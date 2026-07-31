@@ -22,14 +22,23 @@ import {
   updateUser,
 } from "../../../../api/UserManagement/userManagement";
 import PermissionsChecklist from "../../../../components/PermissionsChecklist";
+import { useAuth } from "../../../../context/AuthContext";
+import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
+import ErrorModal from "../../../../components/ErrorModal";
 
 export default function AddUserAccessForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Access levels edition');
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [permissionIds, setPermissionIds] = useState<number[]>([]);
+  const [editPermissionIds, setEditPermissionIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
+  const [errorOpen, setErrorOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
@@ -54,24 +63,22 @@ export default function AddUserAccessForm() {
 
     if (!id) {
       setPermissionIds([]);
+      setEditPermissionIds([]);
       return;
     }
 
     setLoading(true);
     try {
       const user = await getUser(id);
-      const ids: number[] = [];
+      const parseIds = (value: unknown) =>
+        (value ? String(value).split(";") : [])
+          .map((s: string) => Number(s))
+          .filter((n: number) => !Number.isNaN(n));
 
-      (user.sections ? String(user.sections).split(";") : []).forEach((s: string) => {
-        const n = Number(s);
-        if (!Number.isNaN(n)) ids.push(n);
-      });
-      (user.areas ? String(user.areas).split(";") : []).forEach((a: string) => {
-        const n = Number(a);
-        if (!Number.isNaN(n)) ids.push(n);
-      });
-
-      setPermissionIds(ids);
+      // sections = pages the user can View; areas = the subset of those
+      // pages the user can also Edit (add/modify/delete).
+      setPermissionIds(parseIds(user.sections));
+      setEditPermissionIds(parseIds(user.areas));
     } catch (err) {
       console.error("Failed to load user permissions", err);
       setError("Failed to load permissions for this user");
@@ -81,7 +88,22 @@ export default function AddUserAccessForm() {
   };
 
   const handlePermissionToggle = (permId: number) => {
-    setPermissionIds((prev) =>
+    setPermissionIds((prev) => {
+      const next = prev.includes(permId)
+        ? prev.filter((p) => p !== permId)
+        : [...prev, permId];
+
+      // Revoking View also revokes Edit for that page.
+      if (!next.includes(permId)) {
+        setEditPermissionIds((editPrev) => editPrev.filter((p) => p !== permId));
+      }
+      return next;
+    });
+  };
+
+  const handleEditPermissionToggle = (permId: number) => {
+    if (!permissionIds.includes(permId)) return; // Edit requires View
+    setEditPermissionIds((prev) =>
       prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
     );
   };
@@ -97,13 +119,14 @@ export default function AddUserAccessForm() {
     try {
       await updateUser(selectedUserId, {
         sections: permissionIds.join(";"),
-        areas: "",
+        areas: editPermissionIds.join(";"),
       });
 
-      alert("User access updated successfully");
+      setOpen(true);
     } catch (err) {
       console.error("Failed to update user access", err);
-      alert("Failed to update user access. See console for details.");
+      setErrorMessage("Failed to update user access. Please try again.");
+      setErrorOpen(true);
     } finally {
       setSaving(false);
     }
@@ -147,6 +170,8 @@ export default function AddUserAccessForm() {
           <PermissionsChecklist
             selectedIds={permissionIds}
             onToggle={handlePermissionToggle}
+            editIds={editPermissionIds}
+            onToggleEdit={handleEditPermissionToggle}
             error={selectedUserId ? error : undefined}
           />
         </Stack>
@@ -169,12 +194,23 @@ export default function AddUserAccessForm() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={saving || loading || !selectedUserId}
+            disabled={saving || loading || !selectedUserId || !canEdit}
           >
             Save
           </Button>
         </Box>
       </Paper>
+      <UpdateConfirmationModal
+        open={open}
+        title="Success"
+        content="User access has been updated successfully!"
+        handleClose={() => setOpen(false)}
+      />
+      <ErrorModal
+        open={errorOpen}
+        onClose={() => setErrorOpen(false)}
+        message={errorMessage}
+      />
     </FormPageLayout>
   );
 }

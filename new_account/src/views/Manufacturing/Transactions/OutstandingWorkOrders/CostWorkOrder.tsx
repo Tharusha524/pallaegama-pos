@@ -32,8 +32,11 @@ import { runTransactionSave } from "../../../../utils/transactionSave";
 // dynamic import to match pattern used in WorkOrderEntry
 import { useQueryClient } from "@tanstack/react-query";
 import { getInventoryLocations } from "../../../../api/InventoryLocation/InventoryLocationApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CostWorkOrder() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Work order releases');
   const navigate = useNavigate();
   const location = useLocation();
   const idFromState = (location.state as any)?.id ?? null;
@@ -344,7 +347,7 @@ export default function CostWorkOrder() {
                 )}
 
                 <Grid item xs={12} sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
-                  <Button variant="contained" color="primary" onClick={handleProcessAdditionalCost}>Process additional cost</Button>
+                  <Button disabled={!canEdit} variant="contained" color="primary" onClick={handleProcessAdditionalCost}>Process additional cost</Button>
                 </Grid>
               </Grid>
             </Paper>

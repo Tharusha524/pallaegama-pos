@@ -33,8 +33,11 @@ import CostCenterSelect from "../../../../components/CostCenterSelect";
 import { useCompanySetupSettings } from "../../../../hooks/useCompanySetupSettings";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function BudgetEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Budget edition');
   const navigate = useNavigate();
   const { useCostCenters, costCenterLevel } = useCompanySetupSettings();
 
@@ -407,7 +410,7 @@ export default function BudgetEntry() {
         >
           {isSaving ? "Saving..." : "Save"}
         </Button>
-        <Button
+        <Button disabled={!canEdit}
           variant="outlined"
           color="error"
           onClick={handleDelete}

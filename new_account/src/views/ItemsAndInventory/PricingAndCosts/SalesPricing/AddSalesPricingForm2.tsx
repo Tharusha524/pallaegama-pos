@@ -23,6 +23,7 @@ import { createSalesPricing, getSalesPricingByStockId } from "../../../../api/Sa
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface SalesPricingFormData {
   stock_id: string;
@@ -51,6 +52,8 @@ interface SalesType {
 }
 
 export default function AddSalesPricingForm2() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales prices edition');
   const { itemId } = useParams<{ itemId: string }>();
   const [formData, setFormData] = useState<SalesPricingFormData>({
     stock_id: itemId || "",
@@ -214,7 +217,7 @@ export default function AddSalesPricingForm2() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

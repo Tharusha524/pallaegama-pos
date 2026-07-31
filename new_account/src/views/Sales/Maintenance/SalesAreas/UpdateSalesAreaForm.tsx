@@ -17,11 +17,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
 import useFormPersist from "../../../../hooks/useFormPersist";
+import { useAuth } from "../../../../context/AuthContext";
 interface SalesAreaFormData {
   name: string;
 }
 
 export default function UpdateSalesAreaForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales areas maintenance');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -117,7 +120,7 @@ export default function UpdateSalesAreaForm() {
             navigate(-1);
           }}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

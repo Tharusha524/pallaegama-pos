@@ -17,6 +17,7 @@ import { useNavigate } from "react-router";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface SalesPersonFormData {
   name: string;
@@ -29,6 +30,8 @@ interface SalesPersonFormData {
 }
 
 export default function AddSalesPerson() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales staff maintenance');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -212,7 +215,7 @@ export default function AddSalesPerson() {
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0, }}>
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

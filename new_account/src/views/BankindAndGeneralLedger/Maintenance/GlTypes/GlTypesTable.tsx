@@ -29,6 +29,7 @@ import DeleteConfirmationModal from "../../../../components/DeleteConfirmationMo
 import theme from "../../../../theme";
 
 import { getGlTypes, deleteGlType } from "../../../../api/GlType/GlTypeApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 function GlTypesTable() {
   const [page, setPage] = useState(0);
@@ -39,6 +40,8 @@ function GlTypesTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Company GL setup');
   const queryClient = useQueryClient();
 
   const { data: glTypes = [] } = useQuery({
@@ -161,6 +164,7 @@ function GlTypesTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

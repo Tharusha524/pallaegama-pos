@@ -41,8 +41,11 @@ import UploadIcon from '@mui/icons-material/Upload';
 import AddIcon from '@mui/icons-material/Add';
 import theme from "../../../../theme";
 import { backupApiService, CreateBackupRequest, Backup } from "../../../../api/backup/BackupApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function BackupRestore() {
+    const { hasEditPermission } = useAuth();
+    const canEdit = hasEditPermission('Database backup/restore');
     // State management
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
@@ -375,7 +378,7 @@ export default function BackupRestore() {
                                     <Button
                                         variant="contained"
                                         onClick={handleCreateBackup}
-                                        disabled={loading}
+                                        disabled={loading || !canEdit}
                                         startIcon={<AddIcon />}
                                         sx={{ 
                                             backgroundColor: theme.palette.primary.main,
@@ -422,7 +425,7 @@ export default function BackupRestore() {
                                     <Button
                                         variant="outlined"
                                         onClick={handleUploadBackup}
-                                        disabled={!fileToUpload || loading}
+                                        disabled={!fileToUpload || loading || !canEdit}
                                         color="secondary"
                                     >
                                         Upload Backup
@@ -547,7 +550,7 @@ export default function BackupRestore() {
                                                                             e.stopPropagation();
                                                                             handleRestoreBackup(backup.id);
                                                                         }}
-                                                                        disabled={loading}
+                                                                        disabled={loading || !canEdit}
                                                                         sx={{ color: "#ed6c02" }}
                                                                     >
                                                                         <RestoreIcon fontSize="small" />
@@ -560,7 +563,7 @@ export default function BackupRestore() {
                                                                             e.stopPropagation();
                                                                             handleDeleteBackup(backup.id);
                                                                         }}
-                                                                        disabled={loading}
+                                                                        disabled={loading || !canEdit}
                                                                         sx={{ color: "#d32f2f" }}
                                                                     >
                                                                         <DeleteIcon fontSize="small" />

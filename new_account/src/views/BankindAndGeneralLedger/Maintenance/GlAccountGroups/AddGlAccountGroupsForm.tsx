@@ -22,6 +22,7 @@ import { getChartTypes, createChartType } from "../../../../api/GLAccounts/Chart
 import { useNavigate } from "react-router";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface GlAccountGroupData {
     id: string;
@@ -31,6 +32,8 @@ interface GlAccountGroupData {
 }
 
 export default function AddGlAccountGroupsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL account groups');
     const queryClient = useQueryClient();
     const [formData, setFormData] = useState<GlAccountGroupData>({
         id: "",
@@ -227,7 +230,7 @@ export default function AddGlAccountGroupsForm() {
                 >
                     <Button onClick={() => window.history.back()}>Back</Button>
 
-                    <Button
+                    <Button disabled={!canEdit}
                         variant="contained"
                         fullWidth={isMobile}
                         sx={{ backgroundColor: "var(--pallet-blue)" }}

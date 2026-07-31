@@ -27,6 +27,7 @@ import PageTitle from "../../../../../components/PageTitle";
 import theme from "../../../../../theme";
 import SearchBar from "../../../../../components/SearchBar";
 import { getBranches, deleteBranch, getBranch, updateBranch, CustomerBranch as ApiCustomerBranch } from "../../../../../api/CustomerBranch/CustomerBranchApi";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface CustomerBranchesTableProps {
   customerId: string | number;
@@ -76,6 +77,8 @@ export default function CustomerBranchesTable({ customerId }: CustomerBranchesTa
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer branches maintenance');
 
   useEffect(() => {
     const loadBranches = async () => {
@@ -381,6 +384,7 @@ export default function CustomerBranchesTable({ customerId }: CustomerBranchesTa
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

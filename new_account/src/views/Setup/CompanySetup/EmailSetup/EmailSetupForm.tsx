@@ -30,6 +30,7 @@ import {
   type MailSettings,
 } from "../../../../api/MailSettings/MailSettingsApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 type ProviderPreset = "gmail" | "outlook" | "custom";
 
@@ -39,6 +40,8 @@ const PRESETS: Record<Exclude<ProviderPreset, "custom">, Pick<MailSettings, "mai
 };
 
 export default function EmailSetupForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Email setup page');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
@@ -278,7 +281,7 @@ export default function EmailSetupForm() {
           <Button
             variant="contained"
             startIcon={<SaveIcon />}
-            disabled={isLoading || saveMutation.isPending}
+            disabled={isLoading || saveMutation.isPending || !canEdit}
             onClick={handleSave}
           >
             Save settings

@@ -42,8 +42,11 @@ import AddedConfirmationModal from "../../../../components/AddedConfirmationModa
 import ErrorModal from "../../../../components/ErrorModal";
 import ItemSearchSelect, { type ItemSearchOption } from "../../../../components/ItemSearchSelect";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function AddInventoryAdjustments() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Inventory adjustments');
   const navigate = useNavigate();
 
   // Fetch locations
@@ -634,7 +637,7 @@ export default function AddInventoryAdjustments() {
         <Button
           variant="contained"
           color="primary"
-          disabled={!!dateError || isSaving}
+          disabled={!!dateError || isSaving || !canEdit}
           onClick={handleSaveAdjustment}
         >
           {isSaving ? "Saving..." : "Process Adjustment"}

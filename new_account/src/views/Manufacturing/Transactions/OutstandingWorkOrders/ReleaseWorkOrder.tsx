@@ -22,8 +22,11 @@ import { getCompanies } from "../../../../api/CompanySetup/CompanySetupApi";
 import useCurrentUser from "../../../../hooks/useCurrentUser";
 import PageTitle from "../../../../components/PageTitle";
 import Breadcrumb from "../../../../components/BreadCrumb";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ReleaseWorkOrder() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Work order releases');
   const navigate = useNavigate();
   const location = useLocation();
   const idFromState = (location.state as any)?.id ?? null;
@@ -175,7 +178,7 @@ export default function ReleaseWorkOrder() {
           )}
 
           <Grid item xs={12} sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
-            <Button variant="contained" color="primary" onClick={handleRelease} disabled={isSaving}>{isSaving ? "Releasing..." : "Release Work Order"}</Button>
+            <Button variant="contained" color="primary" onClick={handleRelease} disabled={isSaving || !canEdit}>{isSaving ? "Releasing..." : "Release Work Order"}</Button>
           </Grid>
         </Grid>
       </Paper>

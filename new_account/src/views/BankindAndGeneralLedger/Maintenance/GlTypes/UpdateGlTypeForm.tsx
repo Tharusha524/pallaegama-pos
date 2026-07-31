@@ -16,12 +16,15 @@ import theme from "../../../../theme";
 import { getGlType, updateGlType } from "../../../../api/GlType/GlTypeApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface GlTypeFormData {
   type: string;
 }
 
 export default function UpdateGlTypeForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Company GL setup');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -115,7 +118,7 @@ export default function UpdateGlTypeForm() {
         >
           <Button onClick={() => navigate(-1)}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

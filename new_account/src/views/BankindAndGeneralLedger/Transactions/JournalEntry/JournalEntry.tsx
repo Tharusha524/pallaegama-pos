@@ -62,6 +62,7 @@ import PageTitle from "../../../../components/PageTitle";
 import PageLoader from "../../../../components/PageLoader";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 // TabPanel helper
 function TabPanel({ children, value, index }: { children: React.ReactNode; value: number; index: number }) {
@@ -84,6 +85,8 @@ function emptyTaxLine(): TaxLineFormState {
 }
 
 export default function JournalEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Journal entries to bank related accounts');
   const navigate = useNavigate();
   const location = useLocation();
   const editState = location.state as {
@@ -1254,7 +1257,7 @@ export default function JournalEntry() {
         <Button
           variant="contained"
           color="primary"
-          disabled={!!dateError || isSaving}
+          disabled={!!dateError || isSaving || !canEdit}
           onClick={handleSaveJournalEntry}
         >
           {isSaving

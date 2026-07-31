@@ -32,6 +32,7 @@ import { getContactCategories } from "../../../../../api/ContactCategory/Contact
 import CostCenterSelect from "../../../../../components/CostCenterSelect";
 import { getFriendlyApiErrorMessage } from "../../../../../utils/apiErrorMessage";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface SupplierGeneralSettingProps {
   supplierId?: string | number;
@@ -39,6 +40,8 @@ interface SupplierGeneralSettingProps {
 }
 
 export default function SupplierGeneralSettingsForm({ supplierId, onSupplierAdded }: SupplierGeneralSettingProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Suppliers changes');
   const [formData, setFormData] = useState({
     supplierName: "",
     supplierShortName: "",
@@ -675,7 +678,7 @@ export default function SupplierGeneralSettingsForm({ supplierId, onSupplierAdde
             onClick={() => window.history.back()}>
             Back
           </Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             sx={{ backgroundColor: theme.palette.primary.main }}
             onClick={handleSubmit}

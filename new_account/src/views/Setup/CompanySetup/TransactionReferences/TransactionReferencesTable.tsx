@@ -30,6 +30,7 @@ import SearchBar from "../../../../components/SearchBar";
 import theme from "../../../../theme";
 import { getReflines, deleteRefline } from "../../../../api/Reflines/ReflinesApi";
 import { getTransTypes } from "../../../../api/Reflines/TransTypesApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 // Data is loaded from the Reflines API (see schema):
 // id, trans_type, prefix, pattern, memo, default, inactive, timestamps
@@ -41,6 +42,8 @@ function TransactionReferencesTable() {
   const [showDefault, setShowDefault] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Stock transactions view');
 
   const { data: transactionData = [], refetch } = useQuery({
     queryKey: ["reflines"],
@@ -274,7 +277,7 @@ function TransactionReferencesTable() {
                           color="error"
                           startIcon={<DeleteIcon />}
                           onClick={() => handleDelete(item.id)}
-                          disabled={deletingId === item.id}
+                          disabled={deletingId === item.id || !canEdit}
                         >
                           Delete
                         </Button>

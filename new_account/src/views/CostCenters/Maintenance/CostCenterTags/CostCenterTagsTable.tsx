@@ -28,6 +28,7 @@ import SearchBar from "../../../../components/SearchBar";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import { getTags, deleteTag } from "../../../../api/CostCenterTag/CostCenterTagApi";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CostCenterTagsTable() {
   const [tags, setTags] = useState<any[]>([]);
@@ -40,6 +41,8 @@ const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('CostCenter tags');
 
   const loadTags = async () => {
     try {
@@ -177,6 +180,7 @@ const [errorOpen, setErrorOpen] = useState(false);
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

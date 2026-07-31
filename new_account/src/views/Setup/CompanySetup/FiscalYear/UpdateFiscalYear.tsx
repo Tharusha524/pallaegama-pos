@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 interface FiscalYearFormData {
     fiscalYearFrom: string;
     fiscalYearTo: string;
@@ -29,6 +30,8 @@ interface Props {
 }
 
 export default function UpdateFiscalYear() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fiscal years maintenance');
     const [open, setOpen] = useState(false);
     const [errorOpen, setErrorOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
@@ -195,7 +198,7 @@ export default function UpdateFiscalYear() {
                         Back
                     </Button>
 
-                    <Button
+                    <Button disabled={!canEdit}
                         fullWidth={isMobile}
                         variant="contained"
                         sx={{ backgroundColor: "var(--pallet-blue)" }}

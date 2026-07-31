@@ -14,6 +14,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getTag, updateTag } from "../../../../api/CostCenterTag/CostCenterTagApi";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface CostCenterTagData {
   tagName: string;
@@ -21,6 +22,8 @@ interface CostCenterTagData {
 }
 
 export default function UpdateCostCenterTagsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('CostCenter tags');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -112,7 +115,7 @@ export default function UpdateCostCenterTagsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

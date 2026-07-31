@@ -30,6 +30,7 @@ import SearchBar from "../../../../components/SearchBar";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import { getAccountTags, deleteAccountTag, updateAccountTag } from "../../../../api/AccountTag/AccountTagsApi";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function AccountTagsTable() {
   const [tags, setTags] = useState<any[]>([]);
@@ -44,6 +45,8 @@ export default function AccountTagsTable() {
   const [errorMessage, setErrorMessage] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL Account tags');
 
   // Load tags
   const loadTags = async () => {
@@ -247,6 +250,7 @@ export default function AccountTagsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

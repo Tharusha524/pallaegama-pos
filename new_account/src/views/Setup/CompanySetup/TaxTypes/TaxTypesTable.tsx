@@ -31,6 +31,7 @@ import theme from "../../../../theme";
 import { getTaxTypes, deleteTaxType, updateTaxType } from "../../../../api/Tax/taxServices";
 import ErrorModal from "../../../../components/ErrorModal";
 import { getChartMasters } from "../../../../api/GLAccounts/ChartMasterApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function TaxTypesTable() {
   const [taxGroups, setTaxGroups] = useState<any[]>([]);
@@ -44,6 +45,8 @@ export default function TaxTypesTable() {
   const [errorMessage, setErrorMessage] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Tax rates');
 
   const [chartMasters, setChartMasters] = useState<any[]>([]);
 
@@ -280,6 +283,7 @@ export default function TaxTypesTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

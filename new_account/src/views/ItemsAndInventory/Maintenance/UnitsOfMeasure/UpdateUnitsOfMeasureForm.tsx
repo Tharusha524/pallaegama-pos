@@ -22,6 +22,7 @@ import { getItemUnit, updateItemUnit } from "../../../../api/ItemUnit/ItemUnitAp
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface UnitsOfMeasureFormData {
   unitAbbreviation: string;
@@ -30,6 +31,8 @@ interface UnitsOfMeasureFormData {
 }
 
 export default function UpdateUnitsOfMeasureForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Units of measure');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -212,7 +215,7 @@ export default function UpdateUnitsOfMeasureForm() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !canEdit}
           >
             {loading ? "Updating..." : "Update"}
           </Button>

@@ -31,6 +31,7 @@ import SearchBar from "../../../../components/SearchBar";
 import { deleteSalesPerson, getSalesPerson, getSalesPersons, updateSalesPerson } from "../../../../api/SalesPerson/SalesPersonApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function SalesPersonTable() {
 
@@ -47,6 +48,8 @@ function SalesPersonTable() {
   const [showInactive, setShowInactive] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales staff maintenance');
 
   const fetchSalesPersons = async () => {
     try {
@@ -287,6 +290,7 @@ function SalesPersonTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

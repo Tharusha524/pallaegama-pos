@@ -43,8 +43,11 @@ import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import BankPayerModeBar from "../../../../components/BankPayerModeBar";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function Deposits() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank deposits');
   const navigate = useNavigate();
 
   // Fetch fiscal years
@@ -560,7 +563,7 @@ export default function Deposits() {
         <Button
           variant="contained"
           color="primary"
-          disabled={!!dateError || isSaving}
+          disabled={!!dateError || isSaving || !canEdit}
           onClick={handleSaveAdjustment}
         >
           {isSaving ? "Saving..." : "Process Deposit"}

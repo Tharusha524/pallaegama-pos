@@ -39,6 +39,7 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AllocationRow {
   transactionType: string;
@@ -55,6 +56,8 @@ interface AllocationRow {
 }
 
 export default function UpdateCustomerPayments() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer payments entry');
   const navigate = useNavigate();
   const location = useLocation();
   const editData = location.state as { trans_no: string, reference: string, date: string, debtor_no: string } | null;
@@ -776,7 +779,7 @@ export default function UpdateCustomerPayments() {
           <Button
             variant="contained"
             onClick={handleAddPayment}
-            disabled={!!dateError}
+            disabled={!!dateError || !canEdit}
           >
             {isEditing ? "Update Payment" : "Add Payment"}
           </Button>

@@ -17,6 +17,7 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import theme from "../../../../theme";
+import { useAuth } from "../../../../context/AuthContext";
 import {
   fetchDepartmentData,
   createDepartment,
@@ -32,6 +33,8 @@ interface DepartmentFormData {
 }
 
 export default function DepartmentSetupForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Department setup page');
   const [formData, setFormData] = useState<DepartmentFormData>({
     selectedDepartmentId: "__new",
     department: "",
@@ -254,7 +257,7 @@ export default function DepartmentSetupForm() {
               fullWidth={isMobile}
               sx={{ backgroundColor: "var(--pallet-blue)" }}
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || !canEdit}
             >
               {isNewMode ? "Insert New Department" : "Save"}
             </Button>

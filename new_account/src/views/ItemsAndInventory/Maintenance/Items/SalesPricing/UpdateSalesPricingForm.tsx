@@ -24,6 +24,7 @@ import { getSalesPricingById, updateSalesPricing, getSalesPricingByStockId } fro
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface SalesPricingFormData {
   currency_id: number | "";
@@ -35,6 +36,8 @@ interface Currency { id: number; currency_abbreviation: string; }
 interface SalesType { id: number; typeName: string; }
 
 export default function UpdateSalesPricingForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales prices edition');
   const { id } = useParams<{ id: string }>();
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
@@ -209,7 +212,7 @@ export default function UpdateSalesPricingForm() {
           }}
         >
           <Button onClick={() => navigate("/itemsandinventory/maintenance/items/")}>Back</Button>
-          <Button variant="contained" fullWidth={isMobile} sx={{ backgroundColor: "var(--pallet-blue)" }} onClick={handleSubmit}>
+          <Button disabled={!canEdit} variant="contained" fullWidth={isMobile} sx={{ backgroundColor: "var(--pallet-blue)" }} onClick={handleSubmit}>
             Update
           </Button>
         </Box>

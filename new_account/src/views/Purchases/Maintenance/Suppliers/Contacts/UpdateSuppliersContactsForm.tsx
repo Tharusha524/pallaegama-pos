@@ -20,6 +20,7 @@ import ErrorModal from "../../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal";
 import { useParams } from "react-router";
 import { getContactCategories } from "../../../../../api/ContactCategory/ContactCategoryApi";
+import { useAuth } from "../../../../../context/AuthContext";
 interface UpdateSuppliersContactsData {
   firstName: string;
   lastName: string;
@@ -35,6 +36,8 @@ interface UpdateSuppliersContactsData {
 }
 
 export default function UpdateSuppliersContactsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Suppliers changes');
   const [formData, setFormData] = useState<UpdateSuppliersContactsData>({
     firstName: "",
     lastName: "",
@@ -405,7 +408,7 @@ export default function UpdateSuppliersContactsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

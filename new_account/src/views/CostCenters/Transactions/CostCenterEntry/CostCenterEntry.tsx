@@ -22,6 +22,7 @@ import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import { getTags } from "../../../../api/CostCenterTag/CostCenterTagApi";
 import { createCostCenter, getCostCenters } from "../../../../api/CostCenter/CostCenterApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface CostCenterFormData {
   costCenterReference: string;
@@ -34,6 +35,8 @@ interface CostCenterFormData {
 }
 
 function CostCenterEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('CostCenter entry');
   const navigate = useNavigate();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
@@ -209,7 +212,7 @@ function CostCenterEntry() {
           <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
             <Button
               variant="contained"
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               sx={{ backgroundColor: "var(--pallet-blue)" }}
               onClick={handleSubmit}
             >

@@ -31,6 +31,7 @@ import SearchBar from "../../../../components/SearchBar";
 import { getSalesAreas, deleteSalesArea, SalesArea, patchSalesArea } from "../../../../api/SalesMaintenance/salesService";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function SalesAreaTable() {
 
@@ -44,6 +45,8 @@ function SalesAreaTable() {
   const [showInactive, setShowInactive] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales areas maintenance');
   const queryClient = useQueryClient();
 
   const { data: salesAreas = [] } = useQuery<SalesArea[]>({
@@ -253,6 +256,7 @@ function SalesAreaTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

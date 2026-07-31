@@ -48,6 +48,7 @@ import AddedConfirmationModal from "../../../../components/AddedConfirmationModa
 import ErrorModal from "../../../../components/ErrorModal";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface SalesKitFormData {
   selectedKit: string; // existing kit or "new"
@@ -78,6 +79,8 @@ const WHOLE_NUMBER = /^\d+$/;
 // ];
 
 export default function AddSalesKitsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales kits');
   const [formData, setFormData] = useState<SalesKitFormData>({
     selectedKit: "new",
     kitCode: "",
@@ -720,7 +723,7 @@ export default function AddSalesKitsForm() {
             <Button onClick={() => navigate(-1)}>Back</Button>
 
             {formData.selectedKit === "new" ? (
-              <Button
+              <Button disabled={!canEdit}
                 variant="contained"
                 fullWidth={isMobile}
                 sx={{ backgroundColor: "var(--pallet-blue)" }}

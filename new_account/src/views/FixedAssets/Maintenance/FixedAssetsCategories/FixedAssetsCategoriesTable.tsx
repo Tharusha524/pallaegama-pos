@@ -32,6 +32,7 @@ import ErrorModal from "../../../../components/ErrorModal";
 import { getItemCategories, deleteItemCategory, updateItemCategory } from "../../../../api/ItemCategories/ItemCategoriesApi";
 import { getItemTaxTypes } from "../../../../api/ItemTaxType/ItemTaxTypeApi";
 import { getItemUnits } from "../../../../api/ItemUnit/ItemUnitApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function FixedAssetsCategoriesTable() {
   const [page, setPage] = useState(0);
@@ -50,6 +51,8 @@ export default function FixedAssetsCategoriesTable() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Asset categories');
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
 
 
@@ -263,6 +266,7 @@ export default function FixedAssetsCategoriesTable() {
                         </Button>
 
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

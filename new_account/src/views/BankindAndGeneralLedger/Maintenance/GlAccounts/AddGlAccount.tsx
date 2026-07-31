@@ -25,6 +25,7 @@ import { getChartMasters, createChartMaster } from "../../../../api/GLAccounts/C
 import theme from "../../../../theme";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface GlAccountFormData {
     accountCode: string;
@@ -53,6 +54,8 @@ interface AccountTag {
 }
 
 export default function AddGlAccount() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL accounts edition');
     const [open, setOpen] = useState(false);
     const [errorOpen, setErrorOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
@@ -323,7 +326,7 @@ export default function AddGlAccount() {
                                 Back
                             </Button>
 
-                            <Button
+                            <Button disabled={!canEdit}
                                 variant="contained"
                                 fullWidth={isMobile}
                                 sx={{ backgroundColor: "var(--pallet-blue)" }}

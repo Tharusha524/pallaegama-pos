@@ -26,6 +26,7 @@ import { getCurrencies } from "../../../../api/Currency/currencyApi";
 import { getChartMasters } from "../../../../api/GLAccounts/ChartMasterApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface BankAccountsFormData {
   bank_account_name: string;
@@ -46,6 +47,8 @@ interface ChartMaster {
 }
 
 export default function UpdateBankAccountsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank accounts');
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const muiTheme = useTheme();
@@ -311,7 +314,7 @@ export default function UpdateBankAccountsForm() {
 
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0 }}>
           <Button onClick={() => window.history.back()}>Back</Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

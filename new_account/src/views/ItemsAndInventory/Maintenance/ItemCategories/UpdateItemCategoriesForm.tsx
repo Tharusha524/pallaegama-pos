@@ -29,6 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
 import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
+import { useAuth } from "../../../../context/AuthContext";
 interface ItemCategoriesFormData {
   categoryName: string;
   itemTaxType: string;
@@ -44,6 +45,8 @@ interface ItemCategoriesFormData {
 }
 
 export default function UpdateItemCategoriesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Item categories');
 
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
@@ -549,7 +552,7 @@ export default function UpdateItemCategoriesForm() {
             }}
           >
             <Button onClick={() => window.history.back()}>Back</Button>
-            <Button
+            <Button disabled={!canEdit}
               variant="contained"
               fullWidth={isMobile}
               onClick={handleSubmit}

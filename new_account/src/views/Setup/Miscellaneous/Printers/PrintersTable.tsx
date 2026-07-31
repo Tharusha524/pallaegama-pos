@@ -27,6 +27,7 @@ import theme from "../../../../theme";
 import SearchBar from "../../../../components/SearchBar";
 import { deletePrinter, getPrinters } from "../../../../api/Printer/PrinterApi";
 import { useSnackbar } from "notistack";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function PrintersTable() {
   const [page, setPage] = useState(0);
@@ -36,6 +37,8 @@ export default function PrintersTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Printers configuration');
 
   // Fetch data
   useEffect(() => {
@@ -179,6 +182,7 @@ export default function PrintersTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

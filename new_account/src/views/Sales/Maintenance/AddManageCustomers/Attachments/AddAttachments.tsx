@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import ErrorModal from "../../../../../components/ErrorModal";
 import SuccessModal from "../../../../../components/SuccessModal";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface AddAttachmentsData {
   customerId: string;
@@ -25,6 +26,8 @@ interface AddAttachmentsData {
 }
 
 export default function AddAttachmentsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const muiTheme = useTheme();
@@ -193,7 +196,7 @@ export default function AddAttachmentsForm() {
           <Button
             variant="contained"
             fullWidth={isMobile}
-            disabled={isLoading}
+            disabled={isLoading || !canEdit}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
           >

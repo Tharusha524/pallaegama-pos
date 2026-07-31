@@ -201,6 +201,7 @@ export const PERMISSION_ID_MAP: Record<string, number> = {
   "Login IP restriction page": 5029,
   "User login activity page": 5030,
   "System diagnostics page": 5031,
+  "Class Types (GL)": 5032,
 };
 
 export const PERMISSION_NAME_BY_ID: Record<number, string> = Object.fromEntries(

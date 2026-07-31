@@ -13,6 +13,7 @@ import {
 import theme from "../../../../theme";
 import DatePickerComponent from "../../../../components/DatePickerComponent";
 import { revaluateCurrencies } from "../../../../api/RevaluateCurency/CurrencyRevaluationApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface RevaluateCurrenciesData {
   revaluationDate: Date | null;
@@ -20,6 +21,8 @@ interface RevaluateCurrenciesData {
 }
 
 export default function RevaluateCurrenciesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Revaluation of currency accounts');
   const [formData, setFormData] = useState<RevaluateCurrenciesData>({
     revaluationDate: null,
     memo: "",
@@ -136,7 +139,7 @@ export default function RevaluateCurrenciesForm() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !canEdit}
           >
             {loading ? "Revaluating..." : "Revaluate Currencies"}
           </Button>

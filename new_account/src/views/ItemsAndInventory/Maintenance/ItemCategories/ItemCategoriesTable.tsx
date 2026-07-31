@@ -34,6 +34,7 @@ import { getItemUnits } from "../../../../api/ItemUnit/ItemUnitApi";
 import { getItemTypes } from "../../../../api/ItemType/ItemType";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function ItemCategoriesTable() {
   const [page, setPage] = useState(0);
@@ -42,6 +43,8 @@ function ItemCategoriesTable() {
   const [showInactive, setShowInactive] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Item categories');
 
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -285,6 +288,7 @@ function ItemCategoriesTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

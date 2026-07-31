@@ -18,6 +18,7 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface ShippingCompanyFormData {
   shipper_name: string;
@@ -28,6 +29,8 @@ interface ShippingCompanyFormData {
 }
 
 export default function UpdateShippingCompanyForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Shipping ways');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -211,7 +214,7 @@ export default function UpdateShippingCompanyForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

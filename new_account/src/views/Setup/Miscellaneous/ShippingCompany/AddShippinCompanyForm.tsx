@@ -14,6 +14,7 @@ import theme from "../../../../theme";
 import { createShippingCompany } from "../../../../api/ShippingCompany/ShippingCompanyApi";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface ShippingCompanyFormData {
   shipper_name: string;
@@ -24,6 +25,8 @@ interface ShippingCompanyFormData {
 }
 
 export default function AddShippingCompanyForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Shipping ways');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -177,7 +180,7 @@ export default function AddShippingCompanyForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

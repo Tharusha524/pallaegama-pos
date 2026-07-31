@@ -42,6 +42,7 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import { formatTransactionMoney } from "../../../../utils/transactionMoney";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface Row {
   id: number;
@@ -67,6 +68,8 @@ function resolveDebtorNo(selectedCustomer: string, customers: any[]): string | n
 }
 
 export default function TemplateInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales template invoice');
   const navigate = useNavigate();
   const { showError } = useMessageDialog();
 
@@ -433,7 +436,7 @@ export default function TemplateInvoice() {
                   <Button
                     variant="contained"
                     size="small"
-                    disabled={processingOrderNo === Number(row.orderNo)}
+                    disabled={processingOrderNo === Number(row.orderNo) || !canEdit}
                     onClick={() => handleTemplateInvoice(row.orderNo)}
                   >
                     {processingOrderNo === Number(row.orderNo) ? "Processing..." : "Invoice"}

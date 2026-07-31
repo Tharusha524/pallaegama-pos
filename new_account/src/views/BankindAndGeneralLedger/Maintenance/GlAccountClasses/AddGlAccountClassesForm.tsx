@@ -22,6 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface GlAccountClassData {
   cid?: string;
@@ -31,6 +32,8 @@ interface GlAccountClassData {
 }
 
 export default function AddGlAccountClassesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL account classes');
   const [formData, setFormData] = useState<GlAccountClassData>({
     cid: "",
     class_name: "",
@@ -142,7 +145,7 @@ const [open, setOpen] = useState(false);
             fullWidth={isMobile} 
             sx={{ backgroundColor: "var(--pallet-blue)" }} 
             onClick={handleSubmit}
-            disabled={isSubmitting} // Disable while submitting
+            disabled={isSubmitting || !canEdit} // Disable while submitting
           >
             {isSubmitting ? "Adding..." : "Add New"}
           </Button>

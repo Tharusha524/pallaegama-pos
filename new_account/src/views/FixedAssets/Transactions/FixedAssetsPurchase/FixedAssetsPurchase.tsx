@@ -52,6 +52,7 @@ import SupplierCreditSummaryFields from "../../../../components/SupplierCreditSu
 import ItemSearchSelect, { type ItemSearchOption } from "../../../../components/ItemSearchSelect";
 import { findFaItemByStockId } from "../../../../utils/fixedAssetsScreenCopy";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 function faLocationCode(loc: { locationCode?: string; loc_code?: string }): string {
   return String(loc.locationCode ?? loc.loc_code ?? "");
@@ -62,6 +63,8 @@ function faLocationName(loc: { locationName?: string; location_name?: string; lo
 }
 
 export default function FixedAssetsPurchase() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Assets Operations');
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const [submitting, setSubmitting] = useState(false);
@@ -619,7 +622,7 @@ export default function FixedAssetsPurchase() {
           <Button variant="outlined" onClick={() => navigate(-1)}>
             Cancel Invoice
           </Button>
-          <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={submitting}>
+          <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={submitting || !canEdit}>
             {submitting ? "Processing…" : "Process Invoice"}
           </Button>
         </Box>

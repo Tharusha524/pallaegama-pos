@@ -28,8 +28,11 @@ import { getSalesGroups } from "../../../../api/SalesMaintenance/salesService";
 import { getCustomers } from "../../../../api/Customer/AddCustomerApi";
 import { resolveTransactionCurrencyCode } from "../../../../utils/relationId";
 import { useMessageDialog } from "../../../../context/MessageDialogContext";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CreateAndPrintRecurrentInvoices() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Recurrent invoices definitions');
   const breadcrumbItems = [
     { title: "Transactions", href: "/sales/transactions/" },
     { title: "Recurrent Invoices" },
@@ -137,7 +140,7 @@ export default function CreateAndPrintRecurrentInvoices() {
         </Box>
 
         <Stack direction="row" spacing={1}>
-          <Button variant="contained" disabled={generatingAll} onClick={handleGenerateAllDue}>
+          <Button variant="contained" disabled={generatingAll || !canEdit} onClick={handleGenerateAllDue}>
             Generate All Due
           </Button>
           <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>

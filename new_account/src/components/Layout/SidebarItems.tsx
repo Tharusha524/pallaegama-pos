@@ -10,7 +10,7 @@ import ChangeHistoryIcon from "@mui/icons-material/ChangeHistory";
 import FolderIcon from "@mui/icons-material/Folder";
 import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import PERMISSION_ID_MAP from "../../permissions/map";
+import { getModulePermissionIds } from "../../permissions/navigationTree";
 
 export interface SidebarItem {
   title?: string;
@@ -50,11 +50,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "Sales",
     href: "/sales",
     icon: <ShoppingCartOutlinedIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["Sales Configuration"],
-      PERMISSION_ID_MAP["Sales Transactions"],
-      PERMISSION_ID_MAP["Sales Related Reports"],
-    ],
+    requiredPermission: getModulePermissionIds("Sales"),
     nestedItems: [
       {
         title: "Transactions",
@@ -74,11 +70,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "Purchase",
     href: "/purchase",
     icon: <LocalMallOutlinedIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["Purchase Configuration"],
-      PERMISSION_ID_MAP["Purchase Transactions"],
-      PERMISSION_ID_MAP["Purchase Analytics"],
-    ],
+    requiredPermission: getModulePermissionIds("Purchase"),
     nestedItems: [
       {
         title: "Transactions",
@@ -98,11 +90,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "Item and inventory",
     href: "/itemsandinventory",
     icon: <Inventory2OutlinedIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["Inventory Configuration"],
-      PERMISSION_ID_MAP["Inventory Operations"],
-      PERMISSION_ID_MAP["Inventory Analytics"],
-    ],
+    requiredPermission: getModulePermissionIds("Item and inventory"),
     nestedItems: [
       {
         title: "Transactions",
@@ -126,11 +114,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "Manufacturing",
     href: "/manufacturing",
     icon: <PrecisionManufacturingOutlinedIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["Manufacturing Configuration"],
-      PERMISSION_ID_MAP["Manufacturing Transactions"],
-      PERMISSION_ID_MAP["Manufacturing Analytics"],
-    ],
+    requiredPermission: getModulePermissionIds("Manufacturing"),
     nestedItems: [
       {
         title: "Transactions",
@@ -150,11 +134,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "Fixed Assets",
     href: "/fixedassets",
     icon: <EmergencyIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["Fixed Assets Configuration"],
-      PERMISSION_ID_MAP["Fixed Assets Operations"],
-      PERMISSION_ID_MAP["Fixed Assets Analytics"],
-    ],
+    requiredPermission: getModulePermissionIds("Fixed Assets"),
     nestedItems: [
       {
         title: "Transactions",
@@ -174,10 +154,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "CostCenter",
     href: "/costCenter",
     icon: <ChangeHistoryIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["CostCenters Configuration"],
-      PERMISSION_ID_MAP["CostCenters"],
-    ],
+    requiredPermission: getModulePermissionIds("CostCenter"),
     nestedItems: [
       {
         title: "Transactions",
@@ -197,11 +174,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     title: "Banking And General ledger",
     href: "/bankingandgeneralledger",
     icon: <AccountBalanceWalletOutlinedIcon fontSize="small" />,
-    requiredPermission: [
-      PERMISSION_ID_MAP["Banking & GL Configuration"],
-      PERMISSION_ID_MAP["Banking & GL Transactions"],
-      PERMISSION_ID_MAP["Banking & GL Analytics"],
-    ],
+    requiredPermission: getModulePermissionIds("Banking And General ledger"),
     nestedItems: [
       {
         title: "Transactions",

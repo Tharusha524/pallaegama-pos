@@ -19,6 +19,7 @@ import { useNavigate } from "react-router";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import useFormPersist from "../../../../hooks/useFormPersist";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface SalesTypeFormData {
   salesTypeName: string;
@@ -27,6 +28,8 @@ interface SalesTypeFormData {
 }
 
 export default function AddSalesTypesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales types');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -165,7 +168,7 @@ export default function AddSalesTypesForm() {
           >Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

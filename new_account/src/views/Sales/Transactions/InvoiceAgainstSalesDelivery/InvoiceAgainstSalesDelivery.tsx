@@ -42,6 +42,7 @@ import { formatTransactionMoney } from "../../../../utils/transactionMoney";
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface Row {
   id: number;
@@ -58,6 +59,8 @@ interface Row {
 }
 
 export default function InvoiceAgainstSalesDelivery() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales invoices edition');
   const navigate = useNavigate();
   const { showError } = useMessageDialog();
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
@@ -368,7 +371,7 @@ export default function InvoiceAgainstSalesDelivery() {
               <TableCell>Delivery Total</TableCell>
               <TableCell>Currency</TableCell>
               <TableCell align="center">
-                <Button variant="outlined" size="small" onClick={handleBatchInvoice}>Batch</Button>
+                <Button disabled={!canEdit} variant="outlined" size="small" onClick={handleBatchInvoice}>Batch</Button>
               </TableCell>
               <TableCell align="center">Actions</TableCell>
             </TableRow>

@@ -149,8 +149,12 @@ class AuthRepository extends BaseRepository implements AuthInterface
             return;
         }
 
+        // Order by id (monotonically increasing, immune to any server clock
+        // changes) rather than created_at — a clock adjustment could make a
+        // brand-new token's created_at sort as "older" than existing rows,
+        // causing it to be pruned immediately after issuance.
         $keepIds = $user->tokens()
-            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->limit($maxTokens)
             ->pluck('id');
 

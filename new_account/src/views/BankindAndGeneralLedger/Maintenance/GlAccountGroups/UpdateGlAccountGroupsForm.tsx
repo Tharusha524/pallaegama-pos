@@ -22,6 +22,7 @@ import { getChartClasses } from "../../../../api/GLAccounts/ChartClassApi";
 import { getChartTypes, getChartType, updateChartType } from "../../../../api/GLAccounts/ChartTypeApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface GlAccountGroupData {
   id: string;
@@ -31,6 +32,8 @@ interface GlAccountGroupData {
 }
 
 export default function UpdateGlAccountGroupsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL account groups');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -237,7 +240,7 @@ export default function UpdateGlAccountGroupsForm() {
         >
           <Button onClick={() => navigate(-1)}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

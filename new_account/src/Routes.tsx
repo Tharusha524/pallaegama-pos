@@ -108,6 +108,9 @@ import RevaluateCurrenciesForm from "./views/BankindAndGeneralLedger/Maintenance
 import GlAccountClassesTable from "./views/BankindAndGeneralLedger/Maintenance/GlAccountClasses/GlAccountClassesTable";
 import AddGlAccountClassesForm from "./views/BankindAndGeneralLedger/Maintenance/GlAccountClasses/AddGlAccountClassesForm";
 import UpdateGlAccountClassesForm from "./views/BankindAndGeneralLedger/Maintenance/GlAccountClasses/UpdateGlAccountClassesForm";
+import ClassTypesTable from "./views/BankindAndGeneralLedger/Maintenance/ClassTypes/ClassTypesTable";
+import AddClassTypeForm from "./views/BankindAndGeneralLedger/Maintenance/ClassTypes/AddClassTypeForm";
+import UpdateClassTypeForm from "./views/BankindAndGeneralLedger/Maintenance/ClassTypes/UpdateClassTypeForm";
 import AddChartofAccounts from "./views/Setup/Maintenance/ChartOfAccounts/AddChartOfAccounts";
 import ItemTaxTypesTable from "./views/Setup/CompanySetup/ItemTaxTypes/ItemTaxTypesTable";
 import AddItemTaxTypes from "./views/Setup/CompanySetup/ItemTaxTypes/AddItemTaxTypes";
@@ -210,6 +213,7 @@ import UpdatePosForm from "./views/Setup/Miscellaneous/PointsOfSales/UpdatePosFo
 import UpdateGlAccount from "./views/BankindAndGeneralLedger/Maintenance/GlAccounts/UpdateGlAccount";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PERMISSION_ID_MAP } from "./permissions/map";
+import { getModulePermissionIds, getSubmenuPermissionIds } from "./permissions/navigationTree";
 import ReOrderLevelsTable from "./views/ItemsAndInventory/Maintenance/ReOrderLevels/ReOrderLevelsTable";
 import ViewSalesPricing from "./views/ItemsAndInventory/PricingAndCosts/SalesPricing/ViewSalesPricing";
 import ViewPurchasingPricing from "./views/ItemsAndInventory/PricingAndCosts/PurchasingPricing/ViewPurchasingPricing";
@@ -683,7 +687,7 @@ const AppRoutes = () => {
         )}
       />
 
-      <Route path="/setup" element={<ProtectedRoute required={PERMISSION_ID_MAP['Company Setup']} />}>
+      <Route path="/setup" element={<ProtectedRoute required={getModulePermissionIds("Setup")} />}>
         <Route
           path="companysetup"
           element={withLayout(MainLayout, CompanySetup)}
@@ -1158,7 +1162,7 @@ const AppRoutes = () => {
         <Route
           path="/sales/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Sales Transactions']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Sales", "Transactions")}>
               {withLayout(MainLayout, SalesTransactions)}
             </ProtectedRoute>
           }
@@ -1575,7 +1579,7 @@ const AppRoutes = () => {
         <Route
           path="/sales/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Sales Related Reports']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Sales", "Inquiries and Reports")}>
               {withLayout(MainLayout, InquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -1635,7 +1639,7 @@ const AppRoutes = () => {
         <Route
           path="/sales/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Sales Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Sales", "Maintenance")}>
               {withLayout(MainLayout, Maintenance)}
             </ProtectedRoute>
           }
@@ -1974,7 +1978,7 @@ const AppRoutes = () => {
         <Route
           path="/purchase/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Purchase Transactions']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Purchase", "Transactions")}>
               {withLayout(MainLayout, PurchaseTransactions)}
             </ProtectedRoute>
           }
@@ -2190,7 +2194,7 @@ const AppRoutes = () => {
         <Route
           path="/purchase/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Purchase Analytics']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Purchase", "Inquiries and Reports")}>
               {withLayout(MainLayout, PurchaseInquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -2222,7 +2226,7 @@ const AppRoutes = () => {
         <Route
           path="/purchase/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Purchase Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Purchase", "Maintenance")}>
               {withLayout(MainLayout, PurchaseMaintenance)}
             </ProtectedRoute>
           }
@@ -2319,7 +2323,7 @@ const AppRoutes = () => {
         <Route
           path="/itemsandinventory/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Inventory Operations']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Item and inventory", "Transactions")}>
               {withLayout(MainLayout, ItemsTransactions)}
             </ProtectedRoute>
           }
@@ -2384,7 +2388,7 @@ const AppRoutes = () => {
         <Route
           path="/itemsandinventory/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Inventory Analytics']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Item and inventory", "Inquiries and Reports")}>
               {withLayout(MainLayout, ItemsInquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -2408,7 +2412,7 @@ const AppRoutes = () => {
         <Route
           path="/itemsandinventory/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Inventory Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Item and inventory", "Maintenance")}>
               {withLayout(MainLayout, ItemsMaintenance)}
             </ProtectedRoute>
           }
@@ -2739,7 +2743,7 @@ const AppRoutes = () => {
         <Route
           path="/itemsandinventory/pricingandcosts"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Inventory Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Item and inventory", "Pricing and Costs")}>
               {withLayout(MainLayout, ItemsPricingAndCosts)}
             </ProtectedRoute>
           }
@@ -2748,7 +2752,7 @@ const AppRoutes = () => {
         <Route
           path="/manufacturing/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Manufacturing Transactions']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Manufacturing", "Transactions")}>
               {withLayout(MainLayout, ManufacturingTransactions)}
             </ProtectedRoute>
           }
@@ -2837,7 +2841,7 @@ const AppRoutes = () => {
         <Route
           path="/manufacturing/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Manufacturing Analytics']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Manufacturing", "Inquiries and Reports")}>
               {withLayout(MainLayout, ManufacturingInquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -2874,7 +2878,7 @@ const AppRoutes = () => {
         <Route
           path="/manufacturing/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Manufacturing Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Manufacturing", "Maintenance")}>
               {withLayout(MainLayout, ManufacturingMaintenance)}
             </ProtectedRoute>
           }
@@ -2931,7 +2935,7 @@ const AppRoutes = () => {
         <Route
           path="/fixedassets/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Fixed Assets Operations']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Fixed Assets", "Transactions")}>
               {withLayout(MainLayout, FixedAssestsTransactions)}
             </ProtectedRoute>
           }
@@ -3059,7 +3063,7 @@ const AppRoutes = () => {
         <Route
           path="/fixedassets/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Fixed Assets Analytics']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Fixed Assets", "Inquiries and Reports")}>
               {withLayout(MainLayout, FixedAssestsInquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -3083,7 +3087,7 @@ const AppRoutes = () => {
         <Route
           path="/fixedassets/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Fixed Assets Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Fixed Assets", "Maintenance")}>
               {withLayout(MainLayout, FixedAssestsMaintenance)}
             </ProtectedRoute>
           }
@@ -3187,7 +3191,7 @@ const AppRoutes = () => {
         <Route
           path="/costCenter/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['CostCenters']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("CostCenter", "Transactions")}>
               {withLayout(MainLayout, CostCenterTransactions)}
             </ProtectedRoute>
           }
@@ -3228,7 +3232,7 @@ const AppRoutes = () => {
         <Route
           path="/costCenter/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['CostCenters']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("CostCenter", "Inquiries and Reports")}>
               {withLayout(MainLayout, CostCenterInquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -3253,7 +3257,7 @@ const AppRoutes = () => {
         <Route
           path="/costCenter/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['CostCenters Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("CostCenter", "Maintenance")}>
               {withLayout(MainLayout, CostCenterMaintenance)}
             </ProtectedRoute>
           }
@@ -3286,7 +3290,7 @@ const AppRoutes = () => {
         <Route
           path="/bankingandgeneralledger/transactions"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Banking & GL Transactions']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Banking And General ledger", "Transactions")}>
               {withLayout(MainLayout, BankingTransactions)}
             </ProtectedRoute>
           }
@@ -3431,7 +3435,7 @@ const AppRoutes = () => {
         <Route
           path="/bankingandgeneralledger/inquiriesandreports"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Banking & GL Analytics']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Banking And General ledger", "Inquiries and Reports")}>
               {withLayout(MainLayout, BankingInquiriesAndReports)}
             </ProtectedRoute>
           }
@@ -3520,7 +3524,7 @@ const AppRoutes = () => {
         <Route
           path="/bankingandgeneralledger/maintenance"
           element={
-            <ProtectedRoute required={PERMISSION_ID_MAP['Banking & GL Configuration']}>
+            <ProtectedRoute required={getSubmenuPermissionIds("Banking And General ledger", "Maintenance")}>
               {withLayout(MainLayout, BankingMaintenance)}
             </ProtectedRoute>
           }
@@ -3731,6 +3735,30 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute required={PERMISSION_ID_MAP['GL account classes']}>
               {withLayout(MainLayout, UpdateGlAccountClassesForm)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bankingandgeneralledger/maintenance/class-types"
+          element={
+            <ProtectedRoute required={PERMISSION_ID_MAP['Class Types (GL)']}>
+              {withLayout(MainLayout, ClassTypesTable)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bankingandgeneralledger/maintenance/add-class-type"
+          element={
+            <ProtectedRoute required={PERMISSION_ID_MAP['Class Types (GL)']}>
+              {withLayout(MainLayout, AddClassTypeForm)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bankingandgeneralledger/maintenance/update-class-type/:id"
+          element={
+            <ProtectedRoute required={PERMISSION_ID_MAP['Class Types (GL)']}>
+              {withLayout(MainLayout, UpdateClassTypeForm)}
             </ProtectedRoute>
           }
         />

@@ -31,8 +31,11 @@ import useCurrentUser from "../../../../hooks/useCurrentUser";
 import PageTitle from "../../../../components/PageTitle";
 import Breadcrumb from "../../../../components/BreadCrumb";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function UpdateWorkOrderEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Work order entry');
   const navigate = useNavigate();
   const location = useLocation();
   const idFromState = (location.state as any)?.id ?? null;
@@ -419,7 +422,7 @@ export default function UpdateWorkOrderEntry() {
 
           <Grid item xs={12} sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
             <Button variant="contained" color="error" onClick={handleDelete}>Delete this work order</Button>
-            <Button variant="contained" color="primary" onClick={handleUpdate} disabled={isSaving}>{isSaving ? "Updating..." : "Update"}</Button>
+            <Button variant="contained" color="primary" onClick={handleUpdate} disabled={isSaving || !canEdit}>{isSaving ? "Updating..." : "Update"}</Button>
           </Grid>
         </Grid>
       </Paper>

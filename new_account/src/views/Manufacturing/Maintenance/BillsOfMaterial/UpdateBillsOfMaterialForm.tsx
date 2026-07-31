@@ -27,6 +27,7 @@ import theme from "../../../../theme";
 import ErrorModal from "../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface BillsOfMaterialFormData {
   componentCode: string;
@@ -37,6 +38,8 @@ interface BillsOfMaterialFormData {
 }
 
 export default function UpdateBillsOfMaterialForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bill of Materials');
   const [formData, setFormData] = useState<BillsOfMaterialFormData>({
     componentCode: "",
     componentName: "",
@@ -315,7 +318,7 @@ export default function UpdateBillsOfMaterialForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -23,6 +23,7 @@ import { createTaxGroup, getTaxTypes } from "../../../../api/Tax/taxServices";
 import { createTaxGroupItem } from "../../../../api/Tax/TaxGroupItemApi";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface TaxType {
   id: number;
@@ -38,6 +39,8 @@ interface TaxGroupFormData {
 }
 
 export default function AddTaxGroupsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Tax groups');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -230,7 +233,7 @@ export default function AddTaxGroupsForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             fullWidth={isMobile}
             variant="contained"
             sx={{ backgroundColor: "var(--pallet-blue)" }}

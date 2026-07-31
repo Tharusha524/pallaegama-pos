@@ -32,6 +32,7 @@ import {
 } from "../../../../../api/CustomerBranch/ContactofBranchApi";
 import DeleteConfirmationModal from "../../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../../components/ErrorModal";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface ContacsProps {
   customerId?: string | number;
@@ -46,6 +47,8 @@ export default function ContactsTable({ customerId, onRefreshNeeded }: ContacsPr
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer branches maintenance');
   const location = useLocation();
 
   // --- Delete Modal States ---
@@ -269,6 +272,7 @@ export default function ContactsTable({ customerId, onRefreshNeeded }: ContacsPr
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

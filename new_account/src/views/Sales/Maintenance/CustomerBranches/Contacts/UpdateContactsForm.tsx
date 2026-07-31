@@ -17,6 +17,7 @@ import { useParams } from "react-router";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../../components/ErrorModal";
 import { getContactCategories } from "../../../../../api/ContactCategory/ContactCategoryApi";
+import { useAuth } from "../../../../../context/AuthContext";
 interface UpdateContactsData {
   firstName: string;
   lastName: string;
@@ -32,6 +33,8 @@ interface UpdateContactsData {
 }
 
 export default function UpdateContactsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer branches maintenance');
   const [formData, setFormData] = useState<UpdateContactsData>({
     firstName: "",
     lastName: "",
@@ -347,7 +350,7 @@ export default function UpdateContactsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

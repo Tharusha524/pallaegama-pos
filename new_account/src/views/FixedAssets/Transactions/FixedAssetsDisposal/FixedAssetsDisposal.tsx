@@ -40,6 +40,7 @@ import ItemSearchSelect, { type ItemSearchOption } from "../../../../components/
 import { findFaItemByStockId } from "../../../../utils/fixedAssetsScreenCopy";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 function faLocationCode(loc: { locationCode?: string; loc_code?: string }): string {
     return String(loc.locationCode ?? loc.loc_code ?? "").toUpperCase();
@@ -59,6 +60,8 @@ async function fetchRowQoh(stockId: string | number, locCode: string): Promise<n
 }
 
 export default function FixedAssetsDisposal() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Asset disposals');
     const navigate = useNavigate();
 
     // Fetch locations
@@ -689,7 +692,7 @@ export default function FixedAssetsDisposal() {
                     variant="contained"
                     color="primary"
                     onClick={handleProcessTransfer}
-                    disabled={!!dateError || isProcessing}
+                    disabled={!!dateError || isProcessing || !canEdit}
                 >
                     {isProcessing ? "Processing..." : "Process Disposal"}
                 </Button>

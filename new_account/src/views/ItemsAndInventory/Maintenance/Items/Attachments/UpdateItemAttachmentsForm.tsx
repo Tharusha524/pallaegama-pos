@@ -11,6 +11,7 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import DatePickerComponent from "../../../../../components/DatePickerComponent";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface UpdateAttachmentsData {
   itemId: string;
@@ -20,6 +21,8 @@ interface UpdateAttachmentsData {
 }
 
 export default function UpdateItemAttachmentsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Stock items add/edit');
   const [formData, setFormData] = useState<UpdateAttachmentsData>({
     itemId: "",
     docDate: null,
@@ -161,7 +164,7 @@ export default function UpdateItemAttachmentsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

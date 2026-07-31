@@ -29,8 +29,11 @@ import { CustomerBranch, getBranch, updateBranch } from "../../../../../api/Cust
 import { getChartMasters } from "../../../../../api/GLAccounts/ChartMasterApi";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../../components/ErrorModal";
+import { useAuth } from "../../../../../context/AuthContext";
 
 export default function UpdateCustomerBranchesGeneralSettingForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer branches maintenance');
   const { branchCode } = useParams<{ branchCode: string }>();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -572,7 +575,7 @@ export default function UpdateCustomerBranchesGeneralSettingForm() {
           >
             Back
           </Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             sx={{ backgroundColor: theme.palette.primary.main }}
             fullWidth

@@ -26,6 +26,7 @@ import { getSalesTypes } from "../../../../api/SalesMaintenance/salesService";
 import { useNavigate } from "react-router";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 import {
   appendCompanySetupFormData,
   handleCompanySetupInputChange,
@@ -77,6 +78,8 @@ interface CompanyFormData {
 }
 
 export default function UpdateCompanySetupForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Users setup');
   const [formData, setFormData] = useState<CompanyFormData>({
     name: "",
     address: "",
@@ -744,7 +747,7 @@ export default function UpdateCompanySetupForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}

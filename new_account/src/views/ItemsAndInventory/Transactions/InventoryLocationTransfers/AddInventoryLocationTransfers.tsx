@@ -41,8 +41,11 @@ import AddedConfirmationModal from "../../../../components/AddedConfirmationModa
 import ErrorModal from "../../../../components/ErrorModal";
 import ItemSearchSelect, { type ItemSearchOption } from "../../../../components/ItemSearchSelect";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function AddInventoryLocationTransfers() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Inventory location transfers');
   const navigate = useNavigate();
 
   // Fetch locations
@@ -616,7 +619,7 @@ export default function AddInventoryLocationTransfers() {
           variant="contained" 
           color="primary" 
           onClick={handleProcessTransfer}
-          disabled={!!dateError || isProcessing || selectedFiscalYear?.closed}
+          disabled={!!dateError || isProcessing || selectedFiscalYear?.closed || !canEdit}
         >
           {isProcessing ? "Processing..." : "Process Transfer"}
         </Button>

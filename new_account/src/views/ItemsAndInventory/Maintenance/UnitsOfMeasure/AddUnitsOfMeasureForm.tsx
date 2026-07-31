@@ -20,6 +20,7 @@ import theme from "../../../../theme";
 import { createItemUnit } from "../../../../api/ItemUnit/ItemUnitApi";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface UnitsOfMeasureFormData {
   unitAbbreviation: string;
@@ -28,6 +29,8 @@ interface UnitsOfMeasureFormData {
 }
 
 export default function AddUnitsOfMeasureForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Units of measure');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -154,7 +157,7 @@ export default function AddUnitsOfMeasureForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

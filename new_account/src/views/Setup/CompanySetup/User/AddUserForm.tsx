@@ -26,6 +26,7 @@ import ErrorModal from "../../../../components/ErrorModal";
 import UserPasswordFields from "../../../../components/UserPasswordFields";
 import PermissionsChecklist from "../../../../components/PermissionsChecklist";
 import { validatePassword } from "../../../../utils/passwordPolicy";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface UserFormData {
   id: string;
@@ -43,6 +44,8 @@ interface UserFormData {
 }
 
 export default function AddUserForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Users setup');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -63,6 +66,7 @@ export default function AddUserForm() {
 
   const [errors, setErrors] = useState<Partial<UserFormData>>({});
   const [permissionIds, setPermissionIds] = useState<number[]>([]);
+  const [editPermissionIds, setEditPermissionIds] = useState<number[]>([]);
   const navigate = useNavigate();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
@@ -88,7 +92,19 @@ export default function AddUserForm() {
   };
 
   const handlePermissionToggle = (id: number) => {
-    setPermissionIds((prev) =>
+    setPermissionIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id];
+      // Revoking View also revokes Edit for that page.
+      if (!next.includes(id)) {
+        setEditPermissionIds((editPrev) => editPrev.filter((p) => p !== id));
+      }
+      return next;
+    });
+  };
+
+  const handleEditPermissionToggle = (id: number) => {
+    if (!permissionIds.includes(id)) return; // Edit requires View
+    setEditPermissionIds((prev) =>
       prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
     );
   };
@@ -143,7 +159,7 @@ export default function AddUserForm() {
         payload.append("status", formData.status);
 
         payload.append("sections", permissionIds.join(";"));
-        payload.append("areas", "");
+        payload.append("areas", editPermissionIds.join(";"));
 
         if (formData.image) {
           payload.append("image", formData.image); // File object
@@ -351,6 +367,8 @@ export default function AddUserForm() {
           <PermissionsChecklist
             selectedIds={permissionIds}
             onToggle={handlePermissionToggle}
+            editIds={editPermissionIds}
+            onToggleEdit={handleEditPermissionToggle}
             title="Individual Access (overrides Role permissions when set)"
           />
         </Stack>
@@ -358,7 +376,7 @@ export default function AddUserForm() {
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0, }}>
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

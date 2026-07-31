@@ -20,6 +20,7 @@ import theme from "../../../../theme";
 import { createCreditStatusSetup } from "../../../../api/CreditStatusSetup/CreditStatusSetupApi";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface CreditStatusFormData {
   description: string;
@@ -27,6 +28,8 @@ interface CreditStatusFormData {
 }
 
 export default function AddCreditStatusForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Credit status definitions changes');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -132,7 +135,7 @@ export default function AddCreditStatusForm() {
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0, }}>
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

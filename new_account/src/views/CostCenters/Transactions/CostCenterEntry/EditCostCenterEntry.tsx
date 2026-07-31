@@ -28,8 +28,11 @@ import {
   getCostCenter,
   updateCostCenter,
 } from "../../../../api/CostCenter/CostCenterApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 function EditCostCenterEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('CostCenter entry');
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const muiTheme = useTheme();
@@ -239,15 +242,15 @@ function EditCostCenterEntry() {
             />
           </Stack>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 3 }} justifyContent="flex-end">
-            <Button color="error" variant="outlined" onClick={handleDeleteCostCenter}>
+            <Button color="error" variant="outlined" onClick={handleDeleteCostCenter} disabled={!canEdit}>
               Delete
             </Button>
-            <Button variant="outlined" onClick={handleCloseCostCenter} disabled={isSaving || formData.closed}>
+            <Button variant="outlined" onClick={handleCloseCostCenter} disabled={isSaving || formData.closed || !canEdit}>
               Close costCenter
             </Button>
             <Button
               variant="contained"
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               sx={{ backgroundColor: "var(--pallet-blue)" }}
               onClick={handleUpdate}
             >

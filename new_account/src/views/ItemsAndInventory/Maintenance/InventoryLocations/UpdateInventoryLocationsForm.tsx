@@ -16,6 +16,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getInventoryLocation, updateInventoryLocation } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface InventoryLocationFormData {
   locationCode: string;
@@ -29,6 +30,8 @@ interface InventoryLocationFormData {
 }
 
 export default function UpdateInventoryLocationForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Inventory locations changes');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -259,7 +262,7 @@ export default function UpdateInventoryLocationForm() {
         >
           <Button onClick={() => navigate(-1)}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

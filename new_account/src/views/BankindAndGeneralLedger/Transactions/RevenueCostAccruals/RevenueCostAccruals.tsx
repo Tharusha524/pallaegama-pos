@@ -33,6 +33,7 @@ import {
 import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
 import { notify } from "../../../../services/notificationService";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 const FREQ_OPTIONS = [
   { value: "1", label: "Weekly" },
@@ -42,6 +43,8 @@ const FREQ_OPTIONS = [
 ];
 
 export default function RevenueCostAccruals() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Revenue / Cost Accruals');
   const navigate = useNavigate();
   const { costCenterLevel, useCostCenters } = useCompanySetupSettings();
 
@@ -281,7 +284,7 @@ export default function RevenueCostAccruals() {
           <Button variant="outlined" onClick={handleShow} disabled={loading}>
             Show GL Rows
           </Button>
-          <Button variant="contained" onClick={handleProcess} disabled={loading}>
+          <Button variant="contained" onClick={handleProcess} disabled={loading || !canEdit}>
             Process Accruals
           </Button>
         </Stack>

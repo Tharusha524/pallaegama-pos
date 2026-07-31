@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface ItemStandardCostProps {
   itemId?: string | number;
@@ -32,6 +33,8 @@ interface StandardCostFormData {
 }
 
 export default function AddStandardCostForm({ itemId }: ItemStandardCostProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Item standard costs');
   const [formData, setFormData] = useState<StandardCostFormData>({
     unitCost: "",
     standardLabourCost: "",
@@ -218,7 +221,7 @@ export default function AddStandardCostForm({ itemId }: ItemStandardCostProps) {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

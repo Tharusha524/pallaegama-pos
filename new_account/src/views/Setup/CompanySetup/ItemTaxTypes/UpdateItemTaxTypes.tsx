@@ -28,6 +28,7 @@ import { createItemTaxTypeExemption, deleteItemTaxTypeExemption, getItemTaxTypeE
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface TaxType {
   id: number;
@@ -42,6 +43,8 @@ interface ItemTaxTypeFormData {
 }
 
 export default function UpdateItemTaxTypes() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Item tax type definitions');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -290,7 +293,7 @@ export default function UpdateItemTaxTypes() {
             variant="contained"
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !canEdit}
           >
             {loading ? "Updating..." : "Update"}
           </Button>

@@ -24,6 +24,7 @@ import { getPaymentTypes } from "../../../../api/PaymentType/PaymentTypeApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface PaymentTermsFormData {
   termsDescription: string;
@@ -36,6 +37,8 @@ interface PaymentType {
 }
 
 export default function UpdatePaymentTermsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Payment terms');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -236,7 +239,7 @@ export default function UpdatePaymentTermsForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

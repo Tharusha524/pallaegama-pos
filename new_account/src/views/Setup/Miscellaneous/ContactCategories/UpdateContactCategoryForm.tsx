@@ -18,6 +18,7 @@ import {
 import { useParams } from "react-router";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface UpdateContactCategoryData {
   type: string;
@@ -30,6 +31,8 @@ interface UpdateContactCategoryData {
 
 
 export default function UpdateContactCategory() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Contact categories');
   const { id } = useParams();
   const [formData, setFormData] = useState<UpdateContactCategoryData>({
   type: "",
@@ -193,7 +196,7 @@ const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaE
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -36,6 +36,7 @@ import DeleteConfirmationModal from "../../../../components/DeleteConfirmationMo
 //   deleteAssetClass,
 // } from "../../../../api/FixedAssetClasses/FixedAssetClassesApi";
 import { getStockFaClasses, deleteStockFaClass } from "../../../../api/StockFaClass/StockFaClassesApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function FixedAssetClassesTable() {
   const [page, setPage] = useState(0);
@@ -85,6 +86,8 @@ export default function FixedAssetClassesTable() {
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
 
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Asset classes');
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
 
   /** API Loading (Uncomment when backend ready) */
@@ -282,6 +285,7 @@ export default function FixedAssetClassesTable() {
 
                         {/* Delete optional */}
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

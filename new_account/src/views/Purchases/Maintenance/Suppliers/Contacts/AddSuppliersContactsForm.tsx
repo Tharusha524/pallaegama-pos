@@ -17,6 +17,7 @@ import { createCrmContact } from "../../../../../api/CrmContact/CrmContact";
 import { getContactCategories, getContactCategory } from "../../../../../api/ContactCategory/ContactCategoryApi";
 import AddedConfirmationModal from "../../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../../components/ErrorModal";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface AddSuppliersContactsData {
   firstName: string;
@@ -33,6 +34,8 @@ interface AddSuppliersContactsData {
 }
 
 export default function AddSuppliersContactsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Suppliers changes');
   const location = useLocation();
   const navigate = useNavigate();
   const supplierId = location.state?.supplierId; // get supplierId from dropdown
@@ -307,7 +310,7 @@ export default function AddSuppliersContactsForm() {
 
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0 }}>
           <Button onClick={() => navigate(-1)}>Back</Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

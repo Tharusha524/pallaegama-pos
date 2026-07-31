@@ -53,8 +53,11 @@ import { resolveSupplierTransactionCurrencyCode } from "../../../../utils/relati
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function SupplierPaymentEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Supplier payments');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -813,7 +816,7 @@ export default function SupplierPaymentEntry() {
             Cancel
           </Button>
 
-          <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!!datePaidError}>
+          <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!!datePaidError || !canEdit}>
             Enter Payment
           </Button>
         </Box>

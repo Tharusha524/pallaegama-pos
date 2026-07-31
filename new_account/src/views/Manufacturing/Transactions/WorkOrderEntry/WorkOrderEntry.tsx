@@ -30,8 +30,11 @@ import { postWorkOrderEntry } from "../../../../api/Manufacturing/ManufacturingA
 import { runTransactionSave, assertPersistedResponse } from "../../../../utils/transactionSave";
 import ItemSearchSelect from "../../../../components/ItemSearchSelect";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function WorkOrderEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Work order entry');
   const navigate = useNavigate();
 
   // Queries
@@ -794,7 +797,7 @@ export default function WorkOrderEntry() {
         <Button
           variant="contained"
           color="primary"
-          disabled={isSaving}
+          disabled={isSaving || !canEdit}
           onClick={handleAddWorkOrder}
         >
           {isSaving ? "Adding..." : "Add Work Order"}

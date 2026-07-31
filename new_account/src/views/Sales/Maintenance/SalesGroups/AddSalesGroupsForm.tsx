@@ -17,11 +17,14 @@ import AddedConfirmationModal from "../../../../components/AddedConfirmationModa
 import ErrorModal from "../../../../components/ErrorModal";
 import useFormPersist from "../../../../hooks/useFormPersist";
 import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
+import { useAuth } from "../../../../context/AuthContext";
 interface SalesGroupFormData {
   groupName: string;
 }
 
 export default function AddSalesGroupsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales groups changes');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -115,7 +118,7 @@ export default function AddSalesGroupsForm() {
             window.history.back();
           }}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

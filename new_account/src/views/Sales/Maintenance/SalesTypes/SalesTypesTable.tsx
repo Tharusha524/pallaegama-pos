@@ -32,6 +32,7 @@ import SearchBar from "../../../../components/SearchBar";
 import { getSalesTypes, deleteSalesType, updateSalesType, SalesType } from "../../../../api/SalesMaintenance/salesService";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function SalesTypesTable() {
 
@@ -48,6 +49,8 @@ function SalesTypesTable() {
     const [updatingIds, setUpdatingIds] = useState<number[]>([]);
     const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
     const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales types');
 
     const { data: salesTypesData = [] } = useQuery({
         queryKey: ["salesTypes"],
@@ -257,6 +260,7 @@ function SalesTypesTable() {
                                                     Edit
                                                 </Button>
                                                 <Button
+                                                  disabled={!canEdit}
                                                     variant="outlined"
                                                     size="small"
                                                     color="error"

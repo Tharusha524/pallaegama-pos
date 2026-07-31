@@ -25,6 +25,7 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import SearchBar from "../../../../components/SearchBar";
+import { useAuth } from "../../../../context/AuthContext";
 
 // Mock API
 const getDocuments = async () => [
@@ -53,6 +54,8 @@ export default function DocumentsTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Attaching documents');
 
   // Fetch data
   useEffect(() => {
@@ -189,6 +192,7 @@ export default function DocumentsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

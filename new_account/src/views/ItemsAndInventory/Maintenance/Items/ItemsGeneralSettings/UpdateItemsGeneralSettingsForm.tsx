@@ -230,7 +230,6 @@ export default function ItemsGeneralSettingsForm({ itemId }: ItemGeneralSettingP
     if (!formData.itemName) tempErrors.itemName = "Item Name is required";
     if (!formData.description) tempErrors.description = "Description is required";
     if (!formData.category) tempErrors.category = "Category is required";
-    if (!formData.itemTaxType) tempErrors.itemTaxType = "Item Tax Type is required";
     if (!formData.itemType) tempErrors.itemType = "Item Type is required";
     if (!formData.unitOfMeasure) tempErrors.unitOfMeasure = "Unit of Measure is required";
     if (!formData.salesAccount) tempErrors.salesAccount = "Sales Account is required";
@@ -264,7 +263,7 @@ export default function ItemsGeneralSettingsForm({ itemId }: ItemGeneralSettingP
     const payload = {
       stock_id: formData.itemCode,
       category_id: parseInt(formData.category),
-      tax_type_id: parseInt(formData.itemTaxType),
+      tax_type_id: formData.itemTaxType ? parseInt(formData.itemTaxType) : null,
       description: formData.itemName,
       long_description: formData.description,
       units: parseInt(formData.unitOfMeasure),

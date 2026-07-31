@@ -19,6 +19,7 @@ import AddedConfirmationModal from "../../../../components/AddedConfirmationModa
 import ErrorModal from "../../../../components/ErrorModal";
 import useFormPersist from "../../../../hooks/useFormPersist";
 import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface InvoiceFormData {
   name: string;
@@ -29,6 +30,8 @@ interface InvoiceFormData {
 }
 
 export default function CreateInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Recurrent invoices maintenance');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -208,7 +211,7 @@ export default function CreateInvoice() {
             navigate(-1);
           }}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -19,6 +19,7 @@ import { getSalesType, updateSalesType, SalesType } from "../../../../api/SalesM
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import useFormPersist from "../../../../hooks/useFormPersist";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface SalesTypeFormData {
   salesTypeName: string;
@@ -27,6 +28,8 @@ interface SalesTypeFormData {
 }
 
 export default function UpdateSalesTypesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales types');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -188,7 +191,7 @@ export default function UpdateSalesTypesForm() {
             navigate(-1);
           }}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

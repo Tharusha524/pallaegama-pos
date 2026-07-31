@@ -27,12 +27,15 @@ import { getDepreciationPeriods } from "../../../../api/DepreciationPeriod/Depre
 import { getSysPrefs, bulkUpdateSysPrefs, SysPref } from "../../../../api/OrganizationSettings/SysPrefsApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface SystemGLSetupFormData {
   [key: string]: string;
 }
 
 export default function SystemGLSetupForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Company GL setup');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
@@ -369,7 +372,7 @@ export default function SystemGLSetupForm() {
           <Button fullWidth={isMobile} variant="outlined" onClick={() => navigate(-1)}>
             Back
           </Button>
-          <Button fullWidth={isMobile} variant="contained" sx={{ backgroundColor: "var(--pallet-blue)" }} onClick={handleSubmit}>
+          <Button disabled={!canEdit} fullWidth={isMobile} variant="contained" sx={{ backgroundColor: "var(--pallet-blue)" }} onClick={handleSubmit}>
             Update
           </Button>
         </Box>

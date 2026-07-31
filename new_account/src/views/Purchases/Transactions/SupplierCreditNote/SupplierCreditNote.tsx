@@ -56,8 +56,11 @@ import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import { prefValue, chartByCodeMap } from "../../../../utils/glJournalLinesCore";
 import { extractUserGlLines } from "../../../../utils/purchasesGlLines";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function SupplierCreditNote() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Supplier credit notes');
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { state: navState } = useLocation();
@@ -1228,7 +1231,7 @@ export default function SupplierCreditNote() {
                 />
 
                 <Stack direction="row" justifyContent="flex-end" spacing={2} mt={2}>
-                    <Button variant="contained" onClick={handleEnterCreditNote} disabled={!!invoiceDateError}>
+                    <Button variant="contained" onClick={handleEnterCreditNote} disabled={!!invoiceDateError || !canEdit}>
                         Enter Credit Note
                     </Button>
                 </Stack>

@@ -22,6 +22,7 @@ import { getSuppliers } from "../../../../api/Supplier/SupplierApi";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface PurchasingPricingFormData {
   supplier_id: number | "";
@@ -44,6 +45,8 @@ interface Supplier {
 }
 
 export default function UpdatePurchasingPricingForm2() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Purchase price changes');
   const { supplierId, stockId } = useParams<{ supplierId: string; stockId: string }>();
   const [formData, setFormData] = useState<PurchasingPricingFormData>({
     supplier_id: "",
@@ -253,7 +256,7 @@ export default function UpdatePurchasingPricingForm2() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

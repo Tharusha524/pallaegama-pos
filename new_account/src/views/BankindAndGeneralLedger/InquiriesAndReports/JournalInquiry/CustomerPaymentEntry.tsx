@@ -29,6 +29,7 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AllocationRow {
   transactionType: string;
@@ -45,6 +46,8 @@ interface AllocationRow {
 }
 
 export default function CustomerPaymentEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL analytical reports and inquiries');
   const navigate = useNavigate();
 
   // ====== Form State ======
@@ -396,7 +399,7 @@ export default function CustomerPaymentEntry() {
           <Button variant="outlined" onClick={() => navigate(-1)}>
             Cancel
           </Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             onClick={handleAddPayment}
           >

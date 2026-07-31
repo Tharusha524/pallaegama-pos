@@ -48,6 +48,7 @@ import { relationId, bankAccountLabel, sortCashBankAccounts } from "../../../../
 import { isCashSalePaymentTerm } from "../../../../utils/customerCredit";
 import { getStockQoh } from "../../../../api/Inventory/StockQuantityApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 function faLocationCode(loc: { locationCode?: string; loc_code?: string }): string {
     return String(loc.locationCode ?? loc.loc_code ?? "").toUpperCase();
@@ -85,6 +86,8 @@ async function fetchRowQoh(
 }
 
 export default function FixedAssetsSale() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed assets sale');
     const navigate = useNavigate();
     const { enqueueSnackbar } = useSnackbar();
     const [submitting, setSubmitting] = useState(false);
@@ -912,7 +915,7 @@ export default function FixedAssetsSale() {
                     <Button variant="outlined" onClick={() => navigate(-1)}>
                         Cancel Invoice
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation} disabled={submitting}>
+                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation} disabled={submitting || !canEdit}>
                         {submitting ? "Posting…" : "Place Invoice"}
                     </Button>
                 </Box>

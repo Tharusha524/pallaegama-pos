@@ -74,8 +74,11 @@ import { resolveSalesItemLinePrices } from "../../../../utils/resolveSalesItemPr
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function DirectDelivery() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Direct sales delivery entry');
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -1325,6 +1328,7 @@ export default function DirectDelivery() {
                         disabled={
                             !!dateError ||
                             submitting ||
+                            !canEdit ||
                             rows.some((r) => r.selectedItemId && r.quantity > r.availableQuantity + 0.0001)
                         }
                     >

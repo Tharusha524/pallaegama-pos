@@ -58,8 +58,11 @@ import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import { getSuppTrans } from "../../../../api/SuppTrans/SuppTransApi";
 import { getInventoryLocations } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function SupplierInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Supplier invoices');
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { state: locationState } = useLocation();
@@ -1356,7 +1359,7 @@ export default function SupplierInvoice() {
                     <Button
                         variant="contained"
                         onClick={handleEnterInvoice}
-                        disabled={!!invoiceDateError || grnLoading || deliveryFullyInvoiced}
+                        disabled={!!invoiceDateError || grnLoading || deliveryFullyInvoiced || !canEdit}
                     >
                         Enter Invoice
                     </Button>

@@ -76,6 +76,7 @@ import { resolveSalesItemLinePrices } from "../../../../utils/resolveSalesItemPr
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 function sanitizeEmail(value: string | null | undefined): string | null {
     if (!value || typeof value !== "string") return null;
@@ -106,6 +107,8 @@ function bankAccountLabel(acc: any): string {
 }
 
 export default function DirectInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Direct sales invoice entry');
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -521,7 +524,7 @@ export default function DirectInvoice() {
             }
         }
         handleChange(rowId, "availableQuantity", availableQty);
-        handleChange(rowId, "quantity", Math.min(1, availableQty));
+        handleChange(rowId, "quantity", 1);
         const itemData = await getItemById(selectedItem.stock_id);
         if (itemData) {
             const unitName = itemUnits.find((u: any) => u.id === itemData.units)?.abbr || "";
@@ -1202,16 +1205,8 @@ export default function DirectInvoice() {
                                         size="small"
                                         value={row.quantity}
                                         onChange={(e) => {
-                                            // const newValue = Number(e.target.value);
-                                            // // Prevent entering quantity greater than available stock
-                                            // if (newValue > row.availableQuantity && row.availableQuantity > 0) {
-                                            //     // Don't update if it exceeds available quantity
-                                            //     return;
-                                            // }
-                                            // handleChange(row.id, "quantity", newValue);
                                             const inputValue = Number(e.target.value);
-                                            const clampedValue = Math.min(inputValue, row.availableQuantity || 0);
-                                            handleChange(row.id, "quantity", clampedValue);
+                                            handleChange(row.id, "quantity", inputValue);
                                         }}
                                         inputProps={{ min: 0 }}
                                     />
@@ -1405,7 +1400,7 @@ export default function DirectInvoice() {
                     <Button variant="outlined" onClick={() => navigate(-1)}>
                         Cancel Invoice
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation} disabled={!!dateError || submitting}>
+                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation} disabled={!!dateError || submitting || !canEdit}>
                         {submitting ? "Saving..." : "Place Invoice"}
                     </Button>
                 </Box>

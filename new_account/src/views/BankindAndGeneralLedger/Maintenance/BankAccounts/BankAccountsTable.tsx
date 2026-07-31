@@ -31,6 +31,7 @@ import theme from "../../../../theme";
 import { getBankAccounts, deleteBankAccount } from "../../../../api/BankAccount/BankAccountApi";
 import { updateBankAccount } from "../../../../api/BankAccount/BankAccountApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function BankAccountsTable() {
   const [page, setPage] = useState(0);
@@ -40,6 +41,8 @@ function BankAccountsTable() {
   const colCount = showInactive ? 11 : 10;
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank accounts');
   const queryClient = useQueryClient();
 
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
@@ -285,6 +288,7 @@ function BankAccountsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

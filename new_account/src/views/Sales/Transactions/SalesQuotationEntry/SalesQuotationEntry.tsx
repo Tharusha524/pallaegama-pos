@@ -61,11 +61,14 @@ import { resolveSalesItemLinePrices } from "../../../../utils/resolveSalesItemPr
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function SalesQuotationEntry() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { code: homeCurrencyCode } = useHomeCurrency();
+    const { hasEditPermission } = useAuth();
+    const canEdit = hasEditPermission('Sales quotations');
 
     const [open, setOpen] = useState(false);
     // ===== Form fields =====
@@ -824,6 +827,7 @@ export default function SalesQuotationEntry() {
                                             variant="contained"
                                             startIcon={<AddIcon />}
                                             onClick={handleAddRow}
+                                            disabled={!canEdit}
                                         >
                                             Add
                                         </Button>
@@ -833,6 +837,7 @@ export default function SalesQuotationEntry() {
                                                 variant="outlined"
                                                 size="small"
                                                 startIcon={<EditIcon />}
+                                                disabled={!canEdit}
                                                 onClick={() => {
                                                     // Focus on the first editable field (item code)
                                                     const rowElement = document.querySelector(`[data-row-id="${row.id}"]`);
@@ -849,6 +854,7 @@ export default function SalesQuotationEntry() {
                                                 color="error"
                                                 size="small"
                                                 startIcon={<DeleteIcon />}
+                                                disabled={!canEdit}
                                                 onClick={() => handleRemoveRow(row.id)}
                                             >
                                                 Delete
@@ -908,6 +914,7 @@ export default function SalesQuotationEntry() {
                                 <Button
                                     variant="contained"
                                     size="small"
+                                    disabled={!canEdit}
                                     onClick={() => {
                                         // Force re-render to update totals
                                         setRows([...rows]);
@@ -1062,7 +1069,7 @@ export default function SalesQuotationEntry() {
                         variant="contained"
                         color="primary"
                         onClick={handlePlaceQuotation}
-                        disabled={submitting}
+                        disabled={submitting || !canEdit}
                     >
                         {submitting ? "Saving..." : "Place Quotation"}
                     </Button>

@@ -34,8 +34,11 @@ import { getTaxGroups } from "../../../../api/Tax/taxServices";
 import { getPaymentTerms } from "../../../../api/PaymentTerm/PaymentTermApi";
 import { getChartMasters } from "../../../../api/GLAccounts/ChartMasterApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ModifyPurchaseInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL analytical reports and inquiries');
     const navigate = useNavigate();
 
     // ================= Form States =================
@@ -717,7 +720,7 @@ export default function ModifyPurchaseInvoice() {
                 />
 
                 <Stack direction="row" justifyContent="flex-end" spacing={2} mt={2}>
-                    <Button variant="contained" onClick={handleEnterInvoice}>
+                    <Button disabled={!canEdit} variant="contained" onClick={handleEnterInvoice}>
                         Enter Invoice
                     </Button>
                 </Stack>

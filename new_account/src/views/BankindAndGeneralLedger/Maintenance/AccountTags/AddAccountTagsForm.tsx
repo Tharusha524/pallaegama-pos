@@ -16,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AccountTagsFormData {
   tagName: string;
@@ -23,6 +24,8 @@ interface AccountTagsFormData {
 }
 
 export default function AddAccountTagsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL Account tags');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -149,7 +152,7 @@ export default function AddAccountTagsForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

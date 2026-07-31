@@ -23,6 +23,7 @@ import { getPaymentTypes } from "../../../../api/PaymentType/PaymentTypeApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface PaymentTermsFormData {
   termsDescription: string;
@@ -35,6 +36,8 @@ interface PaymentType {
 }
 
 export default function AddPaymentTermsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Payment terms');
   const [formData, setFormData] = useState<PaymentTermsFormData>({
     termsDescription: "",
     paymentType: "",
@@ -217,7 +220,7 @@ export default function AddPaymentTermsForm() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

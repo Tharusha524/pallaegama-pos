@@ -30,6 +30,7 @@ import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 interface ItemCategoriesFormData {
   categoryName: string;
   itemTaxType: string;
@@ -45,6 +46,8 @@ interface ItemCategoriesFormData {
 }
 
 export default function AddItemCategoriesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Item categories');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -496,7 +499,7 @@ export default function AddItemCategoriesForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

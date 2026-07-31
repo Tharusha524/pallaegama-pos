@@ -17,6 +17,7 @@ import { getItems } from "../../../../api/Item/ItemApi";
 import { createLocStock } from "../../../../api/LocStock/LocStockApi";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface InventoryLocationFormData {
   locationCode: string;
@@ -30,6 +31,8 @@ interface InventoryLocationFormData {
 }
 
 export default function AddInventoryLocationForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Inventory locations changes');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -233,7 +236,7 @@ export default function AddInventoryLocationForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -25,6 +25,7 @@ import { getChartMasters } from "../../../../api/GLAccounts/ChartMasterApi";
 import { createBankAccount } from "../../../../api/BankAccount/BankAccountApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface BankAccountsFormData {
   bank_account_name: string;
@@ -45,6 +46,8 @@ interface ChartMaster {
 }
 
 export default function AddBankAccountsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank accounts');
   const [formData, setFormData] = useState<BankAccountsFormData>({
     bank_account_name: "",
     account_type: "",
@@ -268,7 +271,7 @@ const [open, setOpen] = useState(false);
 
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0 }}>
           <Button onClick={() => window.history.back()}>Back</Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

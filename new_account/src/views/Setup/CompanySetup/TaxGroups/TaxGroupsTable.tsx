@@ -30,6 +30,7 @@ import SearchBar from "../../../../components/SearchBar";
 import { getTaxGroups, deleteTaxGroup } from "../../../../api/Tax/taxServices";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function TaxGroupTable() {
 
@@ -44,6 +45,8 @@ export default function TaxGroupTable() {
   const [searchQuery, setSearchQuery] = useState(""); // search state
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Tax groups');
 
   // Fetch data (simulate API)
   useEffect(() => {
@@ -200,6 +203,7 @@ export default function TaxGroupTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

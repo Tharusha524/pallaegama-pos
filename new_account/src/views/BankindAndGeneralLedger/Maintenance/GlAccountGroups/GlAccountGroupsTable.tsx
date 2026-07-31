@@ -32,6 +32,7 @@ import theme from "../../../../theme";
 
 import { getChartClasses } from "../../../../api/GLAccounts/ChartClassApi";
 import { getChartTypes, deleteChartType, updateChartType } from "../../../../api/GLAccounts/ChartTypeApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 function GlAccountGroupsTable() {
   const [page, setPage] = useState(0);
@@ -43,6 +44,8 @@ function GlAccountGroupsTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL account groups');
   const queryClient = useQueryClient();
 
   const { data: chartTypesData = [] } = useQuery({
@@ -230,6 +233,7 @@ function GlAccountGroupsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

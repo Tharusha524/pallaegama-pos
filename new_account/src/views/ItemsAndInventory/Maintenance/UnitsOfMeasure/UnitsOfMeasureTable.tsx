@@ -30,6 +30,7 @@ import { getItemUnits, deleteItemUnit, updateItemUnit } from "../../../../api/It
 import SearchBar from "../../../../components/SearchBar";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function UnitsOfMeasureTable() {
   const [unitsData, setUnitsData] = useState<any[]>([]);
@@ -43,6 +44,8 @@ export default function UnitsOfMeasureTable() {
   const [errorMessage, setErrorMessage] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Units of measure');
 
   // Fetch units from backend
   const loadData = async () => {
@@ -253,6 +256,7 @@ export default function UnitsOfMeasureTable() {
                         Edit
                       </Button>
                       <Button
+                        disabled={!canEdit}
                         variant="outlined"
                         size="small"
                         color="error"

@@ -29,8 +29,11 @@ import { getWoManufactures } from "../../../../api/WorkOrders/WOManufactureApi";
 import { getWorkOrderById } from "../../../../api/WorkOrders/WorkOrderApi";
 import { postWorkOrderProduce } from "../../../../api/Manufacturing/ManufacturingApi";
 import { runTransactionSave } from "../../../../utils/transactionSave";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ProduceWorkOrder() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Work order releases');
   const navigate = useNavigate();
   const location = useLocation();
   const idFromState = (location.state as any)?.id ?? null;
@@ -283,7 +286,7 @@ export default function ProduceWorkOrder() {
 
                 <Grid item xs={12} sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
                   <Button variant="contained" color="primary" onClick={handleProcess} disabled={!!processingAction}>{processingAction === 'process' ? 'Processing...' : 'Process'}</Button>
-                  <Button variant="contained" color="secondary" onClick={handleProcessAndClose} disabled={!!processingAction}>{processingAction === 'processAndClose' ? 'Processing...' : 'Process and Close Order'}</Button>
+                  <Button variant="contained" color="secondary" onClick={handleProcessAndClose} disabled={!!processingAction || !canEdit}>{processingAction === 'processAndClose' ? 'Processing...' : 'Process and Close Order'}</Button>
                 </Grid>
               </Grid>
             </Paper>

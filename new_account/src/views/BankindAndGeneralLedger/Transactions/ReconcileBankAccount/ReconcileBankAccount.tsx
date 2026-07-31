@@ -31,6 +31,7 @@ import {
 import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface TransactionRow {
   id: number;
@@ -45,6 +46,8 @@ interface TransactionRow {
 }
 
 export default function ReconcileBankAccount() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank reconciliation');
   const navigate = useNavigate();
 
   const { data: bankAccounts = [] } = useQuery({
@@ -332,7 +335,7 @@ export default function ReconcileBankAccount() {
       <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
         <Button
           variant="contained"
-          disabled={!selectedAccount || saving || Math.abs(difference) > 0.01}
+          disabled={!selectedAccount || saving || !canEdit || Math.abs(difference) > 0.01}
           onClick={handleReconcile}
         >
           {saving ? "Saving..." : "Reconcile"}

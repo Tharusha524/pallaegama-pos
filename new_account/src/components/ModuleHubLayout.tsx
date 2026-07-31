@@ -7,6 +7,8 @@ import {
   hubIntro,
   type HubSectionKey,
 } from "../utils/moduleHubCopy";
+import { useAuth } from "../context/AuthContext";
+import { getPermissionIdForCard } from "../permissions/navigationTree";
 
 export type ModuleHubItem = {
   text: string;
@@ -24,6 +26,12 @@ type Props = {
 /** Standard module menu — intro panel + description cards */
 export default function ModuleHubLayout({ hubKey, items, onItemClick }: Props) {
   const intro = hubIntro(hubKey);
+  const { hasPermission } = useAuth();
+
+  const visibleItems = items.filter((item) => {
+    const requiredId = getPermissionIdForCard(item.path, item.text);
+    return requiredId === undefined || hasPermission(requiredId);
+  });
 
   return (
     <Stack
@@ -37,7 +45,7 @@ export default function ModuleHubLayout({ hubKey, items, onItemClick }: Props) {
     >
       {intro && <ModuleScreenDescription copy={intro} />}
       <Grid container spacing={2}>
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <Grid item xs={12} sm={6} lg={4} key={item.path + item.text}>
             <DashboardCard
               text={item.text}

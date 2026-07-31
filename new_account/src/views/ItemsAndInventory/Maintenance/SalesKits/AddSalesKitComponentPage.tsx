@@ -27,8 +27,11 @@ import theme from "../../../../theme";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function AddSalesKitComponentPage() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales kits');
   const location = useLocation();
   const navigate = useNavigate();
   const muiTheme = useTheme();
@@ -184,7 +187,7 @@ export default function AddSalesKitComponentPage() {
 
             {/* Action on the right */}
             <Box sx={{ ml: isMobile ? 0 : 'auto', display: 'flex', width: isMobile ? '100%' : 'auto' }}>
-              <Button
+              <Button disabled={!canEdit}
                 variant="contained"
                 fullWidth={isMobile}
                 sx={{ backgroundColor: 'var(--pallet-blue)', color: '#fff', height: 36 }}

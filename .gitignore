@@ -34,3 +34,5 @@ new_account/.vite/
 # Logs
 *.log
 npm-debug.log*
+
+*.zip

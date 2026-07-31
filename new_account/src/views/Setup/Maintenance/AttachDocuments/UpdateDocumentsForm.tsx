@@ -1,5 +1,6 @@
 import { FormPageLayout } from "../../../../components/Layout/FormPageLayout";
 import React, { useState } from "react";
+import { useAuth } from "../../../../context/AuthContext";
 import {
   Box,
   Stack,
@@ -23,6 +24,8 @@ interface UpdateDocumentsData {
 }
 
 export default function UpdateDocumentsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Attaching documents');
   const [formData, setFormData] = useState<UpdateDocumentsData>({
     transaction: "",
     title: "",
@@ -165,7 +168,7 @@ export default function UpdateDocumentsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -72,8 +72,8 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
     }
 
     const trimmed = String(initialUrl).trim();
-    // If it's already a data URL or full http(s) URL, use it as-is
-    if (trimmed.startsWith("data:") || /^https?:\/\//i.test(trimmed)) {
+    // If it's already a data URL, blob URL, or full http(s) URL, use it as-is
+    if (trimmed.startsWith("data:") || trimmed.startsWith("blob:") || /^https?:\/\//i.test(trimmed)) {
       setCandidates([trimmed]);
       setCurrentSrc(trimmed);
       return;

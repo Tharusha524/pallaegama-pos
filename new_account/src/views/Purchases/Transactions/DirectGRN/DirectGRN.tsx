@@ -52,8 +52,11 @@ import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import { invalidateFinancialReports } from "../../../../utils/invalidateFinancialReports";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function DirectGRN() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Direct GRN entry');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useCurrentUser();
@@ -746,7 +749,7 @@ export default function DirectGRN() {
           <Button variant="outlined" onClick={() => navigate(-1)}>
             Cancel GRN
           </Button>
-          <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={isSaving || !!dateError}>
+          <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={isSaving || !!dateError || !canEdit}>
             {isSaving ? "Processing..." : "Process GRN"}
           </Button>
         </Box>

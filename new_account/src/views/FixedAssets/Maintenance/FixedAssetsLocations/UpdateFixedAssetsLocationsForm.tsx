@@ -14,6 +14,7 @@ import { getLocation, updateLocation } from "../../../../api/FixedAssetsLocation
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface FixedAssetsLocationData {
   locationCode: string;
@@ -27,6 +28,8 @@ interface FixedAssetsLocationData {
 }
 
 export default function UpdateFixedAssetsLocations() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed assets locations maintenance');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -147,7 +150,7 @@ export default function UpdateFixedAssetsLocations() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

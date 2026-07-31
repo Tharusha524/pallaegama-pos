@@ -17,6 +17,7 @@ import {
   FormHelperText,
 } from "@mui/material";
 import theme from "../../../../theme";
+import { useAuth } from "../../../../context/AuthContext";
 
 const permissionList = [
   "System Administration",
@@ -60,6 +61,8 @@ interface UserAccessFormData {
 }
 
 export default function UpdateUserAccessForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Access levels edition');
   const [formData, setFormData] = useState<UserAccessFormData>({
     selectedRole: "",
     roleName: "",
@@ -255,7 +258,7 @@ export default function UpdateUserAccessForm() {
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3 }}>
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}

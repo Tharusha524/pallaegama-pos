@@ -22,6 +22,7 @@ import {
 import theme from "../../../../theme";
 import { getTransTypes } from "../../../../api/Reflines/TransTypesApi";
 import { createRefline } from "../../../../api/Reflines/ReflinesApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface TransactionReferenceFormData {
   transactionType: string;
@@ -32,6 +33,8 @@ interface TransactionReferenceFormData {
 }
 
 export default function AddTransactionReferencesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Stock transactions view');
   const [formData, setFormData] = useState<TransactionReferenceFormData>({
     transactionType: "",
     prefix: "",
@@ -199,7 +202,7 @@ export default function AddTransactionReferencesForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

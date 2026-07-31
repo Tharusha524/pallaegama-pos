@@ -32,12 +32,15 @@ import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface ItemGeneralSettingProps {
   itemId: string | number; //  always required now
 }
 
 export default function UpdateFixedAssetsGeneralSettingsForm({ itemId }: ItemGeneralSettingProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Asset items add/edit');
   const [formData, setFormData] = useState({
     itemCode: "",
     itemName: "",
@@ -823,7 +826,7 @@ export default function UpdateFixedAssetsGeneralSettingsForm({ itemId }: ItemGen
           <Button variant="contained" color="secondary" sx={{ width: '140px' }} onClick={handleClone}>
             Clone Fixed Asset
           </Button>
-          <Button variant="outlined" color="error" sx={{ width: '140px' }} onClick={handleDelete}>
+          <Button disabled={!canEdit} variant="outlined" color="error" sx={{ width: '140px' }} onClick={handleDelete}>
             Delete Fixed Asset
           </Button>
         </Box>

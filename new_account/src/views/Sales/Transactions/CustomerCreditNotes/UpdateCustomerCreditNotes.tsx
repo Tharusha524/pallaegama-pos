@@ -54,6 +54,7 @@ import theme from "../../../../theme";
 import CustomerCurrencyField from "../../../../components/CustomerCurrencyField";
 import CurrencyAmountInput from "../../../../components/CurrencyAmountInput";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface ChartMaster {
     account_code: string;
@@ -62,6 +63,8 @@ interface ChartMaster {
 }
 
 export default function UpdateCustomerCreditNotes() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales credit notes against invoice');
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -1215,7 +1218,7 @@ export default function UpdateCustomerCreditNotes() {
                     <Button variant="outlined" onClick={() => navigate(-1)}>
                         Cancel
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handleProcessCreditNote} disabled={!!dateError}>
+                    <Button variant="contained" color="primary" onClick={handleProcessCreditNote} disabled={!!dateError || !canEdit}>
                         {location.state?.trans_no ? "Update Credit Note" : "Process Credit Note"}
                     </Button>
                 </Box>

@@ -34,6 +34,7 @@ import {
 } from "../../../../api/ShippingCompany/ShippingCompanyApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ShippingCompanyTable() {
   const [page, setPage] = useState(0);
@@ -48,6 +49,8 @@ export default function ShippingCompanyTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Shipping ways');
 
   // Fetch data
   useEffect(() => {
@@ -261,6 +264,7 @@ export default function ShippingCompanyTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

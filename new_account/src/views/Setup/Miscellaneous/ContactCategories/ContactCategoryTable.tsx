@@ -34,6 +34,7 @@ import {
 import { updateContactCategory } from "../../../../api/ContactCategory/ContactCategoryApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ContactCategoryTable() {
   const [page, setPage] = useState(0);
@@ -43,6 +44,8 @@ export default function ContactCategoryTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Contact categories');
 
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
@@ -280,7 +283,7 @@ export default function ContactCategoryTable() {
                               setOpenDeleteModal(true);
                             }
                           }}
-                          disabled={!!cat.systm} // true if systm is 1
+                          disabled={!!cat.systm || !canEdit} // true if systm is 1
                           sx={{
                             pointerEvents: cat.systm ? "none" : "auto", // ensures no hover/click
                             opacity: cat.systm ? 0.5 : 1, // grayed out

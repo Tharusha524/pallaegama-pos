@@ -43,8 +43,11 @@ import { useMessageDialog } from "../../../../context/MessageDialogContext";
 import { runTransactionSave } from "../../../../utils/transactionSave";
 import { getLocStocks } from "../../../../api/LocStock/LocStockApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CustomerDelivery() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales orders edition');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { state } = useLocation();
@@ -707,7 +710,7 @@ export default function CustomerDelivery() {
           <Button variant="outlined" color="warning" onClick={handleClear}>
             Clear Quantity
           </Button>
-          <Button variant="contained" color="success" onClick={handleDispatch}>
+          <Button disabled={!canEdit} variant="contained" color="success" onClick={handleDispatch}>
             Process Dispatch
           </Button>
         </Box>

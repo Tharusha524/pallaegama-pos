@@ -15,12 +15,15 @@ import theme from "../../../../theme";
 import { createGlType } from "../../../../api/GlType/GlTypeApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface GlTypeFormData {
   type: string;
 }
 
 export default function AddGlTypeForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Company GL setup');
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState<GlTypeFormData>({ type: "" });
   const [open, setOpen] = useState(false);
@@ -99,7 +102,7 @@ export default function AddGlTypeForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

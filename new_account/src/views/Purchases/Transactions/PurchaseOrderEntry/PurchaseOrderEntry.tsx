@@ -54,8 +54,11 @@ import { resolvePurchaseItemPrice } from "../../../../utils/resolvePurchaseItemP
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function PurchaseOrderEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Purchase order entry');
   const navigate = useNavigate();
   const { user } = useCurrentUser();
   const { showError } = useMessageDialog();
@@ -804,7 +807,7 @@ export default function PurchaseOrderEntry() {
           <Button variant="outlined" onClick={() => navigate(-1)}>
             Cancel Order
           </Button>
-          <Button variant="contained" color="primary" disabled={isSaving} onClick={handlePlaceOrder}>
+          <Button variant="contained" color="primary" disabled={isSaving || !canEdit} onClick={handlePlaceOrder}>
             {isSaving ? "Placing..." : "Place Order"}
           </Button>
         </Box>

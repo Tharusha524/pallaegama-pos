@@ -25,6 +25,7 @@ import ErrorModal from "../../../../components/ErrorModal";
 import UserPasswordFields from "../../../../components/UserPasswordFields";
 import PermissionsChecklist from "../../../../components/PermissionsChecklist";
 import { validatePassword } from "../../../../utils/passwordPolicy";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface UserFormData {
   id: string;
@@ -42,6 +43,8 @@ interface UserFormData {
 
 
 export default function UpdateUserForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Users setup');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -61,6 +64,7 @@ export default function UpdateUserForm() {
 
   const [errors, setErrors] = useState<Partial<UserFormData>>({});
   const [permissionIds, setPermissionIds] = useState<number[]>([]);
+  const [editPermissionIds, setEditPermissionIds] = useState<number[]>([]);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const muiTheme = useTheme();
@@ -98,22 +102,36 @@ export default function UpdateUserForm() {
               : ""),
         });
 
-        const ids: number[] = [];
-        (user.sections ? String(user.sections).split(";") : []).forEach((s: string) => {
-          const n = Number(s);
-          if (!Number.isNaN(n)) ids.push(n);
-        });
-        (user.areas ? String(user.areas).split(";") : []).forEach((a: string) => {
-          const n = Number(a);
-          if (!Number.isNaN(n)) ids.push(n);
-        });
-        setPermissionIds(ids);
+        const parseIds = (value: unknown) =>
+          (value ? String(value).split(";") : [])
+            .map((s: string) => Number(s))
+            .filter((n: number) => !Number.isNaN(n));
+
+        // sections = pages the user can View; areas = the subset of those
+        // pages the user can also Edit (add/modify/delete).
+        setPermissionIds(parseIds(user.sections));
+        setEditPermissionIds(parseIds(user.areas));
       });
     }
   }, [id]);
 
   const handlePermissionToggle = (permId: number) => {
-    setPermissionIds((prev) =>
+    setPermissionIds((prev) => {
+      const next = prev.includes(permId)
+        ? prev.filter((p) => p !== permId)
+        : [...prev, permId];
+
+      // Revoking View also revokes Edit for that page.
+      if (!next.includes(permId)) {
+        setEditPermissionIds((editPrev) => editPrev.filter((p) => p !== permId));
+      }
+      return next;
+    });
+  };
+
+  const handleEditPermissionToggle = (permId: number) => {
+    if (!permissionIds.includes(permId)) return; // Edit requires View
+    setEditPermissionIds((prev) =>
       prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
     );
   };
@@ -174,7 +192,7 @@ export default function UpdateUserForm() {
         };
 
         payload.sections = permissionIds.join(";");
-        payload.areas = "";
+        payload.areas = editPermissionIds.join(";");
 
         if (formData.password) {
           payload.password = formData.password;
@@ -338,6 +356,8 @@ export default function UpdateUserForm() {
           <PermissionsChecklist
             selectedIds={permissionIds}
             onToggle={handlePermissionToggle}
+            editIds={editPermissionIds}
+            onToggleEdit={handleEditPermissionToggle}
             title="Individual Access (overrides Role permissions when set)"
           />
         </Stack>
@@ -345,7 +365,7 @@ export default function UpdateUserForm() {
         <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 2 : 0, }}>
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -33,8 +33,11 @@ import { createCustomerContact } from "../../../../../api/Customer/CustomerConta
 import { createCrmContact } from "../../../../../api/CrmContact/CrmContact";
 import { getContactCategory } from "../../../../../api/ContactCategory/ContactCategoryApi";
 import { getChartMasters } from "../../../../../api/GLAccounts/ChartMasterApi";
+import { useAuth } from "../../../../../context/AuthContext";
 
 export default function AddCustomerBranchesGeneralSettingForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer branches maintenance');
   const { id: customerId } = useParams();
   useEffect(() => {
     if (customerId) setFormData((prev) => ({ ...prev, debtor_no: customerId }));
@@ -615,7 +618,7 @@ export default function AddCustomerBranchesGeneralSettingForm() {
           <Button variant="outlined" fullWidth onClick={() => window.history.back()}>
             Back
           </Button>
-          <Button variant="contained" sx={{ backgroundColor: theme.palette.primary.main }} fullWidth onClick={handleSubmit}>
+          <Button disabled={!canEdit} variant="contained" sx={{ backgroundColor: theme.palette.primary.main }} fullWidth onClick={handleSubmit}>
             Add New Branch
           </Button>
         </Box>

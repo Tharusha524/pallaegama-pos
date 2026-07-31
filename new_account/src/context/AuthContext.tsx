@@ -8,6 +8,7 @@ type AuthContextType = {
   user: User | null;
   permissions: Set<number>;
   hasPermission: (idOrName: number | string) => boolean;
+  hasEditPermission: (idOrName: number | string) => boolean;
   reloadPermissions: () => Promise<void>;
   initializing: boolean;
 };
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   permissions: new Set<number>(),
   hasPermission: () => false,
+  hasEditPermission: () => false,
   reloadPermissions: async () => {},
   initializing: true,
 });
@@ -23,13 +25,16 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const user = useAuthStore((s) => s.user);
   const permissionIds = useAuthStore((s) => s.permissionIds);
+  const editPermissionIds = useAuthStore((s) => s.editPermissionIds);
   const initializing = useAuthStore((s) => s.initializing);
   const setUser = useAuthStore((s) => s.setUser);
   const setPermissionIds = useAuthStore((s) => s.setPermissionIds);
+  const setEditPermissionIds = useAuthStore((s) => s.setEditPermissionIds);
   const setInitializing = useAuthStore((s) => s.setInitializing);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const loadingRef = useRef(false);
   const permissions = new Set(permissionIds);
+  const editPermissions = new Set(editPermissionIds);
 
   const parseIds = (s?: string | null) => {
     if (!s) return [] as number[];
@@ -44,10 +49,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const role = await getSecurityRole(roleId);
       const sections = parseIds(role?.sections);
       const areas = parseIds(role?.areas);
-      setPermissionIds([...sections, ...areas]);
+      setPermissionIds(sections);
+      setEditPermissionIds(areas);
     } catch (err) {
       console.error("Failed to load role permissions", err);
       setPermissionIds([]);
+      setEditPermissionIds([]);
     }
   };
 
@@ -67,13 +74,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(u || null);
 
   if ((u as any)?.sections || (u as any)?.areas) {
-            // sections/areas come as arrays of numeric strings or numbers
+            // sections = pages the user can view; areas = pages within that
+            // set the user can also edit (checked "Edit" alongside "View")
             const parseArr = (arr?: (string|number)[]) =>
                 (arr || []).map((x) => Number(x)).filter((n) => !Number.isNaN(n));
 
             const sections = parseArr((u as any).sections);
             const areas = parseArr((u as any).areas);
-            setPermissionIds([...sections, ...areas]);
+            setPermissionIds(sections);
+            setEditPermissionIds(areas);
         } else {
             // fallback: if role_id present but no sections returned, fetch role
             const roleId = (u as any)?.role_id || (u as any)?.roleId || (u as any)?.role;
@@ -81,6 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 await loadFromRoleId(roleId);
             } else {
                 setPermissionIds([]);
+                setEditPermissionIds([]);
             }
         }
     } catch (err) {
@@ -126,8 +136,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
+  // Whether the user can perform add/edit/delete actions on a page, as
+  // opposed to only viewing it. A page only ever appears here if it's also
+  // in `permissions` (View is a prerequisite for Edit in the Access Setup UI).
+  const hasEditPermission = (idOrName: number | string) => {
+    if (!(user as any)?.strict_access) return true;
+
+    const roleStr = (user as any)?.role;
+    if (roleStr === "Admin" || (user as any)?.is_admin) return true;
+
+    if (typeof idOrName === "number") return editPermissions.has(idOrName);
+    const id = PERMISSION_ID_MAP[idOrName];
+    if (id) return editPermissions.has(id);
+    return false;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, permissions, hasPermission, reloadPermissions, initializing }}>
+    <AuthContext.Provider
+      value={{ user, permissions, hasPermission, hasEditPermission, reloadPermissions, initializing }}
+    >
       {children}
     </AuthContext.Provider>
   );

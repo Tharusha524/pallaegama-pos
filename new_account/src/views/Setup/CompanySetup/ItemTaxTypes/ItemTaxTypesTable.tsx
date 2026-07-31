@@ -34,6 +34,7 @@ import {
 import { updateItemTaxType } from "../../../../api/ItemTaxType/ItemTaxTypeApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ItemTaxTypesTable() {
   const [itemTaxTypes, setItemTaxTypes] = useState<any[]>([]);
@@ -47,6 +48,8 @@ export default function ItemTaxTypesTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Item tax type definitions');
 
   const loadData = async () => {
     try {
@@ -248,6 +251,7 @@ export default function ItemTaxTypesTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

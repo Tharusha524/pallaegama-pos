@@ -33,6 +33,7 @@ import {
 } from "../../../../api/FiscalYear/FiscalYearApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function FiscalYearTable() {
   const [fiscalYears, setFiscalYears] = useState<any[]>([]);
@@ -48,6 +49,8 @@ export default function FiscalYearTable() {
   const [rolloverLoading, setRolloverLoading] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fiscal years maintenance');
 
   const formatFiscalDate = (dateValue: string) => {
     if (!dateValue) return "";
@@ -276,6 +279,7 @@ export default function FiscalYearTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

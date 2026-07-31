@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface QuickEntryFormData {
   name: string;
@@ -31,6 +32,8 @@ interface QuickEntryFormData {
 }
 
 export default function UpdateQuickEntriesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Quick GL entry definitions');
   const { id } = useParams();
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
@@ -201,7 +204,7 @@ export default function UpdateQuickEntriesForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

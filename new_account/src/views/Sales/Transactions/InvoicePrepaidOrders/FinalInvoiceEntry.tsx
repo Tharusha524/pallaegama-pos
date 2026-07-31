@@ -39,8 +39,11 @@ import { getSalesOrders, getSalesOrderByOrderNo, updateSalesOrder } from "../../
 import { getSalesOrderDetailsByOrderNo } from "../../../../api/SalesOrders/SalesOrderDetailsApi";
 import { getTaxGroupItemsByGroupId } from "../../../../api/Tax/TaxGroupItemApi";
 import { getTaxTypes } from "../../../../api/Tax/taxServices";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function FinalInvoiceEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Invoice prepaid orders');
   const navigate = useNavigate();
   const { state } = useLocation();
   const { orderNo, reference: stateReference, date: stateDate } = state || {};
@@ -545,7 +548,7 @@ export default function FinalInvoiceEntry() {
           <Button variant="contained" color="primary" onClick={handleUpdate}>
             Update
           </Button>
-          <Button variant="contained" color="success" onClick={handleProcessInvoice}>
+          <Button disabled={!canEdit} variant="contained" color="success" onClick={handleProcessInvoice}>
             Process Invoice
           </Button>
         </Box>

@@ -13,6 +13,7 @@ import {
 import { createContactCategory } from "../../../../api/ContactCategory/ContactCategoryApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AddContactCategoryData {
   type: string;
@@ -23,6 +24,8 @@ interface AddContactCategoryData {
 
 
 export default function AddContactCategory() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Contact categories');
   const [formData, setFormData] = useState<AddContactCategoryData>({
     type: "",
     subtype: "",
@@ -166,7 +169,7 @@ export default function AddContactCategory() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

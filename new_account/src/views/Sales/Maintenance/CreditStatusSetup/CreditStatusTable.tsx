@@ -34,6 +34,7 @@ import {
 } from "../../../../api/CreditStatusSetup/CreditStatusSetupApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CreditStatusTable() {
   const [creditStatuses, setCreditStatuses] = useState<any[]>([]);
@@ -49,6 +50,8 @@ export default function CreditStatusTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Credit status definitions changes');
 
   const loadData = async () => {
     try {
@@ -221,6 +224,7 @@ export default function CreditStatusTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

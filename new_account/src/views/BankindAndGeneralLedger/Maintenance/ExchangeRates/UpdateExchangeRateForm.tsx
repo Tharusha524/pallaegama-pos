@@ -16,6 +16,7 @@ import DatePickerComponent from "../../../../components/DatePickerComponent";
 import { ExchangeRate, updateExchangeRate, getExchangeRates } from "../../../../api/ExchangeRate/ExchangeRateApi";
 import ErrorModal from "../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface ExchangeRateData {
   dateToUse: Date | null;
@@ -23,6 +24,8 @@ interface ExchangeRateData {
 }
 
 export default function UpdateExchangeRateForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Exchange rate table changes');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const muiTheme = useTheme();
@@ -144,7 +147,7 @@ export default function UpdateExchangeRateForm() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !canEdit}
           >
             {loading ? "Updating..." : "Update"}
           </Button>

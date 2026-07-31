@@ -20,6 +20,7 @@ import theme from "../../../../theme";
 import { createWorkCentre } from "../../../../api/WorkCentre/WorkCentreApi";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface WorkCentresFormData {
   name: string;
@@ -27,6 +28,8 @@ interface WorkCentresFormData {
 }
 
 export default function AddWorkCentresForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Manufacture work centres');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -131,7 +134,7 @@ export default function AddWorkCentresForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

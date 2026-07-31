@@ -20,6 +20,7 @@ import ErrorModal from "../../../../../components/ErrorModal";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal";
 import { getContactCategories } from "../../../../../api/ContactCategory/ContactCategoryApi";
 import api from "../../../../../api/apiClient";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface UpdateCustomersContactsData {
   firstName: string;
@@ -36,6 +37,8 @@ interface UpdateCustomersContactsData {
 }
 
 export default function UpdateCustomersContactsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
   const [formData, setFormData] = useState<UpdateCustomersContactsData>({
     firstName: "",
     lastName: "",
@@ -436,7 +439,7 @@ export default function UpdateCustomersContactsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

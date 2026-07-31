@@ -41,8 +41,11 @@ import { getCompanies } from "../../../../api/CompanySetup/CompanySetupApi";
 import { useCustomerCredit } from "../../../../hooks/useCustomerCredit";
 import CustomerCreditSummaryFields from "../../../../components/CustomerCreditSummaryFields";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function UpdateCustomerDeliveryInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales invoices edition');
   const navigate = useNavigate();
   const location = useLocation();
   const deliveryNo = location.state?.trans_no;
@@ -592,7 +595,7 @@ export default function UpdateCustomerDeliveryInvoice() {
           <Button variant="outlined" color="warning" onClick={handleClear}>
             Clear Quantity
           </Button>
-          <Button variant="contained" color="success" onClick={handleDispatch} disabled={!!dateError}>
+          <Button variant="contained" color="success" onClick={handleDispatch} disabled={!!dateError || !canEdit}>
             Process Dispatch
           </Button>
         </Box>

@@ -32,6 +32,7 @@ import SearchBar from "../../../../components/SearchBar";
 import { getSalesGroups, deleteSalesGroup, SalesGroup, patchSalesGroup } from "../../../../api/SalesMaintenance/salesService";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function SalesGroupsTable() {
 
@@ -47,6 +48,8 @@ function SalesGroupsTable() {
   const [showInactive, setShowInactive] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales groups changes');
   const queryClient = useQueryClient();
 
   const { data: salesGroups = [] } = useQuery<SalesGroup[]>({
@@ -298,6 +301,7 @@ function SalesGroupsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

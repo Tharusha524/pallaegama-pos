@@ -28,6 +28,7 @@ import { getAccountTags } from "../../../../api/AccountTag/AccountTagsApi";
 import theme from "../../../../theme";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal"; //  Added import
 
 interface GlAccountFormData {
@@ -40,6 +41,8 @@ interface GlAccountFormData {
 }
 
 export default function UpdateGlAccount() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL accounts edition');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -296,7 +299,7 @@ export default function UpdateGlAccount() {
           </Stack>
 
           {/* Right-side update button */}
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             size="large"
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSnackbar } from "notistack";
 import { getPrinter, updatePrinter } from "../../../../api/Printer/PrinterApi";
+import { useAuth } from "../../../../context/AuthContext";
 import {
   Box,
   Stack,
@@ -24,6 +25,8 @@ interface UpdatePrintersData {
 }
 
 export default function UpdatePrintersForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Printers configuration');
   const { id } = useParams();
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
@@ -195,7 +198,7 @@ export default function UpdatePrintersForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

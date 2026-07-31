@@ -28,6 +28,7 @@ import SearchBar from "../../../../components/SearchBar";
 import theme from "../../../../theme";
 import { deleteQuickEntry, getQuickEntries } from "../../../../api/QuickEntry/QuickEntryApi";
 import { useSnackbar } from "notistack";
+import { useAuth } from "../../../../context/AuthContext";
 
 function QuickEntriesTable() {
   const [page, setPage] = useState(0);
@@ -35,6 +36,8 @@ function QuickEntriesTable() {
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Quick GL entry definitions');
   const { enqueueSnackbar } = useSnackbar();
 
   const { data: quickEntriesData = [], refetch } = useQuery({
@@ -177,6 +180,7 @@ function QuickEntriesTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

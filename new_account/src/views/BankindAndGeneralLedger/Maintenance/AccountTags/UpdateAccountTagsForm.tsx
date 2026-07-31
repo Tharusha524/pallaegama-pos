@@ -18,6 +18,7 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AccountTagFormData {
   tagName: string;
@@ -25,6 +26,8 @@ interface AccountTagFormData {
 }
 
 export default function UpdateAccountTags() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL Account tags');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -158,6 +161,7 @@ export default function UpdateAccountTags() {
             variant="contained"
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
+            disabled={!canEdit}
           >
             Update
           </Button>

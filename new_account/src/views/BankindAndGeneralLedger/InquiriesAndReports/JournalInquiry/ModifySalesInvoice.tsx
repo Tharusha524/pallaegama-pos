@@ -25,8 +25,11 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import { getPaymentTerms } from "../../../../api/PaymentTerm/PaymentTermApi";
 import { getShippingCompanies } from "../../../../api/ShippingCompany/ShippingCompanyApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function ModifySalesInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('GL analytical reports and inquiries');
   const navigate = useNavigate();
 
   const [customer, setCustomer] = useState("John Traders Pvt Ltd");
@@ -299,7 +302,7 @@ export default function ModifySalesInvoice() {
           <Button variant="contained" color="primary" onClick={handleUpdate}>
             Update
           </Button>
-          <Button variant="contained" color="success" onClick={handleProcessInvoice}>
+          <Button disabled={!canEdit} variant="contained" color="success" onClick={handleProcessInvoice}>
             Process Invoice
           </Button>
         </Box>

@@ -86,8 +86,11 @@ import { resolveSalesItemLinePrices } from "../../../../utils/resolveSalesItemPr
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export function SalesOrderEntry() {
+    const { hasEditPermission } = useAuth();
+    const canEdit = hasEditPermission('Sales orders edition');
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -1211,7 +1214,7 @@ export function SalesOrderEntry() {
                     <Button variant="outlined" onClick={() => navigate(-1)}>
                         Cancel Order
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation}>
+                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation} disabled={!canEdit}>
                         Place Order
                     </Button>
                 </Box>

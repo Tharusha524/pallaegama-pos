@@ -43,6 +43,7 @@ import {
   manufacturedWithoutBom,
 } from "../../../../utils/bomComponentItem";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface BillsOfMaterialFormData {
   componentCode: string;
@@ -63,6 +64,8 @@ function normalizeItemList(raw: unknown): any[] {
 }
 
 export default function AddBillsOfMaterialForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bill of Materials');
   const [formData, setFormData] = useState<BillsOfMaterialFormData>({
     componentCode: "",
     componentName: "",
@@ -431,7 +434,7 @@ export default function AddBillsOfMaterialForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -38,6 +38,7 @@ import { getPaymentTerms } from "../../../../../api/PaymentTerm/PaymentTermApi";
 import { getSysPrefs } from "../../../../../api/OrganizationSettings/SysPrefsApi";
 import CostCenterSelect from "../../../../../components/CostCenterSelect";
 import { getFriendlyApiErrorMessage } from "../../../../../utils/apiErrorMessage";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface GeneralSettingsFormProps {
   customerId?: string | number;
@@ -56,6 +57,8 @@ const getDefaultCreditStatusId = (items: CreditStatusSetup[]): string => {
 
 
 export default function GeneralSettingsForm({ customerId, onCustomerAdded }: GeneralSettingsFormProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -728,7 +731,7 @@ export default function GeneralSettingsForm({ customerId, onCustomerAdded }: Gen
           <Button variant="outlined" onClick={() => window.history.back()}>
             Back
           </Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             sx={{ backgroundColor: theme.palette.primary.main }}
             onClick={handleSubmit}

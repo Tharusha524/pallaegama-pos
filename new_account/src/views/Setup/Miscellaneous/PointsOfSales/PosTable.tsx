@@ -37,6 +37,7 @@ import {
 import { getInventoryLocations } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import { getBankAccounts } from "../../../../api/BankAccount/BankAccountApi";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function PosTable() {
   const [page, setPage] = useState(0);
@@ -50,6 +51,8 @@ export default function PosTable() {
   const [selectedPosId, setSelectedPosId] = useState<number | null>(null);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Point of Sale definitions');
 
   // Fetch master data
   const { data: locations = [] } = useQuery({
@@ -276,6 +279,7 @@ export default function PosTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

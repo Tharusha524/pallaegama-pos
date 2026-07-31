@@ -21,6 +21,7 @@ import { getWorkCentre, updateWorkCentre } from "../../../../api/WorkCentre/Work
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface WorkCentresFormData {
   name: string;
@@ -32,6 +33,8 @@ interface UpdateWorkCentreProps {
 }
 
 export default function UpdateWorkCentresForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Manufacture work centres');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -162,7 +165,7 @@ export default function UpdateWorkCentresForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

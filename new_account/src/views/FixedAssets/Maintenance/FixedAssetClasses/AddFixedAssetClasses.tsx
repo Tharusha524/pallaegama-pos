@@ -22,6 +22,7 @@ import AddedConfirmationModal from "../../../../components/AddedConfirmationModa
 import ErrorModal from "../../../../components/ErrorModal";
 import { createStockFaClass } from "../../../../api/StockFaClass/StockFaClassesApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface FixedAssetClassForm {
   parentClass: string;
@@ -32,6 +33,8 @@ interface FixedAssetClassForm {
 }
 
 export default function AddFixedAssetClasses() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Asset classes');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const muiTheme = useTheme();
@@ -181,7 +184,7 @@ export default function AddFixedAssetClasses() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

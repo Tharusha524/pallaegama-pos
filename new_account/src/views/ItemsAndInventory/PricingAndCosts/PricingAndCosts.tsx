@@ -5,9 +5,12 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import { useNavigate } from "react-router";
 import DashboardCard from "../../../components/DashboardCard";
+import { useAuth } from "../../../context/AuthContext";
+import { getPermissionIdForPath } from "../../../permissions/navigationTree";
 
 function ItemsPricingAndCosts() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
 
   const allItems = [
     {
@@ -30,6 +33,11 @@ function ItemsPricingAndCosts() {
     },
   ];
 
+  const visibleItems = allItems.filter((item) => {
+    const requiredId = getPermissionIdForPath(item.path);
+    return requiredId === undefined || hasPermission(requiredId);
+  });
+
   const handleItemClick = (path: string, text: string) => {
     if (path) {
       navigate(path);
@@ -41,7 +49,7 @@ function ItemsPricingAndCosts() {
   return (
     <Stack sx={{ minHeight: "100vh", backgroundColor: "#f0f0f0", p: 3 }}>
       <Grid container spacing={2}>
-        {allItems.map((item, index) => (
+        {visibleItems.map((item, index) => (
           <Grid item xs={12} sm={6} md={4} key={index}>
             <DashboardCard
               text={item.text}

@@ -32,7 +32,7 @@ class StockMasterRequest extends FormRequest
             ],
 
             'category_id' => 'required|integer|exists:item_category,category_id',
-            'tax_type_id' => 'required|integer|exists:item_tax_types,id',
+            'tax_type_id' => 'nullable|integer|exists:item_tax_types,id',
             'description' => 'required|string|max:255',
             'long_description' => 'required|string',
             'units' => 'required|integer|exists:item_units,id',

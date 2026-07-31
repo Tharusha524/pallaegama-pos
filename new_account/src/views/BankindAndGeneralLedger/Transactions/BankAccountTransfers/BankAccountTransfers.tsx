@@ -25,8 +25,11 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function BankAccountTransfers() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank account transfers');
   const navigate = useNavigate();
 
   // Fetch fiscal years
@@ -438,7 +441,7 @@ export default function BankAccountTransfers() {
         <Button
           variant="contained"
           color="primary"
-          disabled={!!dateError || isSaving}
+          disabled={!!dateError || isSaving || !canEdit}
           onClick={handleEnterTransfer}
         >
           {isSaving ? "Processing..." : "Enter Transfer"}

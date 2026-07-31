@@ -18,6 +18,7 @@ import { createFiscalYear } from "../../../../api/FiscalYear/FiscalYearApi";
 import { useNavigate } from "react-router";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface FiscalYearFormData {
     fiscalYearFrom: string;
@@ -26,6 +27,8 @@ interface FiscalYearFormData {
 }
 
 export default function AddFiscalYear() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fiscal years maintenance');
     const [open, setOpen] = useState(false);
     const [errorOpen, setErrorOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
@@ -170,7 +173,7 @@ export default function AddFiscalYear() {
                         Back
                     </Button>
 
-                    <Button
+                    <Button disabled={!canEdit}
                         fullWidth={isMobile}
                         variant="contained"
                         sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -28,6 +28,7 @@ import theme from "../../../../theme";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface ForeignItemFormData {
   upcCode: string;
@@ -39,6 +40,8 @@ interface ForeignItemFormData {
 const WHOLE_NUMBER = /^\d+$/;
 
 export default function AddForeignItemCodesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Foreign item codes entry');
   const [formData, setFormData] = useState<ForeignItemFormData>({
     upcCode: "",
     quantity: "",
@@ -298,7 +301,7 @@ export default function AddForeignItemCodesForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

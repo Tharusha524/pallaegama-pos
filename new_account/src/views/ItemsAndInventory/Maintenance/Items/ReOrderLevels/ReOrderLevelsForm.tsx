@@ -33,12 +33,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import UpdateConfirmationModal from "../../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface ItemReOderlevelProps {
   itemId?: string | number;
 }
 
 export default function ReOrderLevelsForm({ itemId }: ItemReOderlevelProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Reorder levels');
   const [reorderLevels, setReorderLevels] = useState<Record<string, string>>({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
@@ -205,7 +208,7 @@ export default function ReOrderLevelsForm({ itemId }: ItemReOderlevelProps) {
         </Box>
 
         <Stack direction="row" spacing={1}>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             color="primary"
             onClick={handleSave}

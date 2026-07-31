@@ -28,6 +28,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import AddedConfirmationModal from "../../../../components/AddedConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface RecurrentInvoiceData {
   categoryName: string;
@@ -41,6 +42,8 @@ interface RecurrentInvoiceData {
 }
 
 export default function AddRecurrentInvoices() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Recurrent invoices maintenance');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -307,7 +310,7 @@ export default function AddRecurrentInvoices() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

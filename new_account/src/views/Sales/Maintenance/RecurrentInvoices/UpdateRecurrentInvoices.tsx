@@ -27,6 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal"
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface RecurrentInvoiceData {
   description: string;
@@ -40,6 +41,8 @@ interface RecurrentInvoiceData {
 }
 
 export default function UpdateRecurrentInvoices() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Recurrent invoices maintenance');
 
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
@@ -322,7 +325,7 @@ export default function UpdateRecurrentInvoices() {
             }}
           >
             <Button onClick={() => window.history.back()}>Back</Button>
-            <Button
+            <Button disabled={!canEdit}
               variant="contained"
               fullWidth={isMobile}
               onClick={handleSubmit}

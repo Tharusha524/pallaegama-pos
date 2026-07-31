@@ -30,6 +30,7 @@ import SearchBar from "../../../../../components/SearchBar";
 import { getCustomerContacts, deleteCustomerContact } from "../../../../../api/Customer/CustomerContactApi";
 import ErrorModal from "../../../../../components/ErrorModal";
 import DeleteConfirmationModal from "../../../../../components/DeleteConfirmationModal";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface CustomerContacsProps {
   customerId?: string | number;
@@ -43,6 +44,8 @@ export default function CustomersContactsTable({ customerId }: CustomerContacsPr
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
 
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
@@ -223,6 +226,7 @@ export default function CustomersContactsTable({ customerId }: CustomerContacsPr
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

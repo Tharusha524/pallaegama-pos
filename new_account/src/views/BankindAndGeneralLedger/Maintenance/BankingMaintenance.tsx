@@ -21,6 +21,7 @@ const ITEMS: ModuleHubItem[] = [
   { text: "GL ACCOUNT GROUPS", icon: <ClassIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/bankingandgeneralledger/maintenance/gl-account-groups" },
   { text: "ACCOUNT TYPES (GL)", icon: <ClassIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/bankingandgeneralledger/maintenance/gl-types" },
   { text: "GL ACCOUNT CLASSES", icon: <ClassIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/bankingandgeneralledger/maintenance/gl-account-classes" },
+  { text: "CLASS TYPES", icon: <ClassIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/bankingandgeneralledger/maintenance/class-types" },
   { text: "CLOSING GL TRANSACTIONS", icon: <LockIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/bankingandgeneralledger/maintenance/closing-gl-transactions" },
   { text: "REVALUATION OF CURRENCY ACCOUNTS", icon: <AutorenewIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/bankingandgeneralledger/maintenance/revaluation-of-currency-accounts" },
 ];

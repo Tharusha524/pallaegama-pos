@@ -28,6 +28,7 @@ import SearchBar from "../../../../../components/SearchBar";
 import { getStockMoves } from "../../../../../api/StockMoves/StockMovesApi";
 import { getInventoryLocations } from "../../../../../api/InventoryLocation/InventoryLocationApi";
 import { getLocStocks } from "../../../../../api/LocStock/LocStockApi";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface ItemStatusProps {
   itemId?: string | number;
@@ -49,6 +50,8 @@ function StatusTable({ itemId }: ItemStatusProps) {
     const [rowsPerPage, setRowsPerPage] = useState(5);
     const [searchQuery, setSearchQuery] = useState("");
     const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Stock status view');
     const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
 
     // Fetch data from stock_moves and inventory_locations for the selected item

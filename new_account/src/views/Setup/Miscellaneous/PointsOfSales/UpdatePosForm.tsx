@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { getInventoryLocations } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import { getBankAccounts } from "../../../../api/BankAccount/BankAccountApi";
+import { useAuth } from "../../../../context/AuthContext";
 import {
   getSalesPos,
   updateSalesPos,
@@ -35,6 +36,8 @@ interface UpdatePosData {
 }
 
 export default function UpdatePosForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Point of Sale definitions');
   const [formData, setFormData] = useState<UpdatePosData>({
     posName: "",
     allowCreditSale: false,
@@ -289,7 +292,7 @@ export default function UpdatePosForm() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !canEdit}
           >
             {submitting ? "Updating..." : "Update"}
           </Button>

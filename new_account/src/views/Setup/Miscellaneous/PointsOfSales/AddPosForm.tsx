@@ -21,6 +21,7 @@ import { getInventoryLocations } from "../../../../api/InventoryLocation/Invento
 import { getBankAccounts } from "../../../../api/BankAccount/BankAccountApi";
 import { createSalesPos } from "../../../../api/SalePos/SalePosApi";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AddPosData {
   posName: string;
@@ -31,6 +32,8 @@ interface AddPosData {
 }
 
 export default function AddPosForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Point of Sale definitions');
   const [formData, setFormData] = useState<AddPosData>({
     posName: "",
     allowCreditSale: false,
@@ -242,7 +245,7 @@ export default function AddPosForm() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !canEdit}
           >
             {submitting ? "Adding..." : "Add POS"}
           </Button>

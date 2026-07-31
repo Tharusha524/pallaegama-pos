@@ -35,6 +35,7 @@ import { getPaymentTerms } from "../../../../../api/PaymentTerm/PaymentTermApi";
 import CostCenterSelect from "../../../../../components/CostCenterSelect";
 import { getFriendlyApiErrorMessage } from "../../../../../utils/apiErrorMessage";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface UpdateSupplierGeneralSettingProps {
     supplierId?: string | number;
@@ -45,6 +46,8 @@ export default function UpdateSupplierGeneralSettingsForm({
     supplierId,
     onSupplierDeleted,
 }: UpdateSupplierGeneralSettingProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Suppliers changes');
     const deletedRef = useRef(false);
     const [formData, setFormData] = useState({
         supplierName: "",
@@ -612,7 +615,7 @@ export default function UpdateSupplierGeneralSettingsForm({
                         Update Supplier
                     </Button>
 
-                    <Button
+                    <Button disabled={!canEdit}
                         variant="contained"
                         color="error"
                         sx={{ width: { xs: "100%", sm: 150 } }}

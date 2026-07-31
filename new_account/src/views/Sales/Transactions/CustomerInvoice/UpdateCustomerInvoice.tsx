@@ -46,8 +46,11 @@ import {
 import { useCustomerCredit } from "../../../../hooks/useCustomerCredit";
 import CustomerCreditSummaryFields from "../../../../components/CustomerCreditSummaryFields";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function UpdateCustomerInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer transaction inquiry');
   const navigate = useNavigate();
 
   // === Fields ===
@@ -816,7 +819,7 @@ export default function UpdateCustomerInvoice() {
           <Button variant="contained" color="primary" onClick={handleUpdate} disabled={!!dateError}>
             Update
           </Button>
-          <Button variant="contained" color="success" onClick={handleProcessInvoice} disabled={!!dateError}>
+          <Button variant="contained" color="success" onClick={handleProcessInvoice} disabled={!!dateError || !canEdit}>
             Process Invoice
           </Button>
         </Box>

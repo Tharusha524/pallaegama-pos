@@ -24,6 +24,7 @@ import UpdateConfirmationModal from "../../../../components/UpdateConfirmationMo
 import ErrorModal from "../../../../components/ErrorModal";
 import { getChartMasters } from "../../../../api/GLAccounts/ChartMasterApi";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface TaxFormData {
   description: string;
@@ -33,6 +34,8 @@ interface TaxFormData {
 }
 
 export default function UpdateTaxTypes() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Tax rates');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -246,7 +249,7 @@ export default function UpdateTaxTypes() {
             variant="outlined"
             onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

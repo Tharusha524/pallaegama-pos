@@ -27,6 +27,7 @@ import { getPaymentTerms } from "../../../../../api/PaymentTerm/PaymentTermApi";
 import CostCenterSelect from "../../../../../components/CostCenterSelect";
 import { getFriendlyApiErrorMessage } from "../../../../../utils/apiErrorMessage";
 import FormattedNumberField from "../../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface GeneralSettingsFormProps {
     customerId?: string | number;
@@ -65,6 +66,8 @@ const resolveRelationId = (value: unknown): string => {
 };
 
 export default function UpdateGeneralSettingsForm({ customerId, onCustomerDeleted }: GeneralSettingsFormProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
     const { id } = useParams(); // get id from route if not passed as prop
     const customerIdToUse = customerId || id;
     const deletedRef = useRef(false);
@@ -625,7 +628,7 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                     >
                         Update Customer
                     </Button>
-                    <Button variant="contained" color="error" onClick={handleDelete}>
+                    <Button disabled={!canEdit} variant="contained" color="error" onClick={handleDelete}>
                         Delete Customer
                     </Button>
                 </Box>

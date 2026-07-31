@@ -13,6 +13,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "notistack";
 import { createPrinter } from "../../../../api/Printer/PrinterApi";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AddPrintersData {
   printerName: string;
@@ -24,6 +25,8 @@ interface AddPrintersData {
 }
 
 export default function AddPrintersForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Printers configuration');
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const [formData, setFormData] = useState<AddPrintersData>({
@@ -180,7 +183,7 @@ export default function AddPrintersForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

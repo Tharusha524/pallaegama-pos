@@ -32,6 +32,7 @@ import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
 import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import { formatFaItemLabel } from "../../../../utils/fixedAssetsScreenCopy";
+import { useAuth } from "../../../../context/AuthContext";
 
 const methodLabels: Record<string, string> = {
   D: "Declining balance",
@@ -45,6 +46,8 @@ function formatMoney(value: number) {
 }
 
 export default function ProcessDepreciation() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Depreciation');
   const navigate = useNavigate();
   const today = new Date().toISOString().slice(0, 10);
   const [periodDate, setPeriodDate] = useState(today);
@@ -298,7 +301,8 @@ export default function ProcessDepreciation() {
               processMutation.isPending ||
               selectedIds.size === 0 ||
               !!dateError ||
-              isFetching
+              isFetching ||
+              !canEdit
             }
             onClick={() => {
               setSubmitError("");

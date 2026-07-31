@@ -53,8 +53,11 @@ import ReportCostCenterSelect from "../../../../components/ReportCostCenterSelec
 import BankPayerModeBar from "../../../../components/BankPayerModeBar";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function Payments() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bank payments');
   const navigate = useNavigate();
   const routerLocation = useLocation();
   const editState = routerLocation.state as {
@@ -669,7 +672,7 @@ export default function Payments() {
         <Button
           variant="contained"
           color="primary"
-          disabled={!!dateError || isSaving}
+          disabled={!!dateError || isSaving || !canEdit}
           onClick={handleSaveAdjustment}
         >
           {isSaving ? "Saving..." : isEditMode ? "Update Payment" : "Process Payment"}

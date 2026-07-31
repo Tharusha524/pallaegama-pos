@@ -48,6 +48,7 @@ import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
 import { runTransactionSave } from "../../../../utils/transactionSave";
 import { useMessageDialog } from "../../../../context/MessageDialogContext";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 function findDeliveryNote(
   debtorTrans: any[],
@@ -69,6 +70,8 @@ function findDeliveryNote(
 }
 
 export default function DeliveyNoteInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Direct sales delivery entry');
   const navigate = useNavigate();
   const { showError, showSuccess } = useMessageDialog();
   const { state } = useLocation();
@@ -640,7 +643,7 @@ export default function DeliveyNoteInvoice() {
           <Button variant="contained" color="primary" onClick={handleUpdate} disabled={!!dateError}>
             Update
           </Button>
-          <Button variant="contained" color="success" onClick={handleProcessInvoice} disabled={!!dateError}>
+          <Button variant="contained" color="success" onClick={handleProcessInvoice} disabled={!!dateError || !canEdit}>
             Process Invoice
           </Button>
         </Box>

@@ -30,6 +30,7 @@ import SearchBar from "../../../../components/SearchBar";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import { getLocations, deleteLocation, updateLocation } from "../../../../api/FixedAssetsLocation/FixedAssetsLocationApi";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function FixedAssetsLocationsTable() {
   const [page, setPage] = useState(0);
@@ -45,6 +46,8 @@ export default function FixedAssetsLocationsTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed assets locations maintenance');
 
   useEffect(() => {
     loadLocations();
@@ -243,6 +246,7 @@ export default function FixedAssetsLocationsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

@@ -23,6 +23,7 @@ import {
   voidTransaction,
 } from "../../../../api/VoidTransaction/VoidTransactionApi";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface VoidTransactionData {
   transactionKey: string;
@@ -31,6 +32,8 @@ interface VoidTransactionData {
 }
 
 export default function VoidTransaction() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Voiding transactions');
   const location = useLocation();
   const preselected = (location.state as { transactionKey?: string } | null)?.transactionKey ?? "";
 
@@ -188,7 +191,7 @@ export default function VoidTransaction() {
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}
             onClick={handleSubmit}
-            disabled={voidMutation.isPending}
+            disabled={voidMutation.isPending || !canEdit}
           >
             {voidMutation.isPending ? "Voiding…" : "Void Transaction"}
           </Button>

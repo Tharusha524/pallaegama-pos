@@ -30,6 +30,7 @@ import SearchBar from "../../../../../components/SearchBar";
 import { getSupplierContacts, deleteSupplierContact } from "../../../../../api/Supplier/SupplierContactApi";
 import ErrorModal from "../../../../../components/ErrorModal";
 import DeleteConfirmationModal from "../../../../../components/DeleteConfirmationModal";
+import { useAuth } from "../../../../../context/AuthContext";
 interface SupplierContacsProps {
   supplierId?: string | number;
 }
@@ -42,6 +43,8 @@ export default function SuppliersContactsTable({ supplierId }: SupplierContacsPr
   const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Suppliers changes');
 
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -240,6 +243,7 @@ export default function SuppliersContactsTable({ supplierId }: SupplierContacsPr
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

@@ -34,6 +34,7 @@ import {
 import { updatePaymentTerm } from "../../../../api/PaymentTerm/PaymentTermApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function PaymentTermsTable() {
   const [page, setPage] = useState(0);
@@ -47,6 +48,8 @@ export default function PaymentTermsTable() {
   const [errorMessage, setErrorMessage] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Payment terms');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -284,6 +287,7 @@ export default function PaymentTermsTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

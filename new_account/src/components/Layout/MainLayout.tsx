@@ -38,7 +38,7 @@ import { getPageMetaFromPath } from "../../utils/pageMeta";
 import { SidebarItem, getSidebarItems } from "./SidebarItems";
 import { useCompanySetupSettings } from "../../hooks/useCompanySetupSettings";
 import { useAuth } from "../../context/AuthContext";
-import PERMISSION_ID_MAP from "../../permissions/map";
+import { getModulePermissionIds } from "../../permissions/navigationTree";
 import theme from "../../theme";
 import useIsMobile from "../../customHooks/useIsMobile";
 import LogoutIcon from "@mui/icons-material/Logout";
@@ -430,7 +430,7 @@ const DrawerContent = ({
   const sidebarItems = useMemo(
     () =>
       getSidebarItems(
-        hasPermission(PERMISSION_ID_MAP["Company Setup"]),
+        getModulePermissionIds("Setup").some((id) => hasPermission(id)),
         {
           manufacturingEnabled,
           fixedAssetsEnabled,

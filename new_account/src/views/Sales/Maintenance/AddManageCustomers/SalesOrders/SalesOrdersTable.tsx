@@ -39,6 +39,7 @@ import { getInventoryLocations } from "../../../../../api/InventoryLocation/Inve
 import { getItems } from "../../../../../api/Item/ItemApi";
 import { getSalesOrderDetails } from "../../../../../api/SalesOrders/SalesOrderDetailsApi";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface SalesOrdersProps {
     customerId?: string | number;
@@ -60,6 +61,8 @@ export default function SalesOrdersTable({ customerId }: SalesOrdersProps) {
 
     const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
     const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
 
     const { data: salesOrders = [], isLoading, error } = useQuery({ queryKey: ["salesOrders"], queryFn: () => getSalesOrders() });
     const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => getCustomers() });
@@ -340,6 +343,7 @@ export default function SalesOrdersTable({ customerId }: SalesOrdersProps) {
                                                     Edit
                                                 </Button>
                                                 <Button
+                                                  disabled={!canEdit}
                                                     variant="outlined"
                                                     size="small"
                                                     color="error"

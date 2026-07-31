@@ -17,6 +17,7 @@ import { getStockFaClass, updateStockFaClass } from "../../../../api/StockFaClas
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface FixedAssetClassForm {
   parentClass: string;
@@ -27,6 +28,8 @@ interface FixedAssetClassForm {
 }
 
 export default function UpdateFixedAssetClasses() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Fixed Asset classes');
   const navigate = useNavigate();
   const { fa_class_id: faClassId } = useParams();
   const queryClient = useQueryClient();
@@ -204,7 +207,7 @@ export default function UpdateFixedAssetClasses() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

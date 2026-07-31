@@ -52,8 +52,11 @@ import { resolveSalesItemLinePrices } from "../../../../utils/resolveSalesItemPr
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function UpdateSalesQuotationEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales quotations');
     const navigate = useNavigate();
     const { id } = useParams();
     const { code: homeCurrencyCode } = useHomeCurrency();
@@ -807,7 +810,7 @@ export default function UpdateSalesQuotationEntry() {
                     <Button variant="outlined" onClick={() => navigate(-1)}>
                         Cancel Quotation
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handlePlaceQuotation}>
+                    <Button disabled={!canEdit} variant="contained" color="primary" onClick={handlePlaceQuotation}>
                         Commit Quotation Changes
                     </Button>
                 </Box>

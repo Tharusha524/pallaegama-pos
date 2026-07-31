@@ -56,8 +56,11 @@ import { resolvePurchaseItemPrice } from "../../../../utils/resolvePurchaseItemP
 import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function UpdatePurchaseOrderEntry() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Purchase order entry');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const locationRouter = useLocation();
@@ -686,7 +689,7 @@ export default function UpdatePurchaseOrderEntry() {
           <Button variant="outlined" onClick={() => navigate(-1)} disabled={isUpdating}>
             Cancel Order
           </Button>
-          <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={isUpdating}>
+          <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={isUpdating || !canEdit}>
             {isUpdating ? (
               <>
                 <CircularProgress size={18} sx={{ mr: 1, color: 'white' }} /> Updating...

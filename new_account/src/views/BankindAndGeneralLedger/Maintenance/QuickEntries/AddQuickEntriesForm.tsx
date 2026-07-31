@@ -20,6 +20,7 @@ import { createQuickEntry } from "../../../../api/QuickEntry/QuickEntryApi";
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "notistack";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface QuickEntryFormData {
   name: string;
@@ -31,6 +32,8 @@ interface QuickEntryFormData {
 }
 
 export default function AddQuickEntriesForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Quick GL entry definitions');
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const [formData, setFormData] = useState<QuickEntryFormData>({
@@ -186,7 +189,7 @@ export default function AddQuickEntriesForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

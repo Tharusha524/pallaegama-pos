@@ -34,6 +34,7 @@ import {
 } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function InventoryLocationTable() {
   const [page, setPage] = useState(0);
@@ -48,6 +49,8 @@ export default function InventoryLocationTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Inventory locations changes');
 
   const loadData = async () => {
     try {
@@ -250,6 +253,7 @@ export default function InventoryLocationTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

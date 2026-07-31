@@ -30,6 +30,7 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import SearchBar from "../../../../components/SearchBar";
 import { getCurrencies, Currency } from "../../../../api/Currency/currencyApi";
+import { useAuth } from "../../../../context/AuthContext";
 import {
   getExchangeRates,
   deleteExchangeRate,
@@ -45,6 +46,8 @@ function ExchangeRateTable() {
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Exchange rate table changes');
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
 
   //  Fetch currencies
@@ -227,6 +230,7 @@ function ExchangeRateTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

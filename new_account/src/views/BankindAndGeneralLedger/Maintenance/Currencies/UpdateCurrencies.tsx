@@ -18,6 +18,7 @@ import { getCurrency, updateCurrency } from "../../../../api/Currency/currencyAp
 import { useParams, useNavigate } from "react-router-dom";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface CurrenciesFormData {
   currencyAbbreviation: string;
@@ -29,6 +30,8 @@ interface CurrenciesFormData {
 }
 
 export default function UpdateCurrencies() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Currencies');
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -224,7 +227,7 @@ export default function UpdateCurrencies() {
             Back
           </Button>
 
-          <Button
+          <Button disabled={!canEdit}
             fullWidth={isMobile}
             variant="contained"
             sx={{ backgroundColor: "var(--pallet-blue)" }}

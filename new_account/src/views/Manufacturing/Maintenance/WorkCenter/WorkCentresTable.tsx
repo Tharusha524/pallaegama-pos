@@ -34,6 +34,7 @@ import {
   updateWorkCentre,
 } from "../../../../api/WorkCentre/WorkCentreApi";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function WorkCentresTable() {
   const [page, setPage] = useState(0);
@@ -49,6 +50,8 @@ export default function WorkCentresTable() {
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Manufacture work centres');
 
   // Load data
   const loadData = async () => {
@@ -252,6 +255,7 @@ export default function WorkCentresTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

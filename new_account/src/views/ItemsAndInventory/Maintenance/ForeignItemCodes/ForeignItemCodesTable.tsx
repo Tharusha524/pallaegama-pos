@@ -36,6 +36,7 @@ import { getItemCodes, deleteItemCode } from "../../../../api/ItemCodes/ItemCode
 import { resolveStockId } from "../../../../utils/itemCodePayload";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function ForeignItemCodesTable() {
     const [page, setPage] = useState(0);
@@ -50,6 +51,8 @@ function ForeignItemCodesTable() {
 
     const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
     const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Foreign item codes entry');
     const queryClient = useQueryClient();
 
     const { data: rawForeignItemData } = useQuery({
@@ -318,6 +321,7 @@ function ForeignItemCodesTable() {
                                                         Edit
                                                     </Button>
                                                     <Button
+                                                      disabled={!canEdit}
                                                         variant="outlined"
                                                         size="small"
                                                         color="error"

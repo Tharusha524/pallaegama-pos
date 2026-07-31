@@ -62,10 +62,13 @@ import { useHomeCurrency } from "../../../../hooks/useHomeCurrency";
 import { useTransactionMoney } from "../../../../hooks/useTransactionMoney";
 import { useCompanySetupSettings } from "../../../../hooks/useCompanySetupSettings";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 const FA_MB_FLAG = 4;
 
 export default function DirectSupplierInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Direct supplier invoice entry');
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useCurrentUser();
@@ -812,7 +815,7 @@ export default function DirectSupplierInvoice() {
           <Button variant="outlined" onClick={() => navigate(-1)}>
             Cancel Invoice
           </Button>
-                <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={isSaving || !!orderDateError}>
+                <Button variant="contained" color="primary" onClick={handlePlaceOrder} disabled={isSaving || !!orderDateError || !canEdit}>
             {isSaving ? 'Processing...' : 'Process Invoice'}
           </Button>
         </Box>

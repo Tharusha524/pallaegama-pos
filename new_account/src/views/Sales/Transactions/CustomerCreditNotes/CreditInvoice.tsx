@@ -49,8 +49,11 @@ import Breadcrumb from "../../../../components/BreadCrumb";
 import PageTitle from "../../../../components/PageTitle";
 import theme from "../../../../theme";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CreditInvoice() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Direct sales invoice entry');
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -768,7 +771,7 @@ export default function CreditInvoice() {
                     <Button variant="outlined" onClick={() => navigate(-1)}>
                         Update
                     </Button>
-                    <Button variant="contained" color="primary" onClick={handleProcessCreditNote} disabled={!!dateError}>
+                    <Button variant="contained" color="primary" onClick={handleProcessCreditNote} disabled={!!dateError || !canEdit}>
                         Process Credit Note
                     </Button>
                 </Box>

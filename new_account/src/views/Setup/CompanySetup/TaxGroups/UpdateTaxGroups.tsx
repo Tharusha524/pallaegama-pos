@@ -23,6 +23,7 @@ import { getTaxGroupItemsByGroupId, createTaxGroupItem, updateTaxGroupItem, dele
 import { useParams } from "react-router";
 import UpdateConfirmationModal from "../../../../components/UpdateConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface TaxType {
   id: number;
@@ -37,6 +38,8 @@ interface TaxGroupFormData {
 }
 
 export default function UpdateTaxGroupsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Tax groups');
   const { id } = useParams<{ id: string }>();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
@@ -238,7 +241,7 @@ export default function UpdateTaxGroupsForm() {
 
         <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", gap: 2, mt: 3 }}>
           <Button fullWidth={isMobile} onClick={() => window.history.back()} variant="outlined">Back</Button>
-          <Button fullWidth={isMobile} variant="contained" sx={{ backgroundColor: "var(--pallet-blue)" }} onClick={handleSubmit}>Update</Button>
+          <Button disabled={!canEdit} fullWidth={isMobile} variant="contained" sx={{ backgroundColor: "var(--pallet-blue)" }} onClick={handleSubmit}>Update</Button>
         </Box>
       </Paper>
       <UpdateConfirmationModal open={open} title="Success" content="Tax Group updated successfully!" handleClose={() => setOpen(false)} onSuccess={() => window.history.back()} />

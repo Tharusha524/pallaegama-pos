@@ -18,6 +18,7 @@ import { useLocation } from "react-router";
 import ErrorModal from "../../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../../components/AddedConfirmationModal";
 import { getContactCategories } from "../../../../../api/ContactCategory/ContactCategoryApi";
+import { useAuth } from "../../../../../context/AuthContext";
 interface AddContactsData {
   firstName: string;
   lastName: string;
@@ -33,6 +34,8 @@ interface AddContactsData {
 }
 
 export default function AddContactsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer branches maintenance');
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
@@ -358,7 +361,7 @@ export default function AddContactsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

@@ -39,6 +39,7 @@ import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
 import { invalidateFinancialReports } from "../../../../utils/invalidateFinancialReports";
 import { runTransactionSave } from "../../../../utils/transactionSave";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 function resolveLocCode(locations: any[], selected: string | number | null | undefined): string {
   if (selected === null || selected === undefined || selected === "") return "";
@@ -97,6 +98,8 @@ function mapDetailsToRows(
 }
 
 export default function ReceivePurchaseOrderItems() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Purchase receive');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -726,7 +729,7 @@ export default function ReceivePurchaseOrderItems() {
         <Button variant="contained" color="primary" onClick={handleUpdate} disabled={!!dateReceivedError || isProcessing}>
           Update
         </Button>
-        <Button variant="contained" color="success" onClick={handleProcessReceive} disabled={!!dateReceivedError || isProcessing || !reference}>
+        <Button variant="contained" color="success" onClick={handleProcessReceive} disabled={!!dateReceivedError || isProcessing || !reference || !canEdit}>
           {isProcessing ? (
             <>
               <CircularProgress size={18} sx={{ mr: 1, color: 'white' }} /> Processing...

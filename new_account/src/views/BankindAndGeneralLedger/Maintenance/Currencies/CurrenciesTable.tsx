@@ -30,6 +30,7 @@ import SearchBar from "../../../../components/SearchBar";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import { getCurrencies, deleteCurrency, updateCurrency } from "../../../../api/Currency/currencyApi";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 export default function CurrenciesTable() {
   const [currencies, setCurrencies] = useState<any[]>([]);
@@ -44,6 +45,8 @@ export default function CurrenciesTable() {
   const [errorMessage, setErrorMessage] = useState("");
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Currencies');
 
   // Load currencies
   const loadCurrencies = async () => {
@@ -241,6 +244,7 @@ export default function CurrenciesTable() {
                           Edit
                         </Button>
                         <Button
+                          disabled={!canEdit}
                           variant="outlined"
                           size="small"
                           color="error"

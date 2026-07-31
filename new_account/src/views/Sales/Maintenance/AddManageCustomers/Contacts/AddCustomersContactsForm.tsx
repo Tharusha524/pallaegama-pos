@@ -19,6 +19,7 @@ import { useNavigate } from "react-router";
 import ErrorModal from "../../../../../components/ErrorModal";
 import AddedConfirmationModal from "../../../../../components/AddedConfirmationModal";
 import { getContactCategories } from "../../../../../api/ContactCategory/ContactCategoryApi";
+import { useAuth } from "../../../../../context/AuthContext";
 
 interface AddCustomersContactsData {
   firstName: string;
@@ -35,6 +36,8 @@ interface AddCustomersContactsData {
 }
 
 export default function AddCustomersContactsForm() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Sales customer and branches changes');
   const [formData, setFormData] = useState<AddCustomersContactsData>({
     firstName: "",
     lastName: "",
@@ -326,7 +329,7 @@ export default function AddCustomersContactsForm() {
         >
           <Button onClick={() => window.history.back()}>Back</Button>
 
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             fullWidth={isMobile}
             sx={{ backgroundColor: "var(--pallet-blue)" }}

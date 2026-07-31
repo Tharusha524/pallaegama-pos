@@ -48,6 +48,7 @@ import {
 } from "../../../../utils/cashBankAccount";
 import useAllBankBalances from "../../../../hooks/useAllBankBalances";
 import FormattedNumberField from "../../../../components/FormattedNumberField";
+import { useAuth } from "../../../../context/AuthContext";
 
 interface AllocationRow {
   transactionType: string;
@@ -65,6 +66,8 @@ interface AllocationRow {
 }
 
 export default function CustomerPayments() {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Customer payments entry');
   const navigate = useNavigate();
   const location = useLocation();
   const { showError } = useMessageDialog();
@@ -714,7 +717,7 @@ export default function CustomerPayments() {
           <Button
             variant="contained"
             onClick={handleAddPayment}
-            disabled={!!dateError}
+            disabled={!!dateError || !canEdit}
           >
             Add Payment
           </Button>

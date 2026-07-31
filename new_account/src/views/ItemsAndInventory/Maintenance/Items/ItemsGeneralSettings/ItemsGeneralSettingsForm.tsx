@@ -36,11 +36,14 @@ import {
   resolveItemGlAccounts,
 } from "../../../../../utils/stockMasterDefaults";
 import ProfileImage from "../../../../../components/ProfileImageComponent";
+import { useAuth } from "../../../../../context/AuthContext";
 interface ItemGeneralSettingProps {
   itemId?: string | number;
 }
 
 export default function ItemsGeneralSettingsForm({ itemId }: ItemGeneralSettingProps) {
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Stock items add/edit');
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -206,7 +209,6 @@ export default function ItemsGeneralSettingsForm({ itemId }: ItemGeneralSettingP
     if (!formData.itemName) tempErrors.itemName = "Item Name is required";
     if (!formData.description) tempErrors.description = "Description is required";
     if (!formData.category) tempErrors.category = "Category is required";
-    if (!formData.itemTaxType) tempErrors.itemTaxType = "Item Tax Type is required";
     if (!formData.itemType) tempErrors.itemType = "Item Type is required";
     if (!formData.unitOfMeasure) tempErrors.unitOfMeasure = "Unit of Measure is required";
     if (!formData.salesAccount) tempErrors.salesAccount = "Sales Account is required";
@@ -240,7 +242,7 @@ export default function ItemsGeneralSettingsForm({ itemId }: ItemGeneralSettingP
     const payload = {
       stock_id: formData.itemCode, // required
       category_id: parseInt(formData.category),
-      tax_type_id: parseInt(formData.itemTaxType),
+      tax_type_id: formData.itemTaxType ? parseInt(formData.itemTaxType) : null,
       description: formData.itemName,
       long_description: formData.description,
       units: parseInt(formData.unitOfMeasure),
@@ -686,7 +688,7 @@ export default function ItemsGeneralSettingsForm({ itemId }: ItemGeneralSettingP
           <Button variant="outlined" onClick={() => window.history.back()}>
             Back
           </Button>
-          <Button
+          <Button disabled={!canEdit}
             variant="contained"
             sx={{ backgroundColor: theme.palette.primary.main }}
             onClick={handleSubmit}

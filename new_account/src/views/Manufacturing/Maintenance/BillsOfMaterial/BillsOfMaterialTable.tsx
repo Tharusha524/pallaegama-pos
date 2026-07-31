@@ -37,6 +37,7 @@ import { getWorkCentres } from "../../../../api/WorkCentre/WorkCentreApi";
 import { getInventoryLocations } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import DeleteConfirmationModal from "../../../../components/DeleteConfirmationModal";
 import ErrorModal from "../../../../components/ErrorModal";
+import { useAuth } from "../../../../context/AuthContext";
 
 function BillsOfMaterialTable() {
     const [selectedItem, setSelectedItem] = useState("");
@@ -50,6 +51,8 @@ function BillsOfMaterialTable() {
 
     const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
     const navigate = useNavigate();
+  const { hasEditPermission } = useAuth();
+  const canEdit = hasEditPermission('Bill of Materials');
     const location = useLocation();
     const queryClient = useQueryClient();
 
@@ -383,6 +386,7 @@ function BillsOfMaterialTable() {
                                                         Edit
                                                     </Button>
                                                     <Button
+                                                      disabled={!canEdit}
                                                         variant="outlined"
                                                         size="small"
                                                         color="error"
