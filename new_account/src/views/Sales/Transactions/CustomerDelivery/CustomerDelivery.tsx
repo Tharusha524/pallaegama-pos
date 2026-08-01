@@ -608,9 +608,7 @@ export default function CustomerDelivery() {
                     value={row.deliveryQty}
                     onChange={(e) => {
                       const maxOrder = Math.max(0, (row.ordered ?? 0) - (row.delivered ?? 0));
-                      const maxStock =
-                        row.availableQty > 0 ? Math.min(maxOrder, row.availableQty) : maxOrder;
-                      const value = Math.max(0, Math.min(Number(e.target.value), maxStock));
+                      const value = Math.max(0, Math.min(Number(e.target.value), maxOrder));
                       setRows((prev) =>
                         prev.map((r) =>
                           r.id === row.id

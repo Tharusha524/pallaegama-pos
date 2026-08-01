@@ -375,7 +375,7 @@ export default function DirectDelivery() {
             priceBeforeTax = resolvedBefore;
         }
 
-        const qty = Math.min(1, availableQty);
+        const qty = 1;
         const disc = customerDiscount;
         const draftRow = {
             quantity: qty,
@@ -1034,8 +1034,7 @@ export default function DirectDelivery() {
                                             //     return;
                                             // }
                                             const inputValue = Number(e.target.value);
-                                            const clampedValue = Math.min(inputValue, row.availableQuantity || 0);
-                                            handleChange(row.id, "quantity", clampedValue);
+                                            handleChange(row.id, "quantity", inputValue);
                                         }}
                                         inputProps={{ min: 0 }}
                                     />
