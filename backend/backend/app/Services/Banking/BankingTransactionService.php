@@ -197,6 +197,8 @@ class BankingTransactionService
                     'credit' => $columns['credit'],
                     'memo' => (string) ($line->memo ?? ''),
                     'cost_center_id' => $line->cost_center_id ?? null,
+                    'person_type_id' => $line->person_type_id ?? null,
+                    'person_id' => $line->person_id ?? null,
                 ];
             })->values()->all(),
         ];
@@ -283,6 +285,7 @@ class BankingTransactionService
 
         GlTransHelper::insertLines($built['glLines']);
         $this->syncJournalBankTransactions($transNo, $reference, $date, $built['glLines']);
+        $this->syncJournalDebtorTransactions($transNo, $reference, $date, $built['glLines']);
 
         if (Schema::hasTable('comments')) {
             try {
@@ -589,7 +592,9 @@ class BankingTransactionService
                 $credit,
                 $line['memo'] ?? ($headerMemo !== '' ? $headerMemo : 'Journal entry'),
                 $line['cost_center_id'] ?? null,
-                $line['cost_center2_id'] ?? null
+                $line['cost_center2_id'] ?? null,
+                $line['person_type_id'] ?? null,
+                $line['person_id'] ?? null
             );
         }
 
@@ -1013,7 +1018,9 @@ class BankingTransactionService
         float $credit,
         string $memo,
         $costCenterId = null,
-        $costCenter2Id = null
+        $costCenter2Id = null,
+        $personTypeId = null,
+        $personId = null
     ): array {
         $payload = [
             'type' => $type,
@@ -1029,6 +1036,11 @@ class BankingTransactionService
 
         if ($costCenter2Id !== null && $costCenter2Id !== '' && (int) $costCenter2Id > 0) {
             $payload['cost_center2_id'] = (int) $costCenter2Id;
+        }
+
+        if ($personTypeId !== null && $personTypeId !== '' && $personId !== null && $personId !== '') {
+            $payload['person_type_id'] = (int) $personTypeId;
+            $payload['person_id'] = (int) $personId;
         }
 
         return $payload;
@@ -1137,8 +1149,15 @@ class BankingTransactionService
         $maxJournal = Schema::hasTable('journal')
             ? (int) DB::table('journal')->where('type', $transType)->max('trans_no')
             : 0;
+        // gl_trans is always written for every posting, even ones (like an
+        // opening-balance import) that never got a 'journal'/'bank_trans' header
+        // row — without this, nextTransNo() can hand out a number that's already
+        // in use there and silently collide with an existing entry.
+        $maxGl = Schema::hasColumn('gl_trans', 'type_no')
+            ? (int) DB::table('gl_trans')->where('type', (string) $transType)->max('type_no')
+            : 0;
 
-        return max($maxBank, $maxJournal, 0) + 1;
+        return max($maxBank, $maxJournal, $maxGl, 0) + 1;
     }
 
     private function bankGlCode(int $bankAccountId): ?string
@@ -1228,6 +1247,66 @@ class BankingTransactionService
                 'ref' => $reference,
                 'trans_date' => $date,
                 'amount' => round($amount, 2),
+            ]);
+        }
+    }
+
+    /**
+     * Mirror journal debtor-control GL lines into debtor_trans so Customer Balances
+     * (and other AR reports) pick up customer-tagged journal entries.
+     *
+     * @param  array<int, array<string, mixed>>  $glLines
+     */
+    private function syncJournalDebtorTransactions(int $transNo, string $reference, string $date, array $glLines): void
+    {
+        if (! Schema::hasTable('debtor_trans') || ! Schema::hasTable('cust_branch')) {
+            return;
+        }
+
+        DB::table('debtor_trans')
+            ->where('trans_type', self::TYPE_JOURNAL)
+            ->where('trans_no', $transNo)
+            ->delete();
+
+        foreach ($glLines as $line) {
+            if ((int) ($line['person_type_id'] ?? 0) !== 2) {
+                continue;
+            }
+
+            $debtorNo = (int) ($line['person_id'] ?? 0);
+            if ($debtorNo <= 0) {
+                continue;
+            }
+
+            $debit = (float) ($line['debit'] ?? 0);
+            $credit = (float) ($line['credit'] ?? 0);
+            $amount = $debit - $credit;
+            if (abs($amount) < 0.001) {
+                continue;
+            }
+
+            $branchCode = DB::table('cust_branch')
+                ->where('debtor_no', $debtorNo)
+                ->orderBy('branch_code')
+                ->value('branch_code');
+
+            if (! $branchCode) {
+                continue;
+            }
+
+            DB::table('debtor_trans')->insert([
+                'trans_no' => $transNo,
+                'trans_type' => self::TYPE_JOURNAL,
+                'debtor_no' => $debtorNo,
+                'branch_code' => $branchCode,
+                'tran_date' => $date,
+                'due_date' => $date,
+                'reference' => $reference,
+                'ov_amount' => round($amount, 2),
+                'alloc' => 0,
+                'rate' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
         }
     }

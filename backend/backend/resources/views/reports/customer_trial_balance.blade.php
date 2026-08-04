@@ -17,20 +17,20 @@
     <table class="erp-data-table" border="1" cellpadding="0" cellspacing="0" width="100%">
         <thead>
             <tr>
-                <th>Customer</th>
-                <th class="text-right">Opening Balance</th>
-                <th class="text-right">Debits (Invoices)</th>
-                <th class="text-right">Credits (Payments)</th>
-                <th class="text-right">Closing Balance</th>
+                <th>Name</th>
+                <th class="text-right">Open Balance</th>
+                <th class="text-right">Debit</th>
+                <th class="text-right">Credit</th>
+                <th class="text-right">Balance</th>
             </tr>
         </thead>
         <tbody>
-            @php 
+            @php
                 $total_open = 0; $total_debits = 0; $total_credits = 0; $total_closing = 0;
             @endphp
             @foreach($data as $index => $item)
                 <tr @if($index % 2 === 1) class="erp-row-alt" @endif>
-                    <td>{{ $item->name }} ({{ $item->debtor_no }})</td>
+                    <td>{{ $item->name }}</td>
                     <td class="text-right">{{ number_format($item->opening_balance, 2) }}</td>
                     <td class="text-right">{{ number_format($item->debits, 2) }}</td>
                     <td class="text-right">{{ number_format($item->credits, 2) }}</td>
@@ -46,7 +46,7 @@
         </tbody>
         <tfoot>
             <tr class="total-row">
-                <td>Grand Totals</td>
+                <td>Grand Total</td>
                 <td class="text-right">{{ number_format($total_open, 2) }}</td>
                 <td class="text-right">{{ number_format($total_debits, 2) }}</td>
                 <td class="text-right">{{ number_format($total_credits, 2) }}</td>

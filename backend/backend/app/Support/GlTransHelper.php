@@ -225,11 +225,11 @@ class GlTransHelper
         if (Schema::hasColumn('gl_trans', 'type_no') && isset($line['type_no'])) {
             $row['type_no'] = (int) $line['type_no'];
         }
-        if (Schema::hasColumn('gl_trans', 'person_type_id') && isset($line['person_type_id'])) {
-            $row['person_type_id'] = $line['person_type_id'];
+        if (Schema::hasColumn('gl_trans', 'person_type_id')) {
+            $row['person_type_id'] = $line['person_type_id'] ?? null;
         }
-        if (Schema::hasColumn('gl_trans', 'person_id') && isset($line['person_id'])) {
-            $row['person_id'] = $line['person_id'];
+        if (Schema::hasColumn('gl_trans', 'person_id')) {
+            $row['person_id'] = $line['person_id'] ?? null;
         }
         if (Schema::hasColumn('gl_trans', 'created_at')) {
             $row['created_at'] = now();

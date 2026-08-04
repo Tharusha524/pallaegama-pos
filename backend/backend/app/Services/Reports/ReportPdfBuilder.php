@@ -252,15 +252,16 @@ class ReportPdfBuilder
     private function customerBalances(Request $request, string $title): array
     {
         $data = $this->reports->getCustomerBalancesData($request);
-        $subtitle = 'As at: ' . $request->input('endDate', now()->format('Y-m-d'));
+        $subtitle = $request->input('startDate', '') . ' to ' . $request->input('endDate', now()->format('Y-m-d'));
         return $this->pack($title, [
-            'debtor_no' => 'Customer #',
-            'name' => 'Name',
-            'curr_code' => 'Currency',
-            'opening_balance' => 'Opening',
-            'charges' => 'Charges',
+            'trans_type' => 'Trans Type',
+            'number' => '#',
+            'date' => 'Date',
+            'due_date' => 'Due Date',
+            'debits' => 'Debits',
             'credits' => 'Credits',
-            'balance' => 'Balance',
+            'allocated' => 'Allocated',
+            'outstanding_balance' => 'Outstanding',
         ], $data, $request, $subtitle);
     }
 

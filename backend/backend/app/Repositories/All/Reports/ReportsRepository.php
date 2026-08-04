@@ -7,6 +7,8 @@ use App\Repositories\Base\BaseRepository;
 use App\Support\ActiveFiscalYear;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Carbon\Carbon;
 
 class ReportsRepository extends BaseRepository implements ReportsInterface
 {
@@ -16,56 +18,141 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
     }
 
     /**
-     * Get data for Customer Balances Report
-     * 
-     * @param Request $request
-     * @return \Illuminate\Support\Collection
+     * Customer Balances — per customer: an Open Balance line (activity before the
+     * period start), each individual transaction within the period, and a Total line.
      */
     public function getCustomerBalancesData(Request $request)
     {
-        $date = $request->input('endDate', now()->format('Y-m-d'));
+        $startDate = $request->input('startDate', ActiveFiscalYear::defaultStart());
+        $endDate = $request->input('endDate', now()->format('Y-m-d'));
         $from_customer = $request->input('from_customer');
         $to_customer = $request->input('to_customer');
         $currency = $request->input('currency', 'all');
 
-        $query = DB::table('debtors_master as d')
-            ->leftJoin('debtor_trans as t', 'd.debtor_no', '=', 't.debtor_no')
-            ->select(
-                'd.debtor_no',
-                'd.name as name',
-                'd.curr_code',
-                DB::raw("SUM(IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount, 0)) as total_amount"),
-                DB::raw("SUM(IFNULL(t.alloc, 0)) as allocated")
-            )
-            ->where(function($q) use ($date) {
-                $q->where('t.tran_date', '<=', $date)
-                  ->orWhereNull('t.tran_date');
-            })
-            ->where(function($q) {
-                $q->where('t.trans_type', '<>', 13)
-                  ->orWhereNull('t.trans_type');
-            })
-            ->groupBy('d.debtor_no', 'd.name', 'd.curr_code');
+        $customersQuery = DB::table('debtors_master as d')
+            ->select('d.debtor_no', 'd.name', 'd.curr_code')
+            ->orderBy('d.name');
 
         if ($from_customer) {
-            $query->where('d.debtor_no', '>=', $from_customer);
+            $customersQuery->where('d.debtor_no', '>=', $from_customer);
         }
         if ($to_customer) {
-            $query->where('d.debtor_no', '<=', $to_customer);
+            $customersQuery->where('d.debtor_no', '<=', $to_customer);
         }
         if ($currency !== 'all') {
-            $query->where('d.curr_code', '=', $currency);
+            $customersQuery->where('d.curr_code', '=', $currency);
         }
 
-        return $query->get()->map(function ($row) {
-            $row->opening_balance = 0; // Fixed for the view
-            $row->charges = $row->total_amount;
-            $row->credits = $row->allocated;
-            $row->balance = $row->total_amount - $row->allocated;
-            return $row;
-        })->filter(function ($row) {
-            return abs($row->balance) > 0.001;
-        });
+        $customers = $customersQuery->get();
+
+        $transTypeNames = Schema::hasTable('trans_types')
+            ? DB::table('trans_types')->pluck('description', 'trans_type')
+            : collect();
+
+        $netAmountExpr = 'ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount';
+
+        $rows = collect();
+
+        foreach ($customers as $customer) {
+            $opening = DB::table('debtor_trans')
+                ->where('debtor_no', $customer->debtor_no)
+                ->where('tran_date', '<', $startDate)
+                ->where('trans_type', '<>', 13)
+                ->selectRaw("
+                    SUM(CASE WHEN ($netAmountExpr) > 0 THEN ($netAmountExpr) ELSE 0 END) as debits,
+                    SUM(CASE WHEN ($netAmountExpr) < 0 THEN ABS($netAmountExpr) ELSE 0 END) as credits,
+                    SUM(IFNULL(alloc, 0)) as allocated
+                ")
+                ->first();
+
+            $periodTrans = DB::table('debtor_trans')
+                ->where('debtor_no', $customer->debtor_no)
+                ->whereBetween('tran_date', [$startDate, $endDate])
+                ->where('trans_type', '<>', 13)
+                ->orderBy('tran_date')
+                ->orderBy('id')
+                ->get();
+
+            $openDebits = (float) ($opening->debits ?? 0);
+            $openCredits = (float) ($opening->credits ?? 0);
+            $openAlloc = (float) ($opening->allocated ?? 0);
+
+            $totalDebits = $openDebits;
+            $totalCredits = $openCredits;
+            $totalAlloc = $openAlloc;
+
+            $transRows = collect();
+
+            foreach ($periodTrans as $t) {
+                $net = (float) $t->ov_amount + (float) $t->ov_gst + (float) $t->ov_freight
+                    + (float) $t->ov_freight_tax + (float) $t->ov_discount;
+                $debit = $net > 0 ? $net : 0.0;
+                $credit = $net < 0 ? abs($net) : 0.0;
+                $alloc = (float) ($t->alloc ?? 0);
+
+                $totalDebits += $debit;
+                $totalCredits += $credit;
+                $totalAlloc += $alloc;
+
+                $transRows->push((object) [
+                    'row_type' => 'transaction',
+                    'trans_type' => $transTypeNames[$t->trans_type] ?? ('Type '.$t->trans_type),
+                    'number' => $t->reference,
+                    'date' => $t->tran_date ? Carbon::parse($t->tran_date)->format('d/m/Y') : '',
+                    'due_date' => $t->due_date ? Carbon::parse($t->due_date)->format('d/m/Y') : '',
+                    'debits' => $debit,
+                    'credits' => $credit,
+                    'allocated' => $alloc,
+                    'outstanding_balance' => $debit - $credit - $alloc,
+                ]);
+            }
+
+            $totalOutstanding = $totalDebits - $totalCredits - $totalAlloc;
+            $openOutstanding = $openDebits - $openCredits - $openAlloc;
+
+            if ($transRows->isEmpty() && abs($openOutstanding) < 0.001 && abs($totalOutstanding) < 0.001) {
+                continue;
+            }
+
+            $rows->push((object) [
+                'row_type' => 'customer_header',
+                'debtor_no' => $customer->debtor_no,
+                'trans_type' => $customer->name,
+                'curr_code' => $customer->curr_code,
+                'number' => null, 'date' => null, 'due_date' => null,
+                'debits' => null, 'credits' => null, 'allocated' => null, 'outstanding_balance' => null,
+            ]);
+
+            $rows->push((object) [
+                'row_type' => 'opening',
+                'trans_type' => null,
+                'number' => null,
+                'date' => 'Open Balance',
+                'due_date' => null,
+                'debits' => $openDebits,
+                'credits' => $openCredits,
+                'allocated' => $openAlloc,
+                'outstanding_balance' => $openOutstanding,
+            ]);
+
+            foreach ($transRows as $row) {
+                $rows->push($row);
+            }
+
+            $rows->push((object) [
+                'row_type' => 'total',
+                'trans_type' => null,
+                'number' => 'Total',
+                'date' => null,
+                'due_date' => null,
+                'debits' => $totalDebits,
+                'credits' => $totalCredits,
+                'allocated' => $totalAlloc,
+                'outstanding_balance' => $totalOutstanding,
+            ]);
+        }
+
+        return $rows;
     }
 
     /**
@@ -148,24 +235,29 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
 
         return $customers->map(function ($customer) use ($startDate, $endDate) {
             // A. Opening Balance (Total before StartDate)
+            // Delivery Notes (trans_type 13) are excluded — they're a stock-movement
+            // placeholder that duplicates the Sales Invoice raised for the same sale.
             $opening = DB::table('debtor_trans')
                 ->where('debtor_no', $customer->debtor_no)
                 ->where('tran_date', '<', $startDate)
+                ->where('trans_type', '<>', 13)
                 ->sum(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount - alloc"));
 
             // B. Debits (New Invoices/Charges between Start and End)
             $debits = DB::table('debtor_trans')
                 ->where('debtor_no', $customer->debtor_no)
                 ->whereBetween('tran_date', [$startDate, $endDate])
+                ->where('trans_type', '<>', 13)
                 ->where(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount"), '>', 0)
                 ->sum(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount"));
 
             // C. Credits (New Payments/Allocations between Start and End)
-            // Note: In FA logic, credits are often negative amounts or specific trans types. 
+            // Note: In FA logic, credits are often negative amounts or specific trans types.
             // Here we assume positive movement for debits and strictly sum the allocated/payments for credits in this period.
             $credits = DB::table('debtor_trans')
                 ->where('debtor_no', $customer->debtor_no)
                 ->whereBetween('tran_date', [$startDate, $endDate])
+                ->where('trans_type', '<>', 13)
                 ->where(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount"), '<', 0)
                 ->sum(DB::raw("ABS(ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount)"));
             
@@ -206,9 +298,10 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
                 'b.br_name',
                 'b.sales_area',
                 'b.sales_person',
-                DB::raw("(SELECT SUM(ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount) 
-                          FROM debtor_trans 
-                          WHERE debtor_no = d.debtor_no 
+                DB::raw("(SELECT SUM(ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount)
+                          FROM debtor_trans
+                          WHERE debtor_no = d.debtor_no
+                          AND trans_type <> 13
                           AND tran_date >= '$activitySince') as turnover"),
                 // Since contact info is in crm_persons via crm_contacts, we'll try to get representative info
                 DB::raw("(SELECT p.name FROM crm_persons p 

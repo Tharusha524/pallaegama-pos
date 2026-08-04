@@ -129,6 +129,11 @@ class BankingTransactionController extends Controller
             'lines.*.account_code' => 'nullable|string',
             'lines.*.debit' => 'nullable|numeric',
             'lines.*.credit' => 'nullable|numeric',
+            'lines.*.memo' => 'nullable|string',
+            'lines.*.cost_center_id' => 'nullable|integer',
+            'lines.*.cost_center2_id' => 'nullable|integer',
+            'lines.*.person_type_id' => 'nullable|integer',
+            'lines.*.person_id' => 'nullable|integer',
         ]);
 
         try {
@@ -179,6 +184,11 @@ class BankingTransactionController extends Controller
             'lines.*.account_code' => 'nullable|string',
             'lines.*.debit' => 'nullable|numeric',
             'lines.*.credit' => 'nullable|numeric',
+            'lines.*.memo' => 'nullable|string',
+            'lines.*.cost_center_id' => 'nullable|integer',
+            'lines.*.cost_center2_id' => 'nullable|integer',
+            'lines.*.person_type_id' => 'nullable|integer',
+            'lines.*.person_id' => 'nullable|integer',
         ]);
 
         try {

@@ -167,12 +167,29 @@
       "Bash(node apply_wave3.js)",
       "Bash(node test_final.js)",
       "Bash(php -l \"/e/erp-new-main/backend/backend/app/Repositories/All/Auth/AuthRepository.php\")",
-      "Bash(node test_login_fix.js)"
+      "Bash(node test_login_fix.js)",
+      "Bash(powershell -Command 'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '\\\\''php artisan serve|vite'\\\\'' } | Select-Object ProcessId, CommandLine')",
+      "Bash(node test_service_item.js)",
+      "Bash(node test_service_item2.js)",
+      "Bash(node test_manufactured_item.js)",
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(powershell -Command 'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '\\\\''artisan serve'\\\\'' } | Select-Object ProcessId, CommandLine')",
+      "Bash(xargs grep -l \"Schema::create\")",
+      "Bash(php -l app/Services/Banking/BankingTransactionService.php)",
+      "Bash(php -l app/Http/Controllers/BankingTransactionController.php)",
+      "Bash(php -l database/migrations/2026_08_04_090000_add_person_fields_to_gl_trans_table.php)",
+      "Bash(node test_counterparty.js)",
+      "Bash(php -l app/Support/GlTransHelper.php)",
+      "Bash(php -l app/Repositories/All/Reports/ReportsRepository.php)",
+      "Bash(php -l app/Services/Reports/ReportPdfBuilder.php)",
+      "Bash(php -l app/Http/Controllers/ReportController.php)"
     ],
     "additionalDirectories": [
       "\\tmp",
       "e:\\xampp\\php",
-      "E:\\erp-new-main\\new_account\\src\\views\\BankindAndGeneralLedger\\Maintenance"
+      "E:\\erp-new-main\\new_account\\src\\views\\BankindAndGeneralLedger\\Maintenance",
+      "e:\\erp-new-main\\new_account",
+      "e:\\erp-new-main\\new_account\\dist"
     ]
   }
 }
