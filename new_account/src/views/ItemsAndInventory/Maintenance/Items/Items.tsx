@@ -177,7 +177,7 @@ const Items = () => {
         <Tab label="General Settings" />
         <Tab label="Sales Pricing" disabled={selectedItem === "new"} />
         <Tab label="Purchasing Pricing" disabled={selectedItem === "new"} />
-        <Tab label="Standard Costs" disabled={selectedItem === "new"} />
+        <Tab label="Standard Costs" disabled={selectedItem === "new" || isService} />
         <Tab label="Reorder Levels" disabled={selectedItem === "new" || isService} />
         <Tab label="Transactions" disabled={selectedItem === "new" || isService} />
         <Tab label="Status" disabled={selectedItem === "new"} />
@@ -198,7 +198,7 @@ const Items = () => {
         {selectedItem !== "new" && <PurchasingPricingTable itemId={selectedItem} />}
       </TabPanel>
       <TabPanel value={tabValue} index={3}>
-        {selectedItem !== "new" && <AddStandardCostForm itemId={selectedItem} />}
+        {selectedItem !== "new" && !isService && <AddStandardCostForm itemId={selectedItem} />}
       </TabPanel>
       <TabPanel value={tabValue} index={4}>
         {selectedItem !== "new" && !isService && <ReOrderLevelsForm itemId={selectedItem} />}

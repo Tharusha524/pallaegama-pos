@@ -842,15 +842,20 @@ class ReportPdfBuilder
     private function printStatements(Request $request, string $title): array
     {
         $dates = $this->reportDates($request);
+        // Bank deposits (2), credit notes (11) and customer payments (12) are stored
+        // with a positive ov_amount but actually reduce what the customer owes —
+        // matches CustomerCreditService::signedBalanceExpr().
+        $balanceExpr = "(CASE WHEN t.trans_type IN (2,11,12) THEN -1 ELSE 1 END) * "
+            . 'IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0)';
         $query = DB::table('debtor_trans as t')
             ->join('debtors_master as d', 't.debtor_no', '=', 'd.debtor_no')
             ->select(
                 'd.debtor_no',
                 'd.name as customer',
-                DB::raw('SUM(IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0)) as balance')
+                DB::raw("SUM({$balanceExpr}) as balance")
             )
             ->groupBy('d.debtor_no', 'd.name')
-            ->havingRaw('ABS(SUM(IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0))) > 0.001')
+            ->havingRaw("ABS(SUM({$balanceExpr})) > 0.001")
             ->orderBy('d.name');
 
         if ($dates['toDate']) {

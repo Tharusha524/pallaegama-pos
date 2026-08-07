@@ -142,6 +142,30 @@ export default function AddItemCategoriesForm() {
     fetchData();
   }, []);
 
+  // Service categories don't carry inventory/COGS/adjustment/assembly costs —
+  // those fields are hidden from the form, so keep them silently mirroring
+  // Sales Account instead of leaving them blank (still required by the backend).
+  useEffect(() => {
+    if (!isService) return;
+    setFormData((prev) => {
+      if (
+        prev.inventoryAccount === prev.salesAccount &&
+        prev.cogsAccount === prev.salesAccount &&
+        prev.inventoryAdjustmentAccount === prev.salesAccount &&
+        prev.itemAssemblyCostAccount === prev.salesAccount
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        inventoryAccount: prev.salesAccount,
+        cogsAccount: prev.salesAccount,
+        inventoryAdjustmentAccount: prev.salesAccount,
+        itemAssemblyCostAccount: prev.salesAccount,
+      };
+    });
+  }, [isService, formData.salesAccount]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -381,39 +405,41 @@ export default function AddItemCategoriesForm() {
             </FormControl>
           )}
 
-          <FormControl size="small" fullWidth error={!!errors.cogsAccount}>
-            <InputLabel>C.O.G.S. Account</InputLabel>
-            <Select
-              name="cogsAccount"
-              value={formData.cogsAccount}
-              onChange={handleSelectChange}
-              label="C.O.G.S. Account"
-            >
-              {(() => {
-                const groupedAccounts: { [key: string]: any[] } = {};
-                chartMasters.forEach((acc) => {
-                  const type = acc.account_type || "Unknown";
-                  if (!groupedAccounts[type]) groupedAccounts[type] = [];
-                  groupedAccounts[type].push(acc);
-                });
+          {!isService && (
+            <FormControl size="small" fullWidth error={!!errors.cogsAccount}>
+              <InputLabel>C.O.G.S. Account</InputLabel>
+              <Select
+                name="cogsAccount"
+                value={formData.cogsAccount}
+                onChange={handleSelectChange}
+                label="C.O.G.S. Account"
+              >
+                {(() => {
+                  const groupedAccounts: { [key: string]: any[] } = {};
+                  chartMasters.forEach((acc) => {
+                    const type = acc.account_type || "Unknown";
+                    if (!groupedAccounts[type]) groupedAccounts[type] = [];
+                    groupedAccounts[type].push(acc);
+                  });
 
-                return Object.entries(groupedAccounts).flatMap(([typeKey, accounts]) => {
-                  const typeText = accountTypeMap[Number(typeKey)] || "Unknown";
-                  return [
-                    <ListSubheader key={`header-${typeKey}`}>{typeText}</ListSubheader>,
-                    ...accounts.map((acc) => (
-                      <MenuItem key={acc.account_code} value={acc.account_code}>
-                        <Stack direction="row" justifyContent="space-between" sx={{ width: "100%" }}>
-                          {acc.account_code} - {acc.account_name}
-                        </Stack>
-                      </MenuItem>
-                    )),
-                  ];
-                });
-              })()}
-            </Select>
-            <FormHelperText>{errors.cogsAccount || " "}</FormHelperText>
-          </FormControl>
+                  return Object.entries(groupedAccounts).flatMap(([typeKey, accounts]) => {
+                    const typeText = accountTypeMap[Number(typeKey)] || "Unknown";
+                    return [
+                      <ListSubheader key={`header-${typeKey}`}>{typeText}</ListSubheader>,
+                      ...accounts.map((acc) => (
+                        <MenuItem key={acc.account_code} value={acc.account_code}>
+                          <Stack direction="row" justifyContent="space-between" sx={{ width: "100%" }}>
+                            {acc.account_code} - {acc.account_name}
+                          </Stack>
+                        </MenuItem>
+                      )),
+                    ];
+                  });
+                })()}
+              </Select>
+              <FormHelperText>{errors.cogsAccount || " "}</FormHelperText>
+            </FormControl>
+          )}
 
           {!isService && (
             <FormControl size="small" fullWidth error={!!errors.inventoryAdjustmentAccount}>

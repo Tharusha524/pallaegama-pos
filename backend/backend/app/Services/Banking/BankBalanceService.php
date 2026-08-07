@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Schema;
  * FrontAccounting-style bank book balance.
  *
  * book = ending_reconcile_balance + SUM(bank_trans after last_reconciled_date)
- * If never reconciled: SUM(all bank_trans), or ending_reconcile_balance if no movements.
+ * If never reconciled, ending_reconcile_balance is the opening balance and every
+ * bank_trans row counts as a movement on top of it.
  */
 class BankBalanceService
 {
@@ -41,21 +42,7 @@ class BankBalanceService
         }
         $movements = (float) $movementsQuery->sum('amount');
 
-        if ($lastReconciled) {
-            return round($base + $movements, 2);
-        }
-
-        $allQuery = DB::table('bank_trans')->where('bank_act', $bankAccountId);
-        if ($asAtDate) {
-            $allQuery->where('trans_date', '<=', $asAtDate);
-        }
-        $allMovements = (float) $allQuery->sum('amount');
-
-        if ($this->hasAnyTransactions($bankAccountId, $asAtDate)) {
-            return round($allMovements, 2);
-        }
-
-        return round($base, 2);
+        return round($base + $movements, 2);
     }
 
     public function getBalanceBeforeDate(int $bankAccountId, string $beforeDate): float
@@ -82,17 +69,11 @@ class BankBalanceService
 
         if ($lastReconciled) {
             $movementsQuery->where('trans_date', '>', $lastReconciled);
-            $movements = (float) $movementsQuery->sum('amount');
-
-            return round($base + $movements, 2);
         }
 
         $movements = (float) $movementsQuery->sum('amount');
-        if ($this->hasTransactionsBefore($bankAccountId, $beforeDate)) {
-            return round($movements, 2);
-        }
 
-        return round($base, 2);
+        return round($base + $movements, 2);
     }
 
     public function getTotalBalance(?string $asAtDate = null): float
@@ -169,24 +150,6 @@ class BankBalanceService
         }
 
         return Carbon::parse($value)->format('Y-m-d');
-    }
-
-    private function hasAnyTransactions(int $bankAccountId, ?string $asAtDate): bool
-    {
-        $q = DB::table('bank_trans')->where('bank_act', $bankAccountId);
-        if ($asAtDate) {
-            $q->where('trans_date', '<=', $asAtDate);
-        }
-
-        return $q->exists();
-    }
-
-    private function hasTransactionsBefore(int $bankAccountId, string $beforeDate): bool
-    {
-        return DB::table('bank_trans')
-            ->where('bank_act', $bankAccountId)
-            ->where('trans_date', '<', $beforeDate)
-            ->exists();
     }
 
     public function isCashBankAccount(int $bankAccountId): bool

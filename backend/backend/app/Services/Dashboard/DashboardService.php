@@ -21,6 +21,13 @@ class DashboardService
 
   private const PURCHASE_TYPES = [20, 21];
 
+  /**
+   * debtor_trans types stored with a positive ov_amount that actually reduce what
+   * the customer owes: bank deposits/prepayments (2), credit notes (11), customer
+   * payments (12). Mirrors CustomerCreditService::signedBalanceExpr().
+   */
+  private const CREDIT_REDUCING_DEBTOR_TYPES = [2, 11, 12];
+
   public function getSummary(): array
   {
     $ttl = (int) config('performance.dashboard_cache_seconds', 300);
@@ -128,6 +135,14 @@ class DashboardService
     return 'IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount, 0)';
   }
 
+  private function signedDebtorBalanceExpr(): string
+  {
+    $types = implode(',', self::CREDIT_REDUCING_DEBTOR_TYPES);
+
+    return '(CASE WHEN t.trans_type IN (' . $types . ') THEN -1 ELSE 1 END) * ('
+      . $this->debtorAmountExpr() . ' - IFNULL(t.alloc, 0))';
+  }
+
   private function debtorNetExpr(): string
   {
     return 'IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount, 0)';
@@ -170,13 +185,13 @@ class DashboardService
 
     $rows = DB::table('debtor_trans as t')
       ->selectRaw(
-        'SUM(' . $this->debtorAmountExpr() . ' - IFNULL(t.alloc, 0)) as balance'
+        'SUM(' . $this->signedDebtorBalanceExpr() . ') as balance'
       )
       ->where(function ($q) use ($asAt) {
         $q->where('t.tran_date', '<=', $asAt)->orWhereNull('t.tran_date');
       })
       ->groupBy('t.debtor_no')
-      ->havingRaw('ABS(SUM(' . $this->debtorAmountExpr() . ' - IFNULL(t.alloc, 0))) > 0.001')
+      ->havingRaw('ABS(SUM(' . $this->signedDebtorBalanceExpr() . ')) > 0.001')
       ->get();
 
     return (float) $rows->sum('balance');
@@ -534,6 +549,8 @@ class DashboardService
 
     return (int) DB::table('debtor_trans as t')
       ->where('t.due_date', '<', $today->format('Y-m-d'))
+      // Payments/credit notes/deposits aren't themselves "receivables" that can be overdue.
+      ->whereNotIn('t.trans_type', self::CREDIT_REDUCING_DEBTOR_TYPES)
       ->whereRaw(
         'ABS(' . $this->debtorAmountExpr() . ' - IFNULL(t.alloc, 0)) > 0.001'
       )

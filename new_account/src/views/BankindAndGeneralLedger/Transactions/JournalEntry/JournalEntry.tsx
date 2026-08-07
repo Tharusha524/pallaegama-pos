@@ -515,13 +515,7 @@ export default function JournalEntry() {
     const postedDifference = totalDebit - totalCredit;
     const openingBalance = computeOpeningBalanceSummary(rows, accountTypeByCode, chartGroupMeta);
     const columnBalanced = isJournalColumnBalanced(rows);
-    const openingBalanceHint = getOpeningBalanceEquationHint(
-      openingBalance,
-      rows,
-      accountTypeByCode,
-      chartGroupMeta,
-      columnBalanced
-    );
+    const openingBalanceHint = getOpeningBalanceEquationHint(openingBalance, columnBalanced);
     return {
       signedDebit: debitTotal,
       signedCredit: creditTotal,
@@ -626,8 +620,13 @@ export default function JournalEntry() {
       return;
     }
 
+    // The Assets = Liabilities + Equity check only makes sense for pure balance-sheet
+    // entries (e.g. entering opening balances). A normal entry that includes an
+    // Income/Expense line is expected to leave that equation looking "unbalanced"
+    // here, since P&L accounts aren't part of the balance sheet — so it must not
+    // block posting.
     const ob = journalTotals.openingBalance;
-    if (ob.hasBalanceSheetLines && !ob.equationBalanced) {
+    if (ob.hasBalanceSheetLines && !ob.equationBalanced && !ob.hasProfitAndLossLines) {
       setSaveError(
         `Opening balance: Total Assets (${formatBsAmount(ob.totalAssets)}) must equal Liabilities + Equity (${formatBsAmount(ob.liabilitiesPlusEquity)}). Difference: ${formatBsAmount(Math.abs(ob.difference))}`
       );

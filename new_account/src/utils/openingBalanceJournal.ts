@@ -24,6 +24,7 @@ export interface OpeningBalanceSummary {
   difference: number;
   equationBalanced: boolean;
   hasBalanceSheetLines: boolean;
+  hasProfitAndLossLines: boolean;
   grossPostedDebit: number;
   grossPostedCredit: number;
 }
@@ -43,17 +44,23 @@ export function computeOpeningBalanceSummary(
   let grossPostedDebit = 0;
   let grossPostedCredit = 0;
   let hasBalanceSheetLines = false;
+  let hasProfitAndLossLines = false;
 
   lines.forEach((line) => {
     const code = String(line.selectedAccountCode || line.accountCode || "").trim();
     if (!code) return;
 
     const accountType = accountTypeByCode.get(code) ?? 0;
+    const { debit, credit } = normalizeJournalLineAmounts(line.debit, line.credit);
+    if (Math.abs(debit) < 0.001 && Math.abs(credit) < 0.001) return;
+
+    if (isProfitAndLossAccount(accountType, chartGroupMeta)) {
+      hasProfitAndLossLines = true;
+    }
+
     if (!isBalanceSheetAccount(accountType, chartGroupMeta)) return;
 
     hasBalanceSheetLines = true;
-    const { debit, credit } = normalizeJournalLineAmounts(line.debit, line.credit);
-    if (Math.abs(debit) < 0.001 && Math.abs(credit) < 0.001) return;
 
     grossPostedDebit += debit;
     grossPostedCredit += credit;
@@ -78,6 +85,7 @@ export function computeOpeningBalanceSummary(
     difference: round2(difference),
     equationBalanced: Math.abs(difference) <= 0.01,
     hasBalanceSheetLines,
+    hasProfitAndLossLines,
     grossPostedDebit: round2(grossPostedDebit),
     grossPostedCredit: round2(grossPostedCredit),
   };
@@ -88,28 +96,13 @@ export function computeOpeningBalanceSummary(
  */
 export function getOpeningBalanceEquationHint(
   summary: OpeningBalanceSummary,
-  lines: OpeningBalanceLine[],
-  accountTypeByCode: Map<string, number>,
-  chartGroupMeta?: Map<number, ChartGroupMeta>,
   journalColumnBalanced = false
 ): string | null {
   if (!summary.hasBalanceSheetLines || summary.equationBalanced) {
     return null;
   }
 
-  let hasProfitAndLossLines = false;
-  lines.forEach((line) => {
-    const code = String(line.selectedAccountCode || line.accountCode || "").trim();
-    if (!code) return;
-    const accountType = accountTypeByCode.get(code) ?? 0;
-    if (!isProfitAndLossAccount(accountType, chartGroupMeta)) return;
-    const { debit, credit } = normalizeJournalLineAmounts(line.debit, line.credit);
-    if (Math.abs(debit) >= 0.001 || Math.abs(credit) >= 0.001) {
-      hasProfitAndLossLines = true;
-    }
-  });
-
-  if (journalColumnBalanced && hasProfitAndLossLines) {
+  if (journalColumnBalanced && summary.hasProfitAndLossLines) {
     return "Debit and credit columns balance, but Income/Expense accounts are not part of the balance sheet equation. Offset asset or liability lines with another balance sheet account (e.g. Retained Earnings), not Income or Expense.";
   }
 

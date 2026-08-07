@@ -145,6 +145,30 @@ export default function UpdateItemCategoriesForm() {
     fetchData();
   }, [id, navigate]);
 
+  // Service categories don't carry inventory/COGS/adjustment/assembly costs —
+  // those fields are hidden from the form, so keep them silently mirroring
+  // Sales Account instead of leaving them blank (still required by the backend).
+  useEffect(() => {
+    if (!isService) return;
+    setFormData((prev) => {
+      if (
+        prev.inventoryAccount === prev.salesAccount &&
+        prev.cogsAccount === prev.salesAccount &&
+        prev.inventoryAdjustmentAccount === prev.salesAccount &&
+        prev.itemAssemblyCostAccount === prev.salesAccount
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        inventoryAccount: prev.salesAccount,
+        cogsAccount: prev.salesAccount,
+        inventoryAdjustmentAccount: prev.salesAccount,
+        itemAssemblyCostAccount: prev.salesAccount,
+      };
+    });
+  }, [isService, formData.salesAccount]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -416,40 +440,42 @@ export default function UpdateItemCategoriesForm() {
             )}
 
             {/* C.O.G.S Account */}
-            <FormControl size="small" fullWidth error={!!errors.cogsAccount}>
-              <InputLabel>C.O.G.S. Account</InputLabel>
-              <Select
-                name="cogsAccount"
-                value={formData.cogsAccount}
-                onChange={handleSelectChange}
-                label="C.O.G.S. Account"
-              >
-                {Object.entries(
-                  chartMasters.reduce((acc: any, item: any) => {
-                    const type = item.account_type || "Unknown";
-                    if (!acc[type]) acc[type] = [];
-                    acc[type].push(item);
-                    return acc;
-                  }, {})
-                ).flatMap(([typeKey, accounts]: any) => {
-                  const typeText = accountTypeMap[Number(typeKey)] || "Unknown";
-                  return [
-                    <ListSubheader key={`header-${typeKey}`}>
-                      {typeText}
-                    </ListSubheader>,
-                    ...accounts.map((acc: any) => (
-                      <MenuItem
-                        key={acc.account_code}
-                        value={acc.account_code}
-                      >
-                        {acc.account_code} - {acc.account_name}
-                      </MenuItem>
-                    )),
-                  ];
-                })}
-              </Select>
-              <FormHelperText>{errors.cogsAccount || " "}</FormHelperText>
-            </FormControl>
+            {!isService && (
+              <FormControl size="small" fullWidth error={!!errors.cogsAccount}>
+                <InputLabel>C.O.G.S. Account</InputLabel>
+                <Select
+                  name="cogsAccount"
+                  value={formData.cogsAccount}
+                  onChange={handleSelectChange}
+                  label="C.O.G.S. Account"
+                >
+                  {Object.entries(
+                    chartMasters.reduce((acc: any, item: any) => {
+                      const type = item.account_type || "Unknown";
+                      if (!acc[type]) acc[type] = [];
+                      acc[type].push(item);
+                      return acc;
+                    }, {})
+                  ).flatMap(([typeKey, accounts]: any) => {
+                    const typeText = accountTypeMap[Number(typeKey)] || "Unknown";
+                    return [
+                      <ListSubheader key={`header-${typeKey}`}>
+                        {typeText}
+                      </ListSubheader>,
+                      ...accounts.map((acc: any) => (
+                        <MenuItem
+                          key={acc.account_code}
+                          value={acc.account_code}
+                        >
+                          {acc.account_code} - {acc.account_name}
+                        </MenuItem>
+                      )),
+                    ];
+                  })}
+                </Select>
+                <FormHelperText>{errors.cogsAccount || " "}</FormHelperText>
+              </FormControl>
+            )}
 
             {/* Inventory Adjustment Account */}
             {!isService && (

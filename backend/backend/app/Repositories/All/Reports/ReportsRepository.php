@@ -12,9 +12,45 @@ use Carbon\Carbon;
 
 class ReportsRepository extends BaseRepository implements ReportsInterface
 {
+    /**
+     * debtor_trans types whose ov_amount is stored positive but which actually
+     * reduce what the customer owes: bank deposits/prepayments (2), credit notes (11),
+     * customer payments (12). Mirrors CustomerCreditService::signedBalanceExpr().
+     */
+    private const CREDIT_REDUCING_TYPES = [2, 11, 12];
+
     public function __construct(DebtorsMaster $model)
     {
         parent::__construct($model);
+    }
+
+    private function signedDebtorNetExpr(string $netAmountExpr, string $alias = ''): string
+    {
+        $p = $alias !== '' ? $alias.'.' : '';
+        $types = implode(',', self::CREDIT_REDUCING_TYPES);
+
+        return "(CASE WHEN {$p}trans_type IN ({$types}) THEN -($netAmountExpr) ELSE ($netAmountExpr) END)";
+    }
+
+    private function signedDebtorAllocExpr(string $alias = ''): string
+    {
+        $p = $alias !== '' ? $alias.'.' : '';
+        $types = implode(',', self::CREDIT_REDUCING_TYPES);
+
+        return "(CASE WHEN {$p}trans_type IN ({$types}) THEN -IFNULL({$p}alloc, 0) ELSE IFNULL({$p}alloc, 0) END)";
+    }
+
+    /**
+     * Signed (net - alloc) balance for a debtor_trans row/expression, matching
+     * CustomerCreditService::signedBalanceExpr(). Use for report SUM()/CASE totals.
+     */
+    private function signedDebtorBalanceExpr(string $alias = 't'): string
+    {
+        $p = $alias !== '' ? $alias.'.' : '';
+        $types = implode(',', self::CREDIT_REDUCING_TYPES);
+        $net = "{$p}ov_amount + {$p}ov_gst + {$p}ov_freight + {$p}ov_freight_tax + {$p}ov_discount";
+
+        return "(CASE WHEN {$p}trans_type IN ({$types}) THEN -1 ELSE 1 END) * IFNULL({$net} - {$p}alloc, 0)";
     }
 
     /**
@@ -50,6 +86,8 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
             : collect();
 
         $netAmountExpr = 'ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount';
+        $signedNetExpr = $this->signedDebtorNetExpr($netAmountExpr);
+        $signedAllocExpr = $this->signedDebtorAllocExpr();
 
         $rows = collect();
 
@@ -59,9 +97,9 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
                 ->where('tran_date', '<', $startDate)
                 ->where('trans_type', '<>', 13)
                 ->selectRaw("
-                    SUM(CASE WHEN ($netAmountExpr) > 0 THEN ($netAmountExpr) ELSE 0 END) as debits,
-                    SUM(CASE WHEN ($netAmountExpr) < 0 THEN ABS($netAmountExpr) ELSE 0 END) as credits,
-                    SUM(IFNULL(alloc, 0)) as allocated
+                    SUM(CASE WHEN ($signedNetExpr) > 0 THEN ($signedNetExpr) ELSE 0 END) as debits,
+                    SUM(CASE WHEN ($signedNetExpr) < 0 THEN ABS($signedNetExpr) ELSE 0 END) as credits,
+                    SUM($signedAllocExpr) as allocated
                 ")
                 ->first();
 
@@ -86,9 +124,11 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
             foreach ($periodTrans as $t) {
                 $net = (float) $t->ov_amount + (float) $t->ov_gst + (float) $t->ov_freight
                     + (float) $t->ov_freight_tax + (float) $t->ov_discount;
-                $debit = $net > 0 ? $net : 0.0;
-                $credit = $net < 0 ? abs($net) : 0.0;
-                $alloc = (float) ($t->alloc ?? 0);
+                $sign = in_array((int) $t->trans_type, self::CREDIT_REDUCING_TYPES, true) ? -1 : 1;
+                $signedNet = $sign * $net;
+                $debit = $signedNet > 0 ? $signedNet : 0.0;
+                $credit = $signedNet < 0 ? abs($signedNet) : 0.0;
+                $alloc = $sign * (float) ($t->alloc ?? 0);
 
                 $totalDebits += $debit;
                 $totalCredits += $credit;
@@ -170,6 +210,8 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
         $past_due_days = 30; // Usually dynamic in FA
         $past_due_days2 = 60;
 
+        $balanceExpr = $this->signedDebtorBalanceExpr('t');
+
         $query = DB::table('debtors_master as d')
             ->leftJoin('debtor_trans as t', 'd.debtor_no', '=', 't.debtor_no')
             ->select(
@@ -177,13 +219,13 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
                 'd.name',
                 'd.curr_code',
                 // Total outstanding at date
-                DB::raw("SUM(IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0)) as balance"),
+                DB::raw("SUM({$balanceExpr}) as balance"),
                 // Due (Balance where due_date <= $date)
-                DB::raw("SUM(CASE WHEN t.due_date <= '$date' THEN IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0) ELSE 0 END) as due"),
+                DB::raw("SUM(CASE WHEN t.due_date <= '$date' THEN {$balanceExpr} ELSE 0 END) as due"),
                 // Overdue 1 (Balance where (date - due_date) >= 30)
-                DB::raw("SUM(CASE WHEN DATEDIFF('$date', t.due_date) >= $past_due_days THEN IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0) ELSE 0 END) as overdue1"),
+                DB::raw("SUM(CASE WHEN DATEDIFF('$date', t.due_date) >= $past_due_days THEN {$balanceExpr} ELSE 0 END) as overdue1"),
                 // Overdue 2 (Balance where (date - due_date) >= 60)
-                DB::raw("SUM(CASE WHEN DATEDIFF('$date', t.due_date) >= $past_due_days2 THEN IFNULL(t.ov_amount + t.ov_gst + t.ov_freight + t.ov_freight_tax + t.ov_discount - t.alloc, 0) ELSE 0 END) as overdue2")
+                DB::raw("SUM(CASE WHEN DATEDIFF('$date', t.due_date) >= $past_due_days2 THEN {$balanceExpr} ELSE 0 END) as overdue2")
             )
             ->where(function($q) use ($date) {
                 $q->where('t.tran_date', '<=', $date)
@@ -241,27 +283,27 @@ class ReportsRepository extends BaseRepository implements ReportsInterface
                 ->where('debtor_no', $customer->debtor_no)
                 ->where('tran_date', '<', $startDate)
                 ->where('trans_type', '<>', 13)
-                ->sum(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount - alloc"));
+                ->sum(DB::raw($this->signedDebtorBalanceExpr('')));
 
-            // B. Debits (New Invoices/Charges between Start and End)
+            // B. Debits (New Invoices/Charges between Start and End) — everything
+            // except the credit-reducing types (bank deposits/prepayments, credit
+            // notes, customer payments), which are stored with a positive ov_amount
+            // too but actually reduce the balance.
             $debits = DB::table('debtor_trans')
                 ->where('debtor_no', $customer->debtor_no)
                 ->whereBetween('tran_date', [$startDate, $endDate])
                 ->where('trans_type', '<>', 13)
+                ->whereNotIn('trans_type', self::CREDIT_REDUCING_TYPES)
                 ->where(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount"), '>', 0)
                 ->sum(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount"));
 
             // C. Credits (New Payments/Allocations between Start and End)
-            // Note: In FA logic, credits are often negative amounts or specific trans types.
-            // Here we assume positive movement for debits and strictly sum the allocated/payments for credits in this period.
             $credits = DB::table('debtor_trans')
                 ->where('debtor_no', $customer->debtor_no)
                 ->whereBetween('tran_date', [$startDate, $endDate])
                 ->where('trans_type', '<>', 13)
-                ->where(DB::raw("ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount"), '<', 0)
+                ->whereIn('trans_type', self::CREDIT_REDUCING_TYPES)
                 ->sum(DB::raw("ABS(ov_amount + ov_gst + ov_freight + ov_freight_tax + ov_discount)"));
-            
-            // Additionally sum external allocations/payments if needed, but usually debtor_trans handles it.
             
             $customer->opening_balance = $opening;
             $customer->debits = $debits;
