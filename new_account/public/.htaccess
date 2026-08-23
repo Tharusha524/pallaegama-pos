@@ -1,4 +1,4 @@
-# SPA in public_html/dilmani_apparel/
+# SPA in public_html/Sky_Smart/
 
 <IfModule mod_negotiation.c>
     Options -MultiViews
@@ -8,10 +8,11 @@ DirectoryIndex index.html
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /dilmani_apparel/
+    RewriteBase /Sky_Smart/
 
-    # Never rewrite built assets
+    # Never rewrite built assets or the backend
     RewriteRule ^assets/ - [L]
+    RewriteRule ^backend/ - [L]
 
     # Serve existing files/folders directly
     RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -23,7 +24,7 @@ DirectoryIndex index.html
 </IfModule>
 
 # Some LiteSpeed hosts only honor ErrorDocument (not RewriteRule)
-ErrorDocument 404 /dilmani_apparel/index.html
+ErrorDocument 404 /Sky_Smart/index.html
 
 # Security headers (scan: bizos.dio.lk/dilmani_apparel/)
 <IfModule mod_headers.c>

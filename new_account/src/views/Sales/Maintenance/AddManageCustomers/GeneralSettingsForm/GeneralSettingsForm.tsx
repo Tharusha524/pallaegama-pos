@@ -265,10 +265,10 @@ export default function GeneralSettingsForm({ customerId, onCustomerAdded }: Gen
         shipping_company: ShippingCompanies.find(
           s => s.shipper_name === formData.defaultShippingCompany
         )?.shipper_id || null,
-        sales_account: getPref('default_sales_act'),
-        sales_discount_account: getPref('default_sales_discount_act'),
-        receivables_account: getPref('debtors_act'),
-        payment_discount_account: getPref('default_prompt_payment_act'),
+        sales_account: getPref('salesAccount'),
+        sales_discount_account: getPref('salesDiscountAccount'),
+        receivables_account: getPref('receivableAccount'),
+        payment_discount_account: getPref('promptPaymentDiscountAccount'),
         contact_person: formData.customerName,
         inactive: false,
       };

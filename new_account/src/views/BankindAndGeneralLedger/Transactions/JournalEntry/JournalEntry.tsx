@@ -532,21 +532,26 @@ export default function JournalEntry() {
 
   //  Add new row
   const handleAddItem = () => {
-    setRows((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        accountCode: "",
-        accountDescription: "",
-        costCenter: "",
-        debit: "",
-        credit: "",
-        memo: "",
-        selectedAccountCode: "",
-        personTypeId: "",
-        personId: "",
-      },
-    ]);
+    setRows((prev) => {
+      // Use max existing id + 1, not row count — prevents duplicate ids
+      // (and the row-state mix-ups they cause) once a row has been removed.
+      const nextId = prev.length > 0 ? Math.max(...prev.map((r) => r.id)) + 1 : 1;
+      return [
+        ...prev,
+        {
+          id: nextId,
+          accountCode: "",
+          accountDescription: "",
+          costCenter: "",
+          debit: "",
+          credit: "",
+          memo: "",
+          selectedAccountCode: "",
+          personTypeId: "",
+          personId: "",
+        },
+      ];
+    });
   };
 
   //  Remove row (optional)

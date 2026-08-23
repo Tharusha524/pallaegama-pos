@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getOrganization } from '../api/OrganizationSettings/organizationSettingsApi';
+import { resolveLogoSrc } from './logoUrl';
 
 export function useCurrentOrganization() {
   const { data } = useQuery({
@@ -9,12 +10,13 @@ export function useCurrentOrganization() {
   });
 
   const logoEntry = Array.isArray(data?.logoUrl) ? data.logoUrl[0] : data?.logoUrl;
-  const logoUrl =
+  const logoUrl = resolveLogoSrc(
     logoEntry && typeof logoEntry === "object"
       ? (logoEntry as { imageUrl?: string }).imageUrl
       : typeof logoEntry === "string"
         ? logoEntry
-        : undefined;
+        : undefined
+  );
 
   return {
     organizationName: data?.organizationName ?? 'Grow Ledger',

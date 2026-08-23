@@ -343,6 +343,8 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                 default_shipping_company: formData.defaultShippingCompany,
                 sales_area: formData.salesArea,
                 tax_group: formData.taxGroup,
+                cost_center_id: formData.costCenter ? Number(formData.costCenter) : null,
+                cost_center2_id: 0,
                 inactive: formData.status === "Inactive",
             };
 
