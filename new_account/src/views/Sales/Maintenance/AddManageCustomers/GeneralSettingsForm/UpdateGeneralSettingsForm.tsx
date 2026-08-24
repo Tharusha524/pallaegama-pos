@@ -208,7 +208,13 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                                 customerRes.payment_terms ?? customerRes.paymentTerm
                             ),
                             creditStatus: creditStatusId,
-                            costCenter: customerRes.cost_center_id || "",
+                            // `|| ""` would treat a real cost_center_id of 0 (no cost center
+                            // set) as falsy and blank the field — use a null/undefined check
+                            // instead so 0 round-trips correctly.
+                            costCenter:
+                                customerRes.cost_center_id !== null && customerRes.cost_center_id !== undefined
+                                    ? String(customerRes.cost_center_id)
+                                    : "",
                             generalNotes: customerRes.notes || "",
                             defaultInventoryLocation: customerRes.default_inventory_location || "",
                             defaultShippingCompany: customerRes.default_shipping_company || "",
@@ -343,7 +349,9 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                 default_shipping_company: formData.defaultShippingCompany,
                 sales_area: formData.salesArea,
                 tax_group: formData.taxGroup,
-                cost_center_id: formData.costCenter ? Number(formData.costCenter) : null,
+                // debtors_master.cost_center_id is NOT NULL — send 0 (no cost center),
+                // never null, or the update fails with a DB constraint violation.
+                cost_center_id: formData.costCenter !== "" ? Number(formData.costCenter) : 0,
                 cost_center2_id: 0,
                 inactive: formData.status === "Inactive",
             };
