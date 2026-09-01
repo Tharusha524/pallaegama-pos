@@ -27,8 +27,8 @@ export const getStockDamageSummary = async (params?: { from_date?: string; to_da
   (await api.get("/stock-damages-summary", { params })).data;
 
 // ---- Low Stock ----
-export const getLowStock = async (lookbackDays = 30) =>
-  (await api.get("/inventory/low-stock", { params: { lookback_days: lookbackDays } })).data;
+export const getLowStock = async (lookbackDays = 30, locCode?: string) =>
+  (await api.get("/inventory/low-stock", { params: { lookback_days: lookbackDays, loc_code: locCode } })).data;
 
 // ---- Sales Analytics ----
 export const getSupermarketDashboardSummary = async () =>

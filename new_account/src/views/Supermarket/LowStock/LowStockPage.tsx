@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box, Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, Chip, Typography,
+  FormControl, InputLabel, Select, MenuItem,
 } from "@mui/material";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
 import { getLowStock } from "../../../api/Pos/posApi";
+import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 
 const statusColor: Record<string, "error" | "warning" | "success"> = {
   critical: "error",
@@ -15,16 +18,31 @@ const statusColor: Record<string, "error" | "warning" | "success"> = {
 };
 
 export default function LowStockPage() {
+  const [locCode, setLocCode] = useState("");
+  const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
   const { data, isLoading } = useQuery({
-    queryKey: ["low-stock"],
-    queryFn: () => getLowStock(30),
+    queryKey: ["low-stock", locCode],
+    queryFn: () => getLowStock(30, locCode || undefined),
   });
 
   return (
     <FormPageLayout>
-      <Box sx={{ p: 2, boxShadow: 2, borderRadius: 1, mb: 2 }}>
-        <PageTitle title="Low Stock Alerts" />
-        <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Low Stock Alerts" }]} />
+      <Box sx={{ p: 2, boxShadow: 2, borderRadius: 1, mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+        <Box>
+          <PageTitle title="Low Stock Alerts" />
+          <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Low Stock Alerts" }]} />
+        </Box>
+        {locations && locations.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Branch / Location</InputLabel>
+            <Select value={locCode} label="Branch / Location" onChange={(e) => setLocCode(e.target.value)}>
+              <MenuItem value="">All Locations</MenuItem>
+              {locations.map((loc: any) => (
+                <MenuItem key={loc.loc_code} value={loc.loc_code}>{loc.location_name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
       </Box>
 
       {isLoading ? <PageLoader /> : (

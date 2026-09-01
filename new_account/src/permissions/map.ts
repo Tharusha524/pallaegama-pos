@@ -205,6 +205,17 @@ export const PERMISSION_ID_MAP: Record<string, number> = {
 
   // Smart Supermarket module (loyalty, offers, POS shifts, analytics).
   "Supermarket POS checkout": 5041,
+  "Supermarket stock adjustments": 5042,
+  "Supermarket stock transfers": 5043,
+  "Supermarket inventory audits": 5044,
+  "Supermarket offline entries": 5045,
+  "Supermarket warranty": 5046,
+  "Supermarket vouchers": 5047,
+  "Supermarket customer segments": 5048,
+  "Supermarket product variants": 5049,
+  "Supermarket service tickets": 5050,
+  "Supermarket pos settings": 5051,
+  "Supermarket reports": 5052,
   "Supermarket sales analytics": 5033,
   "Supermarket low stock alerts": 5034,
   "Supermarket loyalty tiers": 5035,

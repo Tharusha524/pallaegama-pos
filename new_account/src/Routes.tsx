@@ -40,6 +40,17 @@ import WinBackPage from "./views/Supermarket/WinBack/WinBackPage";
 import StockDamagePage from "./views/Supermarket/StockDamage/StockDamagePage";
 import PosShiftPage from "./views/Supermarket/PosShift/PosShiftPage";
 import PosCheckoutPage from "./views/Supermarket/PosCheckout/PosCheckoutPage";
+import StockAdjustmentsPage from "./views/Supermarket/StockAdjustments/StockAdjustmentsPage";
+import StockTransfersPage from "./views/Supermarket/StockTransfers/StockTransfersPage";
+import InventoryAuditsPage from "./views/Supermarket/InventoryAudits/InventoryAuditsPage";
+import OfflineEntriesPage from "./views/Supermarket/OfflineEntries/OfflineEntriesPage";
+import WarrantyPage from "./views/Supermarket/Warranty/WarrantyPage";
+import VouchersPage from "./views/Supermarket/Vouchers/VouchersPage";
+import CustomerSegmentsPage from "./views/Supermarket/CustomerSegments/CustomerSegmentsPage";
+import ProductVariantsPage from "./views/Supermarket/ProductVariants/ProductVariantsPage";
+import ServiceTicketsPage from "./views/Supermarket/ServiceTickets/ServiceTicketsPage";
+import PosSettingsPage from "./views/Supermarket/PosSettings/PosSettingsPage";
+import SupermarketReportsPage from "./views/Supermarket/Reports/SupermarketReportsPage";
 import CompanySetup from "./views/Setup/CompanySetup/CompanySetup";
 import Miscellaneous from "./views/Setup/Miscellaneous/Miscellaneous";
 import FixedAssestsMaintenance from "./views/FixedAssets/Maintenance/FixedAssestsMaintenance";
@@ -532,6 +543,17 @@ const AppRoutes = () => {
         />
         <Route path="/supermarket" element={withLayout(MainLayout, SupermarketHub)} />
         <Route path="/supermarket/pos-checkout" element={withLayout(MainLayout, PosCheckoutPage)} />
+        <Route path="/supermarket/stock-adjustments" element={withLayout(MainLayout, StockAdjustmentsPage)} />
+        <Route path="/supermarket/stock-transfers" element={withLayout(MainLayout, StockTransfersPage)} />
+        <Route path="/supermarket/inventory-audits" element={withLayout(MainLayout, InventoryAuditsPage)} />
+        <Route path="/supermarket/offline-entries" element={withLayout(MainLayout, OfflineEntriesPage)} />
+        <Route path="/supermarket/warranty" element={withLayout(MainLayout, WarrantyPage)} />
+        <Route path="/supermarket/vouchers" element={withLayout(MainLayout, VouchersPage)} />
+        <Route path="/supermarket/customer-segments" element={withLayout(MainLayout, CustomerSegmentsPage)} />
+        <Route path="/supermarket/product-variants" element={withLayout(MainLayout, ProductVariantsPage)} />
+        <Route path="/supermarket/service-tickets" element={withLayout(MainLayout, ServiceTicketsPage)} />
+        <Route path="/supermarket/pos-settings" element={withLayout(MainLayout, PosSettingsPage)} />
+        <Route path="/supermarket/reports" element={withLayout(MainLayout, SupermarketReportsPage)} />
         <Route path="/supermarket/sales-analytics" element={withLayout(MainLayout, SalesAnalyticsPage)} />
         <Route path="/supermarket/low-stock" element={withLayout(MainLayout, LowStockPage)} />
         <Route path="/supermarket/loyalty-tiers" element={withLayout(MainLayout, LoyaltyTiersPage)} />

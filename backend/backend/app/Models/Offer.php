@@ -10,6 +10,7 @@ class Offer extends Model
 
     protected $fillable = [
         'offer_name',
+        'coupon_code',
         'offer_type',
         'target_id',
         'discount_type',
@@ -17,6 +18,9 @@ class Offer extends Model
         'valid_from',
         'valid_to',
         'min_purchase_amount',
+        'max_total_uses',
+        'max_uses_per_customer',
+        'times_used',
         'status',
     ];
 

@@ -12,6 +12,17 @@ import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import PointOfSaleIcon from "@mui/icons-material/PointOfSale";
 import InsightsIcon from "@mui/icons-material/Insights";
 import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
+import ReceiptIcon from "@mui/icons-material/Receipt";
+import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
+import CardGiftcardIcon from "@mui/icons-material/CardGiftcard";
+import GroupsIcon from "@mui/icons-material/Groups";
+import StyleIcon from "@mui/icons-material/Style";
+import BuildIcon from "@mui/icons-material/Build";
+import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 
 const cards = [
   { title: "POS Checkout", description: "Cashier till — scan, cart, and complete a sale", href: "/supermarket/pos-checkout", icon: <PointOfSaleOutlinedIcon />, color: "#024271" },
@@ -23,6 +34,17 @@ const cards = [
   { title: "Win-Back Campaigns", description: "Re-engage inactive customers via SMS/WhatsApp", href: "/supermarket/win-back", icon: <CampaignIcon />, color: "#00838f" },
   { title: "Stock Damage", description: "Record and review damaged stock", href: "/supermarket/stock-damage", icon: <ReportProblemIcon />, color: "#ed6c02" },
   { title: "POS Shifts", description: "Open/close cashier tills & cash-up", href: "/supermarket/pos-shifts", icon: <PointOfSaleIcon />, color: "#1976d2" },
+  { title: "Stock Adjustments", description: "Add, reduce, or override stock with a reason", href: "/supermarket/stock-adjustments", icon: <InventoryIcon />, color: "#6d4c41" },
+  { title: "Stock Transfers", description: "Move stock between branches", href: "/supermarket/stock-transfers", icon: <SwapHorizIcon />, color: "#5e35b1" },
+  { title: "Inventory Audits", description: "Physical stock counts & reconciliation", href: "/supermarket/inventory-audits", icon: <FactCheckIcon />, color: "#00695c" },
+  { title: "Offline Sales & Purchases", description: "Log transactions made outside the system", href: "/supermarket/offline-entries", icon: <ReceiptIcon />, color: "#8d6e63" },
+  { title: "Warranty", description: "Track warranties, check status, manage claims", href: "/supermarket/warranty", icon: <VerifiedUserIcon />, color: "#0277bd" },
+  { title: "Vouchers", description: "Issue and redeem gift vouchers", href: "/supermarket/vouchers", icon: <CardGiftcardIcon />, color: "#ad1457" },
+  { title: "Customer Segments", description: "RFM segmentation — Champion, At Risk, Dormant", href: "/supermarket/customer-segments", icon: <GroupsIcon />, color: "#283593" },
+  { title: "Product Variants", description: "Size/color/weight combos with own barcodes", href: "/supermarket/product-variants", icon: <StyleIcon />, color: "#00838f" },
+  { title: "Service Tickets", description: "Repair/service job tracking board", href: "/supermarket/service-tickets", icon: <BuildIcon />, color: "#f57f17" },
+  { title: "POS Settings", description: "Configure POS behavior & receipt layout", href: "/supermarket/pos-settings", icon: <SettingsSuggestIcon />, color: "#546e7a" },
+  { title: "Reports", description: "Velocity, dead stock, profit margin, activity feed, valuation", href: "/supermarket/reports", icon: <AssessmentIcon />, color: "#37474f" },
 ];
 
 export default function SupermarketHub() {

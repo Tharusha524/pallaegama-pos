@@ -379,19 +379,47 @@ class SalesInvoiceService
 
             $transNo = (int) ($invoiceResult['trans_no'] ?? 0);
             $paymentTransNo = null;
+            $paymentTransNos = [];
             if ($isCashSale && $documentTotal > 0.001 && $transNo > 0) {
-                $paymentTransNo = $this->createCashSalePayment(
-                    $debtorNo,
-                    $branchCode,
-                    $tranDate,
-                    $documentTotal,
-                    $transNo,
-                    (int) ($payload['bank_account_id'] ?? 0)
-                );
+                // Split payments (multiple methods on one sale): if the caller
+                // supplies a 'payments' array, create one payment record per
+                // line via the same accounting path used below — purely
+                // additive, the original single bank_account_id flow is
+                // untouched for callers that don't send 'payments'.
+                $paidTotal = $documentTotal;
+                if (!empty($payload['payments']) && is_array($payload['payments'])) {
+                    $paidTotal = 0.0;
+                    foreach ($payload['payments'] as $line) {
+                        $lineAmount = round((float) ($line['amount'] ?? 0), 2);
+                        if ($lineAmount <= 0.001) {
+                            continue;
+                        }
+                        $paymentTransNos[] = $this->createCashSalePayment(
+                            $debtorNo,
+                            $branchCode,
+                            $tranDate,
+                            $lineAmount,
+                            $transNo,
+                            (int) ($line['bank_account_id'] ?? 0)
+                        );
+                        $paidTotal += $lineAmount;
+                    }
+                    $paymentTransNo = $paymentTransNos[0] ?? null;
+                } else {
+                    $paymentTransNo = $this->createCashSalePayment(
+                        $debtorNo,
+                        $branchCode,
+                        $tranDate,
+                        $documentTotal,
+                        $transNo,
+                        (int) ($payload['bank_account_id'] ?? 0)
+                    );
+                    $paymentTransNos[] = $paymentTransNo;
+                }
                 DebtorTrans::query()
                     ->where('trans_type', self::TYPE_INVOICE)
                     ->where('trans_no', $transNo)
-                    ->update(['alloc' => $documentTotal]);
+                    ->update(['alloc' => $paidTotal]);
             }
 
             $result = array_merge($invoiceResult, [
@@ -401,6 +429,7 @@ class SalesInvoiceService
             ]);
             if ($paymentTransNo) {
                 $result['payment_trans_no'] = $paymentTransNo;
+                $result['payment_trans_nos'] = $paymentTransNos;
             }
 
             return $result;

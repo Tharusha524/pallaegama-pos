@@ -125,6 +125,18 @@ use App\Http\Controllers\LowStockController;
 use App\Http\Controllers\SalesAnalyticsController;
 use App\Http\Controllers\PurchaseAnalyticsController;
 use App\Http\Controllers\BarcodeLookupController;
+use App\Http\Controllers\HeldSaleController;
+use App\Http\Controllers\StockAdjustmentController;
+use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\InventoryAuditController;
+use App\Http\Controllers\OfflineEntryController;
+use App\Http\Controllers\WarrantyPolicyController;
+use App\Http\Controllers\WarrantyController;
+use App\Http\Controllers\WarrantyClaimController;
+use App\Http\Controllers\VoucherController;
+use App\Http\Controllers\PosSettingController;
+use App\Http\Controllers\ItemVariantController;
+use App\Http\Controllers\ServiceTicketController;
 use App\Models\Backup;
 use App\Models\ItemCode;
 use App\Models\UserProfile;
@@ -447,6 +459,61 @@ Route::get('purchase-analytics/lowest-cost-by-supplier', [PurchaseAnalyticsContr
 Route::get('purchase-analytics/best-suppliers', [PurchaseAnalyticsController::class, 'bestSuppliers']);
 
 Route::get('barcode-lookup', [BarcodeLookupController::class, 'lookup']);
+
+// ---- Held sales (park / recall cart) ----
+Route::apiResource('held-sales', HeldSaleController::class)->only(['index', 'store', 'show', 'destroy']);
+
+// ---- Stock adjustments / transfers / audits ----
+Route::apiResource('stock-adjustments', StockAdjustmentController::class)->only(['index', 'store']);
+
+Route::apiResource('stock-transfers', StockTransferController::class)->only(['index', 'store']);
+Route::post('stock-transfers/{id}/dispatch', [StockTransferController::class, 'dispatch']);
+Route::post('stock-transfers/{id}/receive', [StockTransferController::class, 'receive']);
+Route::post('stock-transfers/{id}/cancel', [StockTransferController::class, 'cancel']);
+
+Route::apiResource('inventory-audits', InventoryAuditController::class)->only(['index', 'store']);
+Route::post('inventory-audits/{id}/items', [InventoryAuditController::class, 'addItem']);
+Route::post('inventory-audits/{id}/complete', [InventoryAuditController::class, 'complete']);
+
+// ---- Offline sales/purchases entries ----
+Route::apiResource('offline-entries', OfflineEntryController::class)->only(['index', 'store', 'update', 'destroy']);
+
+// ---- Warranty ----
+Route::apiResource('warranty-policies', WarrantyPolicyController::class)->only(['index', 'store', 'update', 'destroy']);
+Route::apiResource('warranties', WarrantyController::class)->only(['index', 'store', 'destroy']);
+Route::get('warranties-check', [WarrantyController::class, 'check']);
+Route::apiResource('warranty-claims', WarrantyClaimController::class)->only(['index', 'store', 'update']);
+
+// ---- Vouchers / gift cards ----
+Route::apiResource('vouchers', VoucherController::class)->only(['index', 'store', 'show']);
+Route::post('vouchers-redeem', [VoucherController::class, 'redeem']);
+
+// ---- Discounts & Coupons ----
+Route::post('offers-apply-coupon', [OfferController::class, 'applyCoupon']);
+Route::post('offers-confirm-coupon-usage', [OfferController::class, 'confirmCouponUsage']);
+
+// ---- Frequently bought together / RFM segmentation ----
+Route::get('sales-analytics/frequently-bought-together', [SalesAnalyticsController::class, 'frequentlyBoughtTogether']);
+Route::get('sales-analytics/customer-segments', [SalesAnalyticsController::class, 'customerSegments']);
+
+// ---- POS behavior settings ----
+Route::get('pos-settings', [PosSettingController::class, 'index']);
+Route::put('pos-settings', [PosSettingController::class, 'update']);
+
+// ---- Product variants ----
+Route::apiResource('item-variants', ItemVariantController::class)->only(['index', 'store', 'update', 'destroy']);
+Route::post('item-variants/{id}/stock', [ItemVariantController::class, 'setStock']);
+Route::post('item-variants/{id}/deduct-stock', [ItemVariantController::class, 'deductStock']);
+
+// ---- Service / repair tickets ----
+Route::apiResource('service-tickets', ServiceTicketController::class)->only(['index', 'store', 'update']);
+
+// ---- Deep reports suite ----
+Route::get('sales-analytics/velocity-and-demand', [SalesAnalyticsController::class, 'velocityAndDemand']);
+Route::get('sales-analytics/dead-stock', [SalesAnalyticsController::class, 'deadStock']);
+Route::get('sales-analytics/product-profit', [SalesAnalyticsController::class, 'productProfit']);
+Route::get('sales-analytics/business-activity', [SalesAnalyticsController::class, 'businessActivityFeed']);
+Route::get('sales-analytics/valuation', [SalesAnalyticsController::class, 'valuation']);
 
 Route::apiResource('bank-trans', BankTransController::class);
 Route::get('purch-orders/next-order-no', [PurchOrdersController::class, 'nextOrderNo']);

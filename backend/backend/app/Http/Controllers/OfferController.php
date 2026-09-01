@@ -19,6 +19,7 @@ class OfferController extends Controller
     {
         $data = $request->validate([
             'offer_name' => 'required|string|max:150',
+            'coupon_code' => 'nullable|string|max:50|unique:offers,coupon_code',
             'offer_type' => 'required|in:product,category,tier,customer',
             'target_id' => 'nullable|string',
             'discount_type' => 'required|in:percent,fixed',
@@ -26,6 +27,8 @@ class OfferController extends Controller
             'valid_from' => 'required|date',
             'valid_to' => 'required|date|after_or_equal:valid_from',
             'min_purchase_amount' => 'nullable|numeric|min:0',
+            'max_total_uses' => 'nullable|integer|min:1',
+            'max_uses_per_customer' => 'nullable|integer|min:1',
             'status' => 'in:active,inactive',
         ]);
 
@@ -109,9 +112,13 @@ class OfferController extends Controller
 
     /**
      * Record that an offer was used on a transaction (also called from SalesInvoiceController).
+     * Increments the offer's usage counter — callers should check usage
+     * limits via applyCoupon()/checkUsageLimits() before invoking this.
      */
     public static function recordRedemption(int $offerId, ?int $debtorNo, float $discountAmount, ?int $transNo = null, ?int $transType = null): OfferRedemption
     {
+        Offer::where('id', $offerId)->increment('times_used');
+
         return OfferRedemption::create([
             'offer_id' => $offerId,
             'debtor_no' => $debtorNo,
@@ -120,6 +127,68 @@ class OfferController extends Controller
             'discount_amount' => $discountAmount,
             'redeemed_at' => now()->toDateString(),
         ]);
+    }
+
+    /**
+     * Resolve a coupon code at checkout: validates it's active, in date,
+     * and within its total/per-customer usage limits.
+     */
+    public function applyCoupon(Request $request)
+    {
+        $data = $request->validate([
+            'coupon_code' => 'required|string',
+            'debtor_no' => 'nullable|integer',
+        ]);
+
+        $offer = Offer::where('coupon_code', $data['coupon_code'])->first();
+        if (!$offer) {
+            return response()->json(['message' => 'Invalid coupon code'], 404);
+        }
+
+        $today = now()->toDateString();
+        if ($offer->status !== 'active' || $offer->valid_from > $today || $offer->valid_to < $today) {
+            return response()->json(['message' => 'This coupon is not currently valid'], 422);
+        }
+        if ($offer->max_total_uses && $offer->times_used >= $offer->max_total_uses) {
+            return response()->json(['message' => 'This coupon has reached its usage limit'], 422);
+        }
+        if ($offer->max_uses_per_customer && !empty($data['debtor_no'])) {
+            $usedByCustomer = OfferRedemption::where('offer_id', $offer->id)
+                ->where('debtor_no', $data['debtor_no'])
+                ->count();
+            if ($usedByCustomer >= $offer->max_uses_per_customer) {
+                return response()->json(['message' => 'You have already used this coupon the maximum number of times'], 422);
+            }
+        }
+
+        return response()->json($offer);
+    }
+
+    /**
+     * Confirm a coupon was actually used on a completed sale (called after
+     * checkout succeeds) — increments its usage counters via recordRedemption.
+     */
+    public function confirmCouponUsage(Request $request)
+    {
+        $data = $request->validate([
+            'coupon_code' => 'required|exists:offers,coupon_code',
+            'debtor_no' => 'nullable|integer',
+            'discount_amount' => 'required|numeric|min:0',
+            'debtor_trans_no' => 'nullable|integer',
+            'debtor_trans_type' => 'nullable|integer',
+        ]);
+
+        $offer = Offer::where('coupon_code', $data['coupon_code'])->firstOrFail();
+
+        $redemption = self::recordRedemption(
+            $offer->id,
+            $data['debtor_no'] ?? null,
+            $data['discount_amount'],
+            $data['debtor_trans_no'] ?? null,
+            $data['debtor_trans_type'] ?? null
+        );
+
+        return response()->json($redemption, 201);
     }
 
     /**

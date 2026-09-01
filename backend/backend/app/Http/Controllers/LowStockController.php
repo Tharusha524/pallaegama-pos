@@ -27,6 +27,7 @@ class LowStockController extends Controller
             )
             ->whereNotNull('ls.reorder_level')
             ->whereColumn('ls.quantity', '<=', 'ls.reorder_level')
+            ->when($request->filled('loc_code'), fn ($q) => $q->where('ls.loc_code', $request->query('loc_code')))
             ->get();
 
         $avgDailySales = DB::table('debtor_trans_details as dtd')
