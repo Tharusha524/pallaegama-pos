@@ -26,6 +26,7 @@ import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
 import { lookupBarcode } from "../../../api/Pos/posApi";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import CameraAltIcon from "@mui/icons-material/CameraAlt";
+import CakeIcon from "@mui/icons-material/Cake";
 import CameraBarcodeScanDialog from "../../../components/CameraBarcodeScanDialog";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
@@ -33,7 +34,10 @@ import { getFriendlyApiErrorMessage } from "../../../utils/apiErrorMessage";
 import useCurrentUser from "../../../hooks/useCurrentUser";
 import {
   getHeldSales, holdSale, deleteHeldSale, applyCoupon, confirmCouponUsage, redeemVoucher, getFrequentlyBoughtTogether,
+  getPosSettings,
 } from "../../../api/Pos/posOpsApi";
+import { deductVariantStock } from "../../../api/Pos/posAdvancedApi";
+import PosReceiptDialog from "../../../components/PosReceiptDialog";
 
 const QUICK_DISCOUNTS = [5, 10, 15, 20];
 
@@ -43,6 +47,8 @@ interface CartLine {
   quantity: number;
   unit_price: number;
   discount_percent: number;
+  variant_id?: number;
+  variant_name?: string;
 }
 
 interface PaymentLine {
@@ -67,6 +73,9 @@ export default function PosCheckoutPage() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+
+  const { data: posSettings } = useQuery({ queryKey: ["pos-settings"], queryFn: getPosSettings });
 
   // Quick discount / coupon / voucher
   const [cartDiscountPercent, setCartDiscountPercent] = useState(0);
@@ -201,21 +210,31 @@ export default function PosCheckoutPage() {
   }, [grandTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addItemToCart = (item: any, quantity: number) => {
+    const variant = item.matched_variant;
+    // A specific variant (size/color/etc.) is tracked as its own cart line —
+    // it must never merge into the base product's line, since it needs its
+    // own variant_id for stock deduction after checkout.
+    const lineKey = variant ? `variant:${variant.id}` : item.stock_id;
+
     setCart((prev) => {
-      const existing = prev.find((l) => l.stock_id === item.stock_id);
+      const existing = prev.find((l) => (l.variant_id ? `variant:${l.variant_id}` : l.stock_id) === lineKey);
       if (existing) {
         return prev.map((l) =>
-          l.stock_id === item.stock_id ? { ...l, quantity: l.quantity + quantity } : l
+          (l.variant_id ? `variant:${l.variant_id}` : l.stock_id) === lineKey
+            ? { ...l, quantity: l.quantity + quantity }
+            : l
         );
       }
       return [
         ...prev,
         {
           stock_id: item.stock_id,
-          description: item.description,
+          description: variant ? `${item.description} (${variant.variant_name})` : item.description,
           quantity,
           unit_price: Number(item.purchase_cost) || 0,
           discount_percent: 0,
+          variant_id: variant?.id,
+          variant_name: variant?.variant_name,
         },
       ];
     });
@@ -356,6 +375,22 @@ export default function PosCheckoutPage() {
 
     checkoutMutation.mutate(payload, {
       onSuccess: async (result) => {
+        // Best-effort: keep each variant's supplementary stock count in sync.
+        // The base product's real stock is already decremented by the
+        // invoice/delivery flow above — this never touches accounting.
+        for (const line of combinedLines) {
+          const cartLine = cart.find((l) => l.stock_id === line.stock_id && l.quantity === line.quantity);
+          if (cartLine?.variant_id && locCode) {
+            try {
+              await deductVariantStock(cartLine.variant_id, { loc_code: locCode, quantity: cartLine.quantity });
+            } catch {
+              // Non-critical — variant stock tracking is supplementary only.
+            }
+          }
+        }
+
+        setReceiptOpen(true);
+
         if (appliedVoucher) {
           try {
             await redeemVoucher({
@@ -623,6 +658,19 @@ export default function PosCheckoutPage() {
                 </FormControl>
               )}
 
+              {customer?.date_of_birth && (() => {
+                const dob = new Date(customer.date_of_birth);
+                const today = new Date();
+                return dob.getUTCMonth() === today.getMonth() && dob.getUTCDate() === today.getDate();
+              })() && (
+                <Chip
+                  sx={{ mt: 2 }}
+                  color="secondary"
+                  icon={<CakeIcon />}
+                  label={`It's ${customer.name}'s birthday today — consider a birthday offer!`}
+                />
+              )}
+
               {applicableOffers && applicableOffers.length > 0 && (
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={700}>APPLICABLE OFFERS</Typography>
@@ -809,6 +857,17 @@ export default function PosCheckoutPage() {
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onDetected={handleCameraDetected}
+      />
+
+      <PosReceiptDialog
+        open={receiptOpen}
+        onClose={() => setReceiptOpen(false)}
+        transNo={lastReceipt?.trans_no}
+        customerName={lastReceipt?.customer?.name}
+        lines={lastReceipt?.lines ?? []}
+        total={lastReceipt?.subtotal ?? 0}
+        businessLogoUrl={posSettings?.receipt_business_logo_url}
+        paperSize={posSettings?.receipt_paper_size}
       />
     </FormPageLayout>
   );
