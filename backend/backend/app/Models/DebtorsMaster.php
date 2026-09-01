@@ -16,6 +16,10 @@ class DebtorsMaster extends Model
         'name',
         'debtor_ref',
         'address',
+        'mobile',
+        'email',
+        'date_of_birth',
+        'last_purchase_date',
         'gst',
         'curr_code',
         'sales_type',
@@ -35,6 +39,8 @@ class DebtorsMaster extends Model
         'discount' => 'decimal:2',
         'pymt_discount' => 'decimal:2',
         'credit_limit' => 'float',
+        'date_of_birth' => 'date',
+        'last_purchase_date' => 'date',
     ];
 
     protected $with = ['currency', 'salesType', 'creditStatus', 'paymentTerm'];
@@ -67,5 +73,10 @@ class DebtorsMaster extends Model
     public function salesOrders()
     {
         return $this->hasMany(SalesOrder::class, 'debtor_no', 'debtor_no');
+    }
+
+    public function loyaltyCard()
+    {
+        return $this->hasOne(LoyaltyCard::class, 'debtor_no', 'debtor_no');
     }
 }

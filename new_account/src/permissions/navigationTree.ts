@@ -328,6 +328,25 @@ export const NAVIGATION_PERMISSION_TREE: NavModule[] = [
       },
     ],
   },
+  {
+    label: "Smart Supermarket",
+    submenus: [
+      {
+        label: "Screens",
+        pages: [
+          { label: "POS Checkout", id: id("Supermarket POS checkout"), path: "/supermarket/pos-checkout" },
+          { label: "Sales Analytics", id: id("Supermarket sales analytics"), path: "/supermarket/sales-analytics" },
+          { label: "Low Stock Alerts", id: id("Supermarket low stock alerts"), path: "/supermarket/low-stock" },
+          { label: "Loyalty Tiers", id: id("Supermarket loyalty tiers"), path: "/supermarket/loyalty-tiers" },
+          { label: "Loyalty Cards", id: id("Supermarket loyalty cards"), path: "/supermarket/loyalty-cards" },
+          { label: "Offers & Discounts", id: id("Supermarket offers and discounts"), path: "/supermarket/offers" },
+          { label: "Win-Back Campaigns", id: id("Supermarket win-back campaigns"), path: "/supermarket/win-back" },
+          { label: "Stock Damage", id: id("Supermarket stock damage"), path: "/supermarket/stock-damage" },
+          { label: "POS Shifts", id: id("Supermarket POS shifts"), path: "/supermarket/pos-shifts" },
+        ],
+      },
+    ],
+  },
 ];
 
 // All permission IDs belonging to a module (every page under every one of

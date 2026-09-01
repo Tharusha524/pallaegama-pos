@@ -114,6 +114,16 @@ use App\Http\Controllers\WOManufactureController;
 use App\Http\Controllers\WORequirementsController;
 use App\Http\Controllers\WorkOrdersController;
 use App\Http\Controllers\QuotationController;
+use App\Http\Controllers\LoyaltyTierController;
+use App\Http\Controllers\LoyaltyCardController;
+use App\Http\Controllers\LoyaltyPointsController;
+use App\Http\Controllers\OfferController;
+use App\Http\Controllers\PosShiftController;
+use App\Http\Controllers\WinBackCampaignController;
+use App\Http\Controllers\StockDamageController;
+use App\Http\Controllers\LowStockController;
+use App\Http\Controllers\SalesAnalyticsController;
+use App\Http\Controllers\PurchaseAnalyticsController;
 use App\Models\Backup;
 use App\Models\ItemCode;
 use App\Models\UserProfile;
@@ -402,6 +412,38 @@ Route::apiResource('debtor-trans', DebtorTransController::class);
 Route::apiResource('debtor-trans-details', DebtorTransDetailsController::class);
 
 Route::apiResource('sales-points', SalesPosController::class);
+
+// ---- Smart Supermarket: Loyalty, Offers, POS Shifts, Win-Back, Stock Damage, Analytics ----
+Route::apiResource('loyalty-tiers', LoyaltyTierController::class);
+Route::apiResource('loyalty-cards', LoyaltyCardController::class);
+Route::post('loyalty-points/earn', [LoyaltyPointsController::class, 'earn']);
+Route::post('loyalty-points/redeem', [LoyaltyPointsController::class, 'redeem']);
+Route::get('loyalty-points/{debtorNo}/history', [LoyaltyPointsController::class, 'history']);
+
+Route::apiResource('offers', OfferController::class);
+Route::get('offers-applicable', [OfferController::class, 'applicable']);
+Route::get('offers-popularity', [OfferController::class, 'popularity']);
+
+Route::apiResource('pos-shifts', PosShiftController::class)->only(['index', 'store', 'show']);
+Route::post('pos-shifts/{id}/close', [PosShiftController::class, 'close']);
+
+Route::get('win-back/inactive-customers', [WinBackCampaignController::class, 'inactiveCustomers']);
+Route::post('win-back/send', [WinBackCampaignController::class, 'send']);
+Route::get('win-back/history', [WinBackCampaignController::class, 'history']);
+Route::post('win-back/{id}/mark-redeemed', [WinBackCampaignController::class, 'markRedeemed']);
+
+Route::apiResource('stock-damages', StockDamageController::class)->only(['index', 'store', 'destroy']);
+Route::get('stock-damages-summary', [StockDamageController::class, 'summary']);
+
+Route::get('inventory/low-stock', [LowStockController::class, 'index']);
+
+Route::get('sales-analytics/dashboard-summary', [SalesAnalyticsController::class, 'dashboardSummary']);
+Route::get('sales-analytics/product-performance', [SalesAnalyticsController::class, 'productPerformance']);
+Route::get('sales-analytics/sales-trend', [SalesAnalyticsController::class, 'salesTrend']);
+Route::get('sales-analytics/top-customers', [SalesAnalyticsController::class, 'topCustomers']);
+
+Route::get('purchase-analytics/lowest-cost-by-supplier', [PurchaseAnalyticsController::class, 'lowestCostBySupplier']);
+Route::get('purchase-analytics/best-suppliers', [PurchaseAnalyticsController::class, 'bestSuppliers']);
 
 Route::apiResource('bank-trans', BankTransController::class);
 Route::get('purch-orders/next-order-no', [PurchOrdersController::class, 'nextOrderNo']);

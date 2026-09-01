@@ -10,6 +10,7 @@ import ChangeHistoryIcon from "@mui/icons-material/ChangeHistory";
 import FolderIcon from "@mui/icons-material/Folder";
 import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import { getModulePermissionIds } from "../../permissions/navigationTree";
 
 export interface SidebarItem {
@@ -168,6 +169,23 @@ const baseSidebarItems: Array<SidebarItem> = [
         title: "Maintenance",
         href: "/costCenter/maintenance",
       },
+    ],
+  },
+  {
+    title: "Smart Supermarket",
+    href: "/supermarket",
+    icon: <StorefrontOutlinedIcon fontSize="small" />,
+    requiredPermission: getModulePermissionIds("Smart Supermarket"),
+    nestedItems: [
+      { title: "POS Checkout", href: "/supermarket/pos-checkout" },
+      { title: "Sales Analytics", href: "/supermarket/sales-analytics" },
+      { title: "Low Stock Alerts", href: "/supermarket/low-stock" },
+      { title: "Loyalty Tiers", href: "/supermarket/loyalty-tiers" },
+      { title: "Loyalty Cards", href: "/supermarket/loyalty-cards" },
+      { title: "Offers & Discounts", href: "/supermarket/offers" },
+      { title: "Win-Back Campaigns", href: "/supermarket/win-back" },
+      { title: "Stock Damage", href: "/supermarket/stock-damage" },
+      { title: "POS Shifts", href: "/supermarket/pos-shifts" },
     ],
   },
   {

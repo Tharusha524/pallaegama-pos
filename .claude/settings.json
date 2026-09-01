@@ -182,7 +182,9 @@
       "Bash(php -l app/Support/GlTransHelper.php)",
       "Bash(php -l app/Repositories/All/Reports/ReportsRepository.php)",
       "Bash(php -l app/Services/Reports/ReportPdfBuilder.php)",
-      "Bash(php -l app/Http/Controllers/ReportController.php)"
+      "Bash(php -l app/Http/Controllers/ReportController.php)",
+      "Bash(php -r 'var_dump\\(password_verify\\('\\\\''admin123'\\\\'', '\\\\''$2y$12$Ob/ym1hZiKSVH.YHCMgkDeH8nRe6zG7wLL5W0lkcfaC1YNyJJRLpC'\\\\''\\)\\);')",
+      "Bash(mysql -h127.0.0.1 -uroot erp2 -N -e \"SELECT email, password FROM user_managements WHERE email='admin@example.com';\")"
     ],
     "additionalDirectories": [
       "\\tmp",

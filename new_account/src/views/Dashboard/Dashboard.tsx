@@ -30,6 +30,9 @@ import { useTimeBasedGreeting } from '../../hooks/useTimeBasedGreeting';
 import { useHomeCurrency } from '../../hooks/useHomeCurrency';
 import { useCurrentOrganization } from '../../utils/index.html';
 import { getDashboardSummary } from '../../api/Dashboard/DashboardApi';
+import { getSupermarketDashboardSummary } from '../../api/Pos/posApi';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import LocalMallIcon from '@mui/icons-material/LocalMall';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
@@ -128,6 +131,12 @@ const Dashboard = () => {
     refetchOnWindowFocus: true,
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
+  });
+  const { data: supermarketSummary } = useQuery({
+    queryKey: ['supermarket-dashboard-summary'],
+    queryFn: getSupermarketDashboardSummary,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
   const { greeting, localTimeLabel, sriLankaDateLabel } = useTimeBasedGreeting(data?.server_now_utc);
   const { code: currencyCode, name: currencyName, formatCurrency } = useHomeCurrency();
@@ -392,6 +401,63 @@ const Dashboard = () => {
           />
         </Grid>
       </Grid>
+
+      {supermarketSummary && (
+        <Box sx={{ mb: 3 }}>
+          <Typography className="erp-dashboard__section-title">Today at the Supermarket</Typography>
+          <Typography className="erp-dashboard__section-subtitle" sx={{ mb: 1.5 }}>
+            Live POS / loyalty snapshot
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6} sm={3}>
+              <Card elevation={0} className="erp-dashboard__card" sx={{ cursor: 'pointer' }} onClick={() => navigate('/supermarket/sales-analytics')}>
+                <CardContent sx={{ p: 2 }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ReceiptIcon fontSize="small" sx={{ color: PRIMARY }} />
+                    <Typography variant="caption" color="text.secondary" fontWeight={700}>TODAY'S SALES</Typography>
+                  </Stack>
+                  <Typography variant="h6" fontWeight={800}>{formatCurrency(supermarketSummary.today_sales)}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Card elevation={0} className="erp-dashboard__card" sx={{ cursor: 'pointer' }} onClick={() => navigate('/supermarket/sales-analytics')}>
+                <CardContent sx={{ p: 2 }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ReceiptLongIcon fontSize="small" sx={{ color: PRIMARY }} />
+                    <Typography variant="caption" color="text.secondary" fontWeight={700}>BILLS ISSUED TODAY</Typography>
+                  </Stack>
+                  <Typography variant="h6" fontWeight={800}>{supermarketSummary.bills_issued_today}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Card elevation={0} className="erp-dashboard__card" sx={{ cursor: 'pointer' }} onClick={() => navigate('/supermarket/low-stock')}>
+                <CardContent sx={{ p: 2 }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <WarningAmberOutlinedIcon fontSize="small" sx={{ color: '#f59e0b' }} />
+                    <Typography variant="caption" color="text.secondary" fontWeight={700}>LOW STOCK ITEMS</Typography>
+                  </Stack>
+                  <Typography variant="h6" fontWeight={800}>{supermarketSummary.low_stock_count}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Card elevation={0} className="erp-dashboard__card" sx={{ cursor: 'pointer' }} onClick={() => navigate('/supermarket')}>
+                <CardContent sx={{ p: 2 }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <AccountBalanceIcon fontSize="small" sx={{ color: PRIMARY }} />
+                    <Typography variant="caption" color="text.secondary" fontWeight={700}>DEBTORS / CREDITORS</Typography>
+                  </Stack>
+                  <Typography variant="body2" fontWeight={700}>
+                    {formatCurrency(supermarketSummary.total_debtors_outstanding)} / {formatCurrency(supermarketSummary.total_creditors_payable)}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        </Box>
+      )}
 
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
         <Grid item xs={12} lg={8}>

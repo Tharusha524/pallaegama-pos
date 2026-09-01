@@ -202,6 +202,17 @@ export const PERMISSION_ID_MAP: Record<string, number> = {
   "User login activity page": 5030,
   "System diagnostics page": 5031,
   "Class Types (GL)": 5032,
+
+  // Smart Supermarket module (loyalty, offers, POS shifts, analytics).
+  "Supermarket POS checkout": 5041,
+  "Supermarket sales analytics": 5033,
+  "Supermarket low stock alerts": 5034,
+  "Supermarket loyalty tiers": 5035,
+  "Supermarket loyalty cards": 5036,
+  "Supermarket offers and discounts": 5037,
+  "Supermarket win-back campaigns": 5038,
+  "Supermarket stock damage": 5039,
+  "Supermarket POS shifts": 5040,
 };
 
 export const PERMISSION_NAME_BY_ID: Record<number, string> = Object.fromEntries(

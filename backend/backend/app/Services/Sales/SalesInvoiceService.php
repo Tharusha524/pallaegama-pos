@@ -577,8 +577,10 @@ class SalesInvoiceService
             'prep_amount' => 0,
             'rate' => CustomerExchangeRate::forDebtor($debtorNo, $tranDate),
             'ship_via' => null,
-            'cost_center_id' => null,
-            'cost_center2_id' => null,
+            // debtor_trans.cost_center_id/cost_center2_id are NOT NULL — send 0
+            // (no cost center), never null, or this insert fails a DB constraint.
+            'cost_center_id' => 0,
+            'cost_center2_id' => 0,
             'payment_terms' => null,
             'tax_included' => 0,
         ]);

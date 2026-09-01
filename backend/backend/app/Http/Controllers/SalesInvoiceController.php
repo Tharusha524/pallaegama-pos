@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PostDirectSalesInvoiceRequest;
 use App\Http\Requests\PostSalesInvoiceFromDeliveryRequest;
+use App\Models\DebtorsMaster;
 use App\Services\Sales\SalesInvoiceService;
 use Illuminate\Http\JsonResponse;
 use InvalidArgumentException;
@@ -16,6 +17,7 @@ class SalesInvoiceController extends Controller
     {
         try {
             $result = $this->invoiceService->invoiceFromDelivery($request->validated());
+            $this->afterInvoicePosted($result);
 
             return response()->json($result, 201);
         } catch (InvalidArgumentException $e) {
@@ -32,6 +34,7 @@ class SalesInvoiceController extends Controller
     {
         try {
             $result = $this->invoiceService->directInvoice($request->validated());
+            $this->afterInvoicePosted($result);
 
             return response()->json($result, 201);
         } catch (InvalidArgumentException $e) {
@@ -94,6 +97,32 @@ class SalesInvoiceController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Failed to update sales invoice.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Post-invoice hooks: loyalty points earning + last_purchase_date update.
+     * Deliberately best-effort and isolated from the invoice's own DB transaction —
+     * a loyalty hiccup must never fail or roll back an already-posted invoice.
+     */
+    private function afterInvoicePosted(array $result): void
+    {
+        try {
+            $debtorTrans = $result['debtor_trans'] ?? null;
+            if (!$debtorTrans || empty($debtorTrans['debtor_no'])) {
+                return;
+            }
+
+            $debtorNo = (int) $debtorTrans['debtor_no'];
+            $amount = (float) ($debtorTrans['ov_amount'] ?? 0);
+            $transNo = $result['trans_no'] ?? null;
+            $transType = $result['trans_type'] ?? null;
+
+            LoyaltyPointsController::earnPoints($debtorNo, $amount, $transNo, $transType);
+
+            DebtorsMaster::where('debtor_no', $debtorNo)->update(['last_purchase_date' => now()->toDateString()]);
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 }

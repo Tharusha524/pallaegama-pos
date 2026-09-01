@@ -30,6 +30,16 @@ import BankingInquiriesAndReports from "./views/BankindAndGeneralLedger/Inquirie
 import BankingMaintenance from "./views/BankindAndGeneralLedger/Maintenance/BankingMaintenance";
 import SetupMaintenance from "./views/Setup/Maintenance/SetupMaintenance";
 import Dashboard from "./views/Dashboard/Dashboard";
+import SupermarketHub from "./views/Supermarket/SupermarketHub";
+import SalesAnalyticsPage from "./views/Supermarket/SalesAnalytics/SalesAnalyticsPage";
+import LowStockPage from "./views/Supermarket/LowStock/LowStockPage";
+import LoyaltyTiersPage from "./views/Supermarket/LoyaltyTiers/LoyaltyTiersPage";
+import LoyaltyCardsPage from "./views/Supermarket/LoyaltyCards/LoyaltyCardsPage";
+import OffersPage from "./views/Supermarket/Offers/OffersPage";
+import WinBackPage from "./views/Supermarket/WinBack/WinBackPage";
+import StockDamagePage from "./views/Supermarket/StockDamage/StockDamagePage";
+import PosShiftPage from "./views/Supermarket/PosShift/PosShiftPage";
+import PosCheckoutPage from "./views/Supermarket/PosCheckout/PosCheckoutPage";
 import CompanySetup from "./views/Setup/CompanySetup/CompanySetup";
 import Miscellaneous from "./views/Setup/Miscellaneous/Miscellaneous";
 import FixedAssestsMaintenance from "./views/FixedAssets/Maintenance/FixedAssestsMaintenance";
@@ -520,6 +530,16 @@ const AppRoutes = () => {
           path="/dashboard"
           element={withLayout(MainLayout, Dashboard)}
         />
+        <Route path="/supermarket" element={withLayout(MainLayout, SupermarketHub)} />
+        <Route path="/supermarket/pos-checkout" element={withLayout(MainLayout, PosCheckoutPage)} />
+        <Route path="/supermarket/sales-analytics" element={withLayout(MainLayout, SalesAnalyticsPage)} />
+        <Route path="/supermarket/low-stock" element={withLayout(MainLayout, LowStockPage)} />
+        <Route path="/supermarket/loyalty-tiers" element={withLayout(MainLayout, LoyaltyTiersPage)} />
+        <Route path="/supermarket/loyalty-cards" element={withLayout(MainLayout, LoyaltyCardsPage)} />
+        <Route path="/supermarket/offers" element={withLayout(MainLayout, OffersPage)} />
+        <Route path="/supermarket/win-back" element={withLayout(MainLayout, WinBackPage)} />
+        <Route path="/supermarket/stock-damage" element={withLayout(MainLayout, StockDamagePage)} />
+        <Route path="/supermarket/pos-shifts" element={withLayout(MainLayout, PosShiftPage)} />
       </Route>
 
       {/* Administration */}

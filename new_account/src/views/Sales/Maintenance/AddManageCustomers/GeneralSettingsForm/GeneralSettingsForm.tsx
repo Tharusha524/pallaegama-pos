@@ -87,6 +87,8 @@ export default function GeneralSettingsForm({ customerId, onCustomerAdded }: Gen
     defaultShippingCompany: "",
     salesArea: "",
     taxGroup: "",
+    mobile: "",
+    dateOfBirth: "",
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -238,6 +240,8 @@ export default function GeneralSettingsForm({ customerId, onCustomerAdded }: Gen
         cost_center_id: Number(formData.costCenter) || 0,
         cost_center2_id: 0,
         inactive: 0,
+        mobile: formData.mobile || formData.phone,
+        date_of_birth: formData.dateOfBirth || null,
       };
 
       const customer = await createCustomer(customerPayload);
@@ -612,6 +616,16 @@ export default function GeneralSettingsForm({ customerId, onCustomerAdded }: Gen
                 costCenterType={1}
                 error={!!errors.costCenter}
                 helperText={errors.costCenter || " "}
+              />
+              <TextField
+                label="Date of Birth"
+                type="date"
+                value={formData.dateOfBirth}
+                onChange={(e) => handleChange("dateOfBirth", e.target.value)}
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                helperText="Used for loyalty birthday offers"
               />
               <TextField
                 label="General Notes"

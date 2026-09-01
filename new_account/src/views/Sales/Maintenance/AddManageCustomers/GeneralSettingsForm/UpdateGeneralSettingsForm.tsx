@@ -96,7 +96,10 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
         salesArea: "",
         taxGroup: "",
         status: "",
+        mobile: "",
+        dateOfBirth: "",
     });
+    const [lastPurchaseDate, setLastPurchaseDate] = useState<string>("");
 
     const [open, setOpen] = useState(false);
     const [openDeleteModal, setOpenDeleteModal] = useState(false);
@@ -221,7 +224,10 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                             salesArea: customerRes.sales_area || "",
                             taxGroup: customerRes.tax_group || "",
                             status: customerRes.inactive ? "Inactive" : "Active",
+                            mobile: customerRes.mobile || "",
+                            dateOfBirth: customerRes.date_of_birth ? String(customerRes.date_of_birth).slice(0, 10) : "",
                         });
+                        setLastPurchaseDate(customerRes.last_purchase_date ? String(customerRes.last_purchase_date).slice(0, 10) : "");
                     }
                 }
             } catch (error) {
@@ -349,6 +355,8 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                 default_shipping_company: formData.defaultShippingCompany,
                 sales_area: formData.salesArea,
                 tax_group: formData.taxGroup,
+                mobile: formData.mobile,
+                date_of_birth: formData.dateOfBirth || null,
                 // debtors_master.cost_center_id is NOT NULL — send 0 (no cost center),
                 // never null, or the update fails with a DB constraint violation.
                 cost_center_id: formData.costCenter !== "" ? Number(formData.costCenter) : 0,
@@ -615,6 +623,58 @@ export default function UpdateGeneralSettingsForm({ customerId, onCustomerDelete
                                 helperText={errors.generalNotes || " "}
                             />
 
+                        </Stack>
+                    </Grid>
+
+                    {/* Loyalty / Supermarket Column */}
+                    <Grid item xs={12}>
+                        <Stack spacing={3}>
+                            <Typography variant="subtitle1">Loyalty & Contact</Typography>
+                            <Divider />
+                            <Grid container spacing={3}>
+                                <Grid item xs={12} sm={4}>
+                                    <TextField
+                                        label="Mobile Number"
+                                        value={formData.mobile}
+                                        onChange={(e) => handleChange("mobile", e.target.value)}
+                                        fullWidth
+                                        size="small"
+                                        helperText="Used for loyalty win-back SMS/WhatsApp"
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
+                                    <TextField
+                                        label="Date of Birth"
+                                        type="date"
+                                        value={formData.dateOfBirth}
+                                        onChange={(e) => handleChange("dateOfBirth", e.target.value)}
+                                        fullWidth
+                                        size="small"
+                                        InputLabelProps={{ shrink: true }}
+                                        helperText="Used for birthday offers"
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
+                                    <TextField
+                                        label="Last Purchase Date"
+                                        value={lastPurchaseDate || "Never"}
+                                        fullWidth
+                                        size="small"
+                                        disabled
+                                        helperText="Updated automatically on invoice"
+                                    />
+                                </Grid>
+                            </Grid>
+                            <Box>
+                                <Button
+                                    variant="text"
+                                    size="small"
+                                    onClick={() => navigate("/supermarket/loyalty-cards")}
+                                    sx={{ textTransform: "none" }}
+                                >
+                                    Manage Loyalty Card →
+                                </Button>
+                            </Box>
                         </Stack>
                     </Grid>
                 </Grid>

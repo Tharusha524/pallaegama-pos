@@ -110,7 +110,7 @@
     </table>
 
     @php
-        $fmt = fn ($n) => number_format((float) $n, 0, '.', ',');
+        $fmt = fn ($n) => number_format((float) $n, 2, '.', ',');
         $achieve = function (float $period, float $compare) {
             if (abs($compare) < 0.001) return '999.0';
             return number_format(($period / $compare) * 100, 1, '.', ',');
