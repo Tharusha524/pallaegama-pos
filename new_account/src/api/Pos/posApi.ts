@@ -1,5 +1,11 @@
 import api from "../apiClient";
 
+// ---- Barcode Lookup ----
+export const lookupBarcode = async (code: string) => {
+  const response = await api.get("/barcode-lookup", { params: { code }, skipErrorDialog: true } as any);
+  return response.data;
+};
+
 // ---- POS Shifts ----
 export const getPosShifts = async (params?: { status?: string; user_id?: number }) =>
   (await api.get("/pos-shifts", { params })).data;

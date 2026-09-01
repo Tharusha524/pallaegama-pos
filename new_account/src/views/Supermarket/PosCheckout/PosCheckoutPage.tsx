@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Box, Grid, Card, CardContent, Typography, Table, TableHead, TableRow, TableCell, TableBody,
@@ -19,6 +19,8 @@ import { getShippingCompanies } from "../../../api/ShippingCompany/ShippingCompa
 import { getBankAccounts } from "../../../api/BankAccount/BankAccountApi";
 import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/SalesInvoice/SalesInvoiceApi";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
+import { lookupBarcode } from "../../../api/Pos/posApi";
+import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
 import { getFriendlyApiErrorMessage } from "../../../utils/apiErrorMessage";
@@ -40,6 +42,9 @@ export default function PosCheckoutPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [qty, setQty] = useState("1");
+  const [scanCode, setScanCode] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
   const [tenderCash, setTenderCash] = useState("0");
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
@@ -94,29 +99,64 @@ export default function PosCheckoutPage() {
 
   const changeDue = Math.max(0, (Number(tenderCash) || 0) - subtotal);
 
-  const addToCart = () => {
-    if (!selectedItem) return;
-    const quantity = Number(qty) || 1;
+  // Keep the scan field focused after a scan-driven cart update so a
+  // handheld/USB scanner can keep firing without the cashier clicking back in.
+  useEffect(() => {
+    scanInputRef.current?.focus();
+  }, [cart.length]);
+
+  const addItemToCart = (item: any, quantity: number) => {
     setCart((prev) => {
-      const existing = prev.find((l) => l.stock_id === selectedItem.stock_id);
+      const existing = prev.find((l) => l.stock_id === item.stock_id);
       if (existing) {
         return prev.map((l) =>
-          l.stock_id === selectedItem.stock_id ? { ...l, quantity: l.quantity + quantity } : l
+          l.stock_id === item.stock_id ? { ...l, quantity: l.quantity + quantity } : l
         );
       }
       return [
         ...prev,
         {
-          stock_id: selectedItem.stock_id,
-          description: selectedItem.description,
+          stock_id: item.stock_id,
+          description: item.description,
           quantity,
-          unit_price: Number(selectedItem.purchase_cost) || 0,
+          unit_price: Number(item.purchase_cost) || 0,
           discount_percent: 0,
         },
       ];
     });
+  };
+
+  const addToCart = () => {
+    if (!selectedItem) return;
+    addItemToCart(selectedItem, Number(qty) || 1);
     setSelectedItem(null);
     setQty("1");
+  };
+
+  /**
+   * Real barcode scanning: a USB/hardware barcode scanner behaves like a
+   * keyboard — it types the code very fast and sends Enter. This input
+   * stays focused for continuous scanning and looks the code up against
+   * item_codes (barcode) then stock_master (item code) on Enter.
+   */
+  const handleScanKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    const code = scanCode.trim();
+    if (!code) return;
+
+    setScanning(true);
+    try {
+      const item = await lookupBarcode(code);
+      addItemToCart(item, Number(qty) || 1);
+      notify.success(`Added: ${item.description}`);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || `No product found for code "${code}"`;
+      notify.error(message);
+    } finally {
+      setScanCode("");
+      setScanning(false);
+      scanInputRef.current?.focus();
+    }
   };
 
   const updateLine = (stockId: string, patch: Partial<CartLine>) => {
@@ -193,19 +233,35 @@ export default function PosCheckoutPage() {
         <Grid item xs={12} md={8}>
           <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, mb: 2 }}>
             <CardContent>
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                <Autocomplete
-                  sx={{ flex: 2 }}
-                  options={items ?? []}
-                  getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
-                  value={selectedItem}
-                  onChange={(_, val) => setSelectedItem(val)}
-                  renderInput={(params) => <TextField {...params} label="Scan / Search Product" size="small" autoFocus />}
+              <Stack spacing={2}>
+                <TextField
+                  inputRef={scanInputRef}
+                  label="Barcode Scanner"
+                  placeholder="Scan a barcode — cursor here, scan, item adds automatically"
+                  size="small"
+                  fullWidth
+                  autoFocus
+                  value={scanCode}
+                  onChange={(e) => setScanCode(e.target.value)}
+                  onKeyDown={handleScanKeyDown}
+                  disabled={scanning}
+                  InputProps={{ startAdornment: <QrCodeScannerIcon sx={{ mr: 1, color: "text.secondary" }} /> }}
+                  helperText="Works with any USB/handheld barcode scanner — it types the code and presses Enter for you."
                 />
-                <TextField label="Qty" type="number" size="small" sx={{ width: 100 }} value={qty} onChange={(e) => setQty(e.target.value)} />
-                <Button variant="contained" startIcon={<AddShoppingCartIcon />} onClick={addToCart} disabled={!selectedItem}>
-                  Add
-                </Button>
+                <Stack direction="row" spacing={2} alignItems="flex-start">
+                  <Autocomplete
+                    sx={{ flex: 2 }}
+                    options={items ?? []}
+                    getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
+                    value={selectedItem}
+                    onChange={(_, val) => setSelectedItem(val)}
+                    renderInput={(params) => <TextField {...params} label="Or Search Product Manually" size="small" />}
+                  />
+                  <TextField label="Qty" type="number" size="small" sx={{ width: 100 }} value={qty} onChange={(e) => setQty(e.target.value)} />
+                  <Button variant="contained" startIcon={<AddShoppingCartIcon />} onClick={addToCart} disabled={!selectedItem}>
+                    Add
+                  </Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>

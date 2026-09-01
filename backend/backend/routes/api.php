@@ -124,6 +124,7 @@ use App\Http\Controllers\StockDamageController;
 use App\Http\Controllers\LowStockController;
 use App\Http\Controllers\SalesAnalyticsController;
 use App\Http\Controllers\PurchaseAnalyticsController;
+use App\Http\Controllers\BarcodeLookupController;
 use App\Models\Backup;
 use App\Models\ItemCode;
 use App\Models\UserProfile;
@@ -444,6 +445,8 @@ Route::get('sales-analytics/top-customers', [SalesAnalyticsController::class, 't
 
 Route::get('purchase-analytics/lowest-cost-by-supplier', [PurchaseAnalyticsController::class, 'lowestCostBySupplier']);
 Route::get('purchase-analytics/best-suppliers', [PurchaseAnalyticsController::class, 'bestSuppliers']);
+
+Route::get('barcode-lookup', [BarcodeLookupController::class, 'lookup']);
 
 Route::apiResource('bank-trans', BankTransController::class);
 Route::get('purch-orders/next-order-no', [PurchOrdersController::class, 'nextOrderNo']);
