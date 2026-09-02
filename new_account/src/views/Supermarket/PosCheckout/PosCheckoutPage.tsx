@@ -93,6 +93,16 @@ export default function PosCheckoutPage() {
   const [recallOpen, setRecallOpen] = useState(false);
 
   const { data: customers } = useQuery({ queryKey: ["customers-all"], queryFn: getCustomers });
+
+  // Default every sale to "Walk-in Customer" — a cashier should never be
+  // forced to pick a named customer just to ring up a simple cash sale.
+  // Switching to a real customer (for loyalty/credit) stays one click away.
+  useEffect(() => {
+    if (!customer && customers && customers.length > 0) {
+      const walkIn = customers.find((c: any) => c.name === "Walk-in Customer");
+      if (walkIn) setCustomer(walkIn);
+    }
+  }, [customers, customer]);
   const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
   const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
   const { data: shippingCompanies } = useQuery({ queryKey: ["shipping-companies"], queryFn: getShippingCompanies });
@@ -302,6 +312,9 @@ export default function PosCheckoutPage() {
     setVoucherAmount("");
     setAppliedVoucher(null);
     setPaymentLines([{ id: "p1", bank_account_id: cashAccount?.id ?? "", amount: "0" }]);
+    // Reset to Walk-in for the next sale — never carry a customer over.
+    const walkIn = (customers ?? []).find((c: any) => c.name === "Walk-in Customer");
+    setCustomer(walkIn ?? null);
   };
 
   const checkoutMutation = useMutation({
