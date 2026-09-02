@@ -27,8 +27,12 @@ export default function WinBackPage() {
 
   const sendMutation = useMutation({
     mutationFn: sendWinBackOffer,
-    onSuccess: () => {
-      notify.success("Win-back offer queued");
+    onSuccess: (result: any) => {
+      if (result?.delivery?.sent) {
+        notify.success("SMS sent successfully");
+      } else {
+        notify.error(result?.delivery?.message || "Message was not delivered — check the offer log for details");
+      }
       queryClient.invalidateQueries({ queryKey: ["inactive-customers"] });
     },
   });
@@ -65,7 +69,7 @@ export default function WinBackPage() {
           </Select>
         </FormControl>
         <Typography variant="caption" color="text.secondary">
-          Note: no SMS/WhatsApp gateway is connected yet — sends are logged, not delivered.
+          Note: SMS is sent live via Notify.lk. WhatsApp is not yet connected — those sends are logged only.
         </Typography>
       </Stack>
 
