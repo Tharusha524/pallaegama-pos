@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
   TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, IconButton, Typography,
-  FormControl, InputLabel, Select, MenuItem, Chip,
+  FormControl, InputLabel, Select, MenuItem, Chip, Autocomplete,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -12,9 +12,13 @@ import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
 import { getOffers, createOffer, deleteOffer, getOfferPopularity } from "../../../api/Loyalty/loyaltyApi";
+import { getLoyaltyTiers } from "../../../api/Loyalty/loyaltyApi";
+import { getItems } from "../../../api/Item/ItemApi";
+import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
+import { getCustomers } from "../../../api/Customer/AddCustomerApi";
 
 const emptyForm = {
-  offer_name: "", offer_type: "product", target_id: "", discount_type: "percent",
+  offer_name: "", offer_type: "product", discount_type: "percent",
   discount_value: "10", valid_from: new Date().toISOString().slice(0, 10),
   valid_to: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
   min_purchase_amount: "0",
@@ -25,8 +29,23 @@ export default function OffersPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
+  // Target selections, kept as real objects (so we can show names) — collapsed
+  // into the offer's single target_id string only on submit.
+  const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<any>(null);
+  const [selectedTier, setSelectedTier] = useState<any>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+
   const { data: offers, isLoading } = useQuery({ queryKey: ["offers"], queryFn: getOffers });
   const { data: popularity } = useQuery({ queryKey: ["offer-popularity"], queryFn: getOfferPopularity });
+  const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems, enabled: open });
+  const { data: categories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories(), enabled: open });
+  const { data: tiers } = useQuery({ queryKey: ["loyalty-tiers"], queryFn: getLoyaltyTiers, enabled: open });
+  const { data: customers } = useQuery({ queryKey: ["customers-all"], queryFn: getCustomers, enabled: open });
+
+  // Look up product names for the target list shown in the offers table.
+  const { data: allItemsForDisplay } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
+  const itemNameByStockId = new Map((allItemsForDisplay ?? []).map((i: any) => [i.stock_id, i.description]));
 
   const popularityMap = new Map<number, number>((popularity ?? []).map((p: any) => [p.offer_id, Number(p.redemption_count)]));
 
@@ -36,6 +55,10 @@ export default function OffersPage() {
       queryClient.invalidateQueries({ queryKey: ["offers"] });
       setOpen(false);
       setForm(emptyForm);
+      setSelectedProducts([]);
+      setSelectedCategory(null);
+      setSelectedTier(null);
+      setSelectedCustomer(null);
     },
   });
 
@@ -44,12 +67,42 @@ export default function OffersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["offers"] }),
   });
 
+  const resolveTargetId = (): string => {
+    switch (form.offer_type) {
+      case "product":
+        return selectedProducts.map((p) => p.stock_id).join(",");
+      case "category":
+        return selectedCategory ? String(selectedCategory.category_id) : "";
+      case "tier":
+        return selectedTier ? String(selectedTier.id) : "";
+      case "customer":
+        return selectedCustomer ? String(selectedCustomer.debtor_no) : "";
+      default:
+        return "";
+    }
+  };
+
   const handleSubmit = () => {
     createMutation.mutate({
       ...form,
+      target_id: resolveTargetId(),
       discount_value: Number(form.discount_value) || 0,
       min_purchase_amount: Number(form.min_purchase_amount) || 0,
     });
+  };
+
+  const targetIsValid =
+    (form.offer_type === "product" && selectedProducts.length > 0) ||
+    (form.offer_type === "category" && !!selectedCategory) ||
+    (form.offer_type === "tier" && !!selectedTier) ||
+    (form.offer_type === "customer" && !!selectedCustomer);
+
+  const displayTarget = (offer: any) => {
+    if (offer.offer_type === "product") {
+      const ids = String(offer.target_id ?? "").split(",").map((s: string) => s.trim()).filter(Boolean);
+      return ids.map((id: string) => itemNameByStockId.get(id) ?? id).join(", ");
+    }
+    return offer.target_id;
   };
 
   return (
@@ -82,7 +135,7 @@ export default function OffersPage() {
                 <TableRow key={offer.id} hover>
                   <TableCell>{offer.offer_name}</TableCell>
                   <TableCell>{offer.offer_type}</TableCell>
-                  <TableCell>{offer.target_id}</TableCell>
+                  <TableCell>{displayTarget(offer)}</TableCell>
                   <TableCell align="right">
                     {offer.discount_type === "percent" ? `${offer.discount_value}%` : offer.discount_value}
                   </TableCell>
@@ -114,20 +167,51 @@ export default function OffersPage() {
             <FormControl fullWidth>
               <InputLabel>Offer Type</InputLabel>
               <Select value={form.offer_type} label="Offer Type" onChange={(e) => setForm({ ...form, offer_type: e.target.value })}>
-                <MenuItem value="product">Product</MenuItem>
+                <MenuItem value="product">Product(s)</MenuItem>
                 <MenuItem value="category">Category</MenuItem>
                 <MenuItem value="tier">Loyalty Tier</MenuItem>
                 <MenuItem value="customer">Specific Customer</MenuItem>
               </Select>
             </FormControl>
-            <TextField
-              label={
-                form.offer_type === "product" ? "Product (stock_id)" :
-                form.offer_type === "category" ? "Category ID" :
-                form.offer_type === "tier" ? "Loyalty Tier ID" : "Customer (debtor_no)"
-              }
-              fullWidth value={form.target_id} onChange={(e) => setForm({ ...form, target_id: e.target.value })}
-            />
+
+            {form.offer_type === "product" && (
+              <Autocomplete
+                multiple
+                options={items ?? []}
+                getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
+                value={selectedProducts}
+                onChange={(_, val) => setSelectedProducts(val)}
+                renderInput={(params) => <TextField {...params} label="Products" placeholder="Search by name" />}
+              />
+            )}
+            {form.offer_type === "category" && (
+              <Autocomplete
+                options={categories ?? []}
+                getOptionLabel={(c: any) => c.description ?? ""}
+                value={selectedCategory}
+                onChange={(_, val) => setSelectedCategory(val)}
+                renderInput={(params) => <TextField {...params} label="Category" />}
+              />
+            )}
+            {form.offer_type === "tier" && (
+              <Autocomplete
+                options={tiers ?? []}
+                getOptionLabel={(t: any) => t.tier_name ?? ""}
+                value={selectedTier}
+                onChange={(_, val) => setSelectedTier(val)}
+                renderInput={(params) => <TextField {...params} label="Loyalty Tier" />}
+              />
+            )}
+            {form.offer_type === "customer" && (
+              <Autocomplete
+                options={customers ?? []}
+                getOptionLabel={(c: any) => c.name ?? ""}
+                value={selectedCustomer}
+                onChange={(_, val) => setSelectedCustomer(val)}
+                renderInput={(params) => <TextField {...params} label="Customer" />}
+              />
+            )}
+
             <Stack direction="row" spacing={2}>
               <FormControl fullWidth>
                 <InputLabel>Discount Type</InputLabel>
@@ -147,7 +231,7 @@ export default function OffersPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={!form.offer_name || createMutation.isPending} onClick={handleSubmit}>
+          <Button variant="contained" disabled={!form.offer_name || !targetIsValid || createMutation.isPending} onClick={handleSubmit}>
             {createMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogActions>

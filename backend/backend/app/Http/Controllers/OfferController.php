@@ -93,7 +93,9 @@ class OfferController extends Controller
 
         $offers = $query->get()->filter(function ($offer) use ($debtorNo, $stockId, $categoryId) {
             return match ($offer->offer_type) {
-                'product' => $stockId && $offer->target_id == $stockId,
+                // A "product" offer's target_id may hold several stock_ids,
+                // comma-separated (e.g. "1000,1500,FG010") — matches any one of them.
+                'product' => $stockId && in_array($stockId, array_map('trim', explode(',', (string) $offer->target_id))),
                 'category' => $categoryId && $offer->target_id == $categoryId,
                 'customer' => $debtorNo && $offer->target_id == $debtorNo,
                 'tier' => $debtorNo && $this->debtorTierMatches($debtorNo, $offer->target_id),

@@ -11,16 +11,32 @@ class BarcodeLookupController extends Controller
 {
     /**
      * Resolve a scanned/typed barcode to a stock item.
-     * Checks item_variants.barcode first (a specific size/color/weight
-     * variant), then item_codes.item_code (barcode/foreign code), then
-     * falls back to stock_master.stock_id for items scanned/entered by
-     * their own item code.
+     * Checks for a weighed-item sticker first (WT|<stock_id>|<price> — printed
+     * at weigh-time for loose produce, price is frozen at the scale), then
+     * item_variants.barcode (a specific size/color/weight variant), then
+     * item_codes.item_code (barcode/foreign code), then falls back to
+     * stock_master.stock_id for items scanned/entered by their own item code.
      */
     public function lookup(Request $request)
     {
         $code = trim((string) $request->query('code', ''));
         if ($code === '') {
             return response()->json(['message' => 'No code provided'], 422);
+        }
+
+        if (str_starts_with($code, 'WT|')) {
+            $parts = explode('|', $code);
+            if (count($parts) === 3) {
+                [, $stockId, $priceStr] = $parts;
+                $stock = StockMaster::where('stock_id', $stockId)->where('inactive', false)->first();
+                if ($stock) {
+                    $stockArray = $stock->toArray();
+                    $stockArray['purchase_cost'] = (float) $priceStr;
+                    $stockArray['is_weighted'] = true;
+                    return response()->json($stockArray);
+                }
+            }
+            return response()->json(['message' => "Weighed-item sticker refers to an unknown product"], 404);
         }
 
         $variant = ItemVariant::where('barcode', $code)->where('inactive', false)->first();

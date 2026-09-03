@@ -354,6 +354,7 @@ export const NAVIGATION_PERMISSION_TREE: NavModule[] = [
           { label: "Service Tickets", id: id("Supermarket service tickets"), path: "/supermarket/service-tickets" },
           { label: "POS Settings", id: id("Supermarket pos settings"), path: "/supermarket/pos-settings" },
           { label: "Reports", id: id("Supermarket reports"), path: "/supermarket/reports" },
+          { label: "Weigh & Print", id: id("Supermarket weigh and print"), path: "/supermarket/weigh-and-print" },
         ],
       },
     ],

@@ -23,6 +23,7 @@ import StyleIcon from "@mui/icons-material/Style";
 import BuildIcon from "@mui/icons-material/Build";
 import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import ScaleIcon from "@mui/icons-material/Scale";
 
 const cards = [
   { title: "POS Checkout", description: "Cashier till — scan, cart, and complete a sale", href: "/supermarket/pos-checkout", icon: <PointOfSaleOutlinedIcon />, color: "#024271" },
@@ -41,10 +42,11 @@ const cards = [
   { title: "Warranty", description: "Track warranties, check status, manage claims", href: "/supermarket/warranty", icon: <VerifiedUserIcon />, color: "#0277bd" },
   { title: "Vouchers", description: "Issue and redeem gift vouchers", href: "/supermarket/vouchers", icon: <CardGiftcardIcon />, color: "#ad1457" },
   { title: "Customer Segments", description: "RFM segmentation — Champion, At Risk, Dormant", href: "/supermarket/customer-segments", icon: <GroupsIcon />, color: "#283593" },
-  { title: "Product Variants", description: "Size/color/weight combos with own barcodes", href: "/supermarket/product-variants", icon: <StyleIcon />, color: "#00838f" },
+  { title: "Product Variants", description: "Size/color/weight combos, with barcode label printing", href: "/supermarket/product-variants", icon: <StyleIcon />, color: "#00838f" },
   { title: "Service Tickets", description: "Repair/service job tracking board", href: "/supermarket/service-tickets", icon: <BuildIcon />, color: "#f57f17" },
   { title: "POS Settings", description: "Configure POS behavior & receipt layout", href: "/supermarket/pos-settings", icon: <SettingsSuggestIcon />, color: "#546e7a" },
   { title: "Reports", description: "Velocity, dead stock, profit margin, activity feed, valuation", href: "/supermarket/reports", icon: <AssessmentIcon />, color: "#37474f" },
+  { title: "Weigh & Print", description: "Print a price sticker for loose/weighed items (produce, bulk goods)", href: "/supermarket/weigh-and-print", icon: <ScaleIcon />, color: "#33691e" },
 ];
 
 export default function SupermarketHub() {

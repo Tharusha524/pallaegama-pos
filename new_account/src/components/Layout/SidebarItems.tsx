@@ -11,6 +11,27 @@ import FolderIcon from "@mui/icons-material/Folder";
 import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
+import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
+import InsightsIcon from "@mui/icons-material/Insights";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import LoyaltyIcon from "@mui/icons-material/Loyalty";
+import CardMembershipIcon from "@mui/icons-material/CardMembership";
+import LocalOfferIcon from "@mui/icons-material/LocalOffer";
+import CampaignIcon from "@mui/icons-material/Campaign";
+import ReportProblemIcon from "@mui/icons-material/ReportProblem";
+import PointOfSaleIcon from "@mui/icons-material/PointOfSale";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
+import ReceiptIcon from "@mui/icons-material/Receipt";
+import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
+import CardGiftcardIcon from "@mui/icons-material/CardGiftcard";
+import GroupsIcon from "@mui/icons-material/Groups";
+import StyleIcon from "@mui/icons-material/Style";
+import BuildIcon from "@mui/icons-material/Build";
+import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
+import AssessmentIcon from "@mui/icons-material/Assessment";
+import ScaleIcon from "@mui/icons-material/Scale";
 import { getModulePermissionIds } from "../../permissions/navigationTree";
 
 export interface SidebarItem {
@@ -53,26 +74,27 @@ const baseSidebarItems: Array<SidebarItem> = [
     icon: <StorefrontOutlinedIcon fontSize="small" />,
     requiredPermission: getModulePermissionIds("Smart Supermarket"),
     nestedItems: [
-      { title: "POS Checkout", href: "/supermarket/pos-checkout" },
-      { title: "Sales Analytics", href: "/supermarket/sales-analytics" },
-      { title: "Low Stock Alerts", href: "/supermarket/low-stock" },
-      { title: "Loyalty Tiers", href: "/supermarket/loyalty-tiers" },
-      { title: "Loyalty Cards", href: "/supermarket/loyalty-cards" },
-      { title: "Offers & Discounts", href: "/supermarket/offers" },
-      { title: "Win-Back Campaigns", href: "/supermarket/win-back" },
-      { title: "Stock Damage", href: "/supermarket/stock-damage" },
-      { title: "POS Shifts", href: "/supermarket/pos-shifts" },
-      { title: "Stock Adjustments", href: "/supermarket/stock-adjustments" },
-      { title: "Stock Transfers", href: "/supermarket/stock-transfers" },
-      { title: "Inventory Audits", href: "/supermarket/inventory-audits" },
-      { title: "Offline Sales & Purchases", href: "/supermarket/offline-entries" },
-      { title: "Warranty", href: "/supermarket/warranty" },
-      { title: "Vouchers", href: "/supermarket/vouchers" },
-      { title: "Customer Segments", href: "/supermarket/customer-segments" },
-      { title: "Product Variants", href: "/supermarket/product-variants" },
-      { title: "Service Tickets", href: "/supermarket/service-tickets" },
-      { title: "POS Settings", href: "/supermarket/pos-settings" },
-      { title: "Reports", href: "/supermarket/reports" },
+      { title: "POS Checkout", href: "/supermarket/pos-checkout", icon: <PointOfSaleOutlinedIcon fontSize="small" /> },
+      { title: "Sales Analytics", href: "/supermarket/sales-analytics", icon: <InsightsIcon fontSize="small" /> },
+      { title: "Low Stock Alerts", href: "/supermarket/low-stock", icon: <WarningAmberIcon fontSize="small" /> },
+      { title: "Product Variants", href: "/supermarket/product-variants", icon: <StyleIcon fontSize="small" /> },
+      { title: "Loyalty Tiers", href: "/supermarket/loyalty-tiers", icon: <LoyaltyIcon fontSize="small" /> },
+      { title: "Loyalty Cards", href: "/supermarket/loyalty-cards", icon: <CardMembershipIcon fontSize="small" /> },
+      { title: "Offers & Discounts", href: "/supermarket/offers", icon: <LocalOfferIcon fontSize="small" /> },
+      { title: "Win-Back Campaigns", href: "/supermarket/win-back", icon: <CampaignIcon fontSize="small" /> },
+      { title: "Stock Damage", href: "/supermarket/stock-damage", icon: <ReportProblemIcon fontSize="small" /> },
+      { title: "POS Shifts", href: "/supermarket/pos-shifts", icon: <PointOfSaleIcon fontSize="small" /> },
+      { title: "Stock Adjustments", href: "/supermarket/stock-adjustments", icon: <InventoryIcon fontSize="small" /> },
+      { title: "Stock Transfers", href: "/supermarket/stock-transfers", icon: <SwapHorizIcon fontSize="small" /> },
+      { title: "Inventory Audits", href: "/supermarket/inventory-audits", icon: <FactCheckIcon fontSize="small" /> },
+      { title: "Offline Sales & Purchases", href: "/supermarket/offline-entries", icon: <ReceiptIcon fontSize="small" /> },
+      { title: "Warranty", href: "/supermarket/warranty", icon: <VerifiedUserIcon fontSize="small" /> },
+      { title: "Vouchers", href: "/supermarket/vouchers", icon: <CardGiftcardIcon fontSize="small" /> },
+      { title: "Customer Segments", href: "/supermarket/customer-segments", icon: <GroupsIcon fontSize="small" /> },
+      { title: "Service Tickets", href: "/supermarket/service-tickets", icon: <BuildIcon fontSize="small" /> },
+      { title: "POS Settings", href: "/supermarket/pos-settings", icon: <SettingsSuggestIcon fontSize="small" /> },
+      { title: "Reports", href: "/supermarket/reports", icon: <AssessmentIcon fontSize="small" /> },
+      { title: "Weigh & Print", href: "/supermarket/weigh-and-print", icon: <ScaleIcon fontSize="small" /> },
     ],
   },
   {

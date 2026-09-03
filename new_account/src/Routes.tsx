@@ -51,6 +51,7 @@ import ProductVariantsPage from "./views/Supermarket/ProductVariants/ProductVari
 import ServiceTicketsPage from "./views/Supermarket/ServiceTickets/ServiceTicketsPage";
 import PosSettingsPage from "./views/Supermarket/PosSettings/PosSettingsPage";
 import SupermarketReportsPage from "./views/Supermarket/Reports/SupermarketReportsPage";
+import WeighAndPrintPage from "./views/Supermarket/WeighAndPrint/WeighAndPrintPage";
 import CompanySetup from "./views/Setup/CompanySetup/CompanySetup";
 import Miscellaneous from "./views/Setup/Miscellaneous/Miscellaneous";
 import FixedAssestsMaintenance from "./views/FixedAssets/Maintenance/FixedAssestsMaintenance";
@@ -554,6 +555,7 @@ const AppRoutes = () => {
         <Route path="/supermarket/service-tickets" element={withLayout(MainLayout, ServiceTicketsPage)} />
         <Route path="/supermarket/pos-settings" element={withLayout(MainLayout, PosSettingsPage)} />
         <Route path="/supermarket/reports" element={withLayout(MainLayout, SupermarketReportsPage)} />
+        <Route path="/supermarket/weigh-and-print" element={withLayout(MainLayout, WeighAndPrintPage)} />
         <Route path="/supermarket/sales-analytics" element={withLayout(MainLayout, SalesAnalyticsPage)} />
         <Route path="/supermarket/low-stock" element={withLayout(MainLayout, LowStockPage)} />
         <Route path="/supermarket/loyalty-tiers" element={withLayout(MainLayout, LoyaltyTiersPage)} />

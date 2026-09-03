@@ -4,14 +4,17 @@ import {
   Box, Grid, Card, CardContent, Typography, Table, TableHead, TableRow, TableCell, TableBody,
   TableContainer, Paper, TextField, Button, Stack, IconButton, Autocomplete, Chip, Divider,
   FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
-  List, ListItemButton, ListItemText,
+  List, ListItemButton, ListItemText, Tooltip,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import AddShoppingCartIcon from "@mui/icons-material/AddShoppingCart";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutline";
 import RestoreIcon from "@mui/icons-material/Restore";
 import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
+import PersonIcon from "@mui/icons-material/Person";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
@@ -23,7 +26,8 @@ import { getShippingCompanies } from "../../../api/ShippingCompany/ShippingCompa
 import { getBankAccounts } from "../../../api/BankAccount/BankAccountApi";
 import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/SalesInvoice/SalesInvoiceApi";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
-import { lookupBarcode } from "../../../api/Pos/posApi";
+import { lookupBarcode, getLowStock } from "../../../api/Pos/posApi";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import CakeIcon from "@mui/icons-material/Cake";
@@ -38,6 +42,7 @@ import {
 } from "../../../api/Pos/posOpsApi";
 import { deductVariantStock } from "../../../api/Pos/posAdvancedApi";
 import PosReceiptDialog from "../../../components/PosReceiptDialog";
+import QuickAddCustomerDialog from "../../../components/QuickAddCustomerDialog";
 
 const QUICK_DISCOUNTS = [5, 10, 15, 20];
 
@@ -69,11 +74,11 @@ export default function PosCheckoutPage() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [qty, setQty] = useState("1");
   const [scanCode, setScanCode] = useState("");
-  const [scanning, setScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [quickAddCustomerOpen, setQuickAddCustomerOpen] = useState(false);
 
   const { data: posSettings } = useQuery({ queryKey: ["pos-settings"], queryFn: getPosSettings });
 
@@ -104,6 +109,18 @@ export default function PosCheckoutPage() {
     }
   }, [customers, customer]);
   const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
+
+  // Low stock — surfaced live at the till, not just as a separate report.
+  const { data: lowStockItems } = useQuery({
+    queryKey: ["low-stock", locCode],
+    queryFn: () => getLowStock(30, locCode || undefined),
+    enabled: !!locCode,
+    refetchInterval: 60_000,
+  });
+  const lowStockStockIds = useMemo(
+    () => new Set((lowStockItems ?? []).map((r: any) => r.stock_id)),
+    [lowStockItems]
+  );
   const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
   const { data: shippingCompanies } = useQuery({ queryKey: ["shipping-companies"], queryFn: getShippingCompanies });
   const { data: bankAccounts } = useQuery({ queryKey: ["bank-accounts"], queryFn: getBankAccounts });
@@ -267,7 +284,6 @@ export default function PosCheckoutPage() {
     const trimmed = code.trim();
     if (!trimmed) return;
 
-    setScanning(true);
     try {
       const item = await lookupBarcode(trimmed);
       addItemToCart(item, Number(qty) || 1);
@@ -275,8 +291,6 @@ export default function PosCheckoutPage() {
     } catch (err: any) {
       const message = err?.response?.data?.message || `No product found for code "${trimmed}"`;
       notify.error(message);
-    } finally {
-      setScanning(false);
     }
   };
 
@@ -321,7 +335,13 @@ export default function PosCheckoutPage() {
     mutationFn: (payload: DirectSalesInvoicePayload) => directSalesInvoice(payload),
     onSuccess: (result) => {
       notify.success("Sale completed and posted to accounts");
-      setLastReceipt({ ...result, lines: cart, subtotal: grandTotal, customer });
+      const receiptPayments = paymentLines
+        .filter((p) => p.bank_account_id !== "" && (Number(p.amount) || 0) > 0)
+        .map((p) => ({
+          method: (bankAccounts ?? []).find((a: any) => a.id === p.bank_account_id)?.bank_account_name ?? "Payment",
+          amount: Number(p.amount) || 0,
+        }));
+      setLastReceipt({ ...result, lines: cart, subtotal: grandTotal, customer, payments: receiptPayments, cashReceived: totalPaid });
       resetSaleState();
     },
     onError: (error) => {
@@ -519,7 +539,17 @@ export default function PosCheckoutPage() {
         </Stack>
       </Box>
 
+      {lowStockItems && lowStockItems.length > 0 && (
+        <Chip
+          sx={{ mb: 2 }}
+          color="warning"
+          icon={<WarningAmberIcon />}
+          label={`Low Stock Alert — ${lowStockItems.length} item${lowStockItems.length === 1 ? "" : "s"} at this location need reordering`}
+        />
+      )}
+
       <Grid container spacing={2}>
+        {/* ---- Left: scan/search + cart (a cashier's main working area) ---- */}
         <Grid item xs={12} md={8}>
           <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, mb: 2 }}>
             <CardContent>
@@ -535,15 +565,13 @@ export default function PosCheckoutPage() {
                     value={scanCode}
                     onChange={(e) => setScanCode(e.target.value)}
                     onKeyDown={handleScanKeyDown}
-                    disabled={scanning}
                     InputProps={{ startAdornment: <QrCodeScannerIcon sx={{ mr: 1, color: "text.secondary" }} /> }}
-                    helperText="Works with any USB/handheld barcode scanner — it types the code and presses Enter for you."
                   />
                   <Button
                     variant="outlined"
                     startIcon={<CameraAltIcon />}
                     onClick={() => setCameraOpen(true)}
-                    sx={{ whiteSpace: "nowrap", mt: 0.25 }}
+                    sx={{ whiteSpace: "nowrap", flexShrink: 0, px: 2 }}
                   >
                     Scan with Camera
                   </Button>
@@ -555,9 +583,17 @@ export default function PosCheckoutPage() {
                     getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
                     value={selectedItem}
                     onChange={(_, val) => setSelectedItem(val)}
+                    renderOption={(props, option: any) => (
+                      <Box component="li" {...props} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1 }}>
+                        <span>{option.stock_id} — {option.description}</span>
+                        {lowStockStockIds.has(option.stock_id) && (
+                          <Chip label="LOW STOCK" size="small" color="warning" icon={<WarningAmberIcon />} />
+                        )}
+                      </Box>
+                    )}
                     renderInput={(params) => <TextField {...params} label="Or Search Product Manually" size="small" />}
                   />
-                  <TextField label="Qty" type="number" size="small" sx={{ width: 100 }} value={qty} onChange={(e) => setQty(e.target.value)} />
+                  <TextField label="Qty" type="number" size="small" sx={{ width: 90 }} value={qty} onChange={(e) => setQty(e.target.value)} />
                   <Button variant="contained" startIcon={<AddShoppingCartIcon />} onClick={addToCart} disabled={!selectedItem}>
                     Add
                   </Button>
@@ -566,12 +602,12 @@ export default function PosCheckoutPage() {
             </CardContent>
           </Card>
 
-          <TableContainer component={Paper} elevation={2}>
+          <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
             <Table size="small">
               <TableHead sx={{ backgroundColor: "var(--pallet-lighter-blue)" }}>
                 <TableRow>
                   <TableCell>Item</TableCell>
-                  <TableCell align="right">Qty</TableCell>
+                  <TableCell align="center">Qty</TableCell>
                   <TableCell align="right">Unit Price</TableCell>
                   <TableCell align="right">Disc %</TableCell>
                   <TableCell align="right">Line Total</TableCell>
@@ -580,13 +616,28 @@ export default function PosCheckoutPage() {
               </TableHead>
               <TableBody>
                 {cart.map((l) => (
-                  <TableRow key={l.stock_id}>
+                  <TableRow key={l.stock_id} hover>
                     <TableCell>{l.description}</TableCell>
-                    <TableCell align="right">
-                      <TextField
-                        type="number" size="small" value={l.quantity} sx={{ width: 70 }}
-                        onChange={(e) => updateLine(l.stock_id, { quantity: Number(e.target.value) || 0 })}
-                      />
+                    <TableCell align="center">
+                      <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => updateLine(l.stock_id, { quantity: Math.max(1, l.quantity - 1) })}
+                        >
+                          <RemoveIcon fontSize="inherit" />
+                        </IconButton>
+                        <TextField
+                          type="number" size="small" value={l.quantity} sx={{ width: 56 }}
+                          inputProps={{ style: { textAlign: "center" } }}
+                          onChange={(e) => updateLine(l.stock_id, { quantity: Math.max(0, Number(e.target.value) || 0) })}
+                        />
+                        <IconButton
+                          size="small"
+                          onClick={() => updateLine(l.stock_id, { quantity: l.quantity + 1 })}
+                        >
+                          <AddIcon fontSize="inherit" />
+                        </IconButton>
+                      </Stack>
                     </TableCell>
                     <TableCell align="right">
                       <TextField
@@ -601,7 +652,9 @@ export default function PosCheckoutPage() {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      {formatCurrency(l.quantity * l.unit_price * (1 - l.discount_percent / 100))}
+                      <Typography variant="body2" fontWeight={700}>
+                        {formatCurrency(l.quantity * l.unit_price * (1 - l.discount_percent / 100))}
+                      </Typography>
                     </TableCell>
                     <TableCell align="center">
                       <IconButton size="small" color="error" onClick={() => removeLine(l.stock_id)}>
@@ -611,11 +664,15 @@ export default function PosCheckoutPage() {
                   </TableRow>
                 ))}
                 {cart.length === 0 && (
-                  <TableRow><TableCell colSpan={6} align="center"><Typography variant="body2">Cart is empty — scan or search a product to begin.</Typography></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}><Typography variant="body2" color="text.secondary">Cart is empty — scan or search a product to begin.</Typography></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </TableContainer>
+
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+            Works with any USB/handheld barcode scanner — it types the code and presses Enter for you.
+          </Typography>
 
           {frequentlyBoughtTogether && frequentlyBoughtTogether.length > 0 && (
             <Box sx={{ mt: 2 }}>
@@ -637,39 +694,59 @@ export default function PosCheckoutPage() {
           )}
         </Grid>
 
+        {/* ---- Right: one consolidated till panel — customer, discounts, payment, checkout ---- */}
         <Grid item xs={12} md={4}>
-          <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, mb: 2 }}>
+          <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, position: { md: "sticky" }, top: { md: 16 } }}>
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>Customer</Typography>
-              <Autocomplete
-                options={customers ?? []}
-                getOptionLabel={(c: any) => c.name ?? ""}
-                value={customer}
-                onChange={(_, val) => setCustomer(val)}
-                renderInput={(params) => <TextField {...params} label="Customer" size="small" />}
-              />
+              {/* Customer */}
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                <PersonIcon fontSize="small" color="action" />
+                <Typography variant="subtitle2" fontWeight={700}>Customer</Typography>
+              </Stack>
+              <Stack direction="row" spacing={1}>
+                <Autocomplete
+                  sx={{ flex: 1 }}
+                  options={customers ?? []}
+                  getOptionLabel={(c: any) => c.name ?? ""}
+                  value={customer}
+                  onChange={(_, val) => setCustomer(val)}
+                  renderInput={(params) => <TextField {...params} label="Customer" size="small" />}
+                />
+                <Tooltip title="Add New Customer">
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={() => setQuickAddCustomerOpen(true)}
+                    sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}
+                  >
+                    <PersonAddIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
 
-              {customer && branches && branches.length > 1 && (
-                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-                  <InputLabel>Branch</InputLabel>
-                  <Select value={branchCode} label="Branch" onChange={(e) => setBranchCode(e.target.value)}>
-                    {branches.map((b: any) => (
-                      <MenuItem key={b.branch_code} value={String(b.branch_code)}>{b.br_name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
+              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                {branches && branches.length > 1 && (
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Branch</InputLabel>
+                    <Select value={branchCode} label="Branch" onChange={(e) => setBranchCode(e.target.value)}>
+                      {branches.map((b: any) => (
+                        <MenuItem key={b.branch_code} value={String(b.branch_code)}>{b.br_name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
 
-              {locations && locations.length > 1 && (
-                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-                  <InputLabel>Stock Location</InputLabel>
-                  <Select value={locCode} label="Stock Location" onChange={(e) => setLocCode(e.target.value)}>
-                    {locations.map((loc: any) => (
-                      <MenuItem key={loc.loc_code} value={loc.loc_code}>{loc.location_name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
+                {locations && locations.length > 1 && (
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Stock Location</InputLabel>
+                    <Select value={locCode} label="Stock Location" onChange={(e) => setLocCode(e.target.value)}>
+                      {locations.map((loc: any) => (
+                        <MenuItem key={loc.loc_code} value={loc.loc_code}>{loc.location_name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+              </Stack>
 
               {customer?.date_of_birth && (() => {
                 const dob = new Date(customer.date_of_birth);
@@ -677,29 +754,28 @@ export default function PosCheckoutPage() {
                 return dob.getUTCMonth() === today.getMonth() && dob.getUTCDate() === today.getDate();
               })() && (
                 <Chip
-                  sx={{ mt: 2 }}
+                  sx={{ mt: 1.5 }}
                   color="secondary"
                   icon={<CakeIcon />}
-                  label={`It's ${customer.name}'s birthday today — consider a birthday offer!`}
+                  label={`It's ${customer.name}'s birthday — consider a birthday offer!`}
                 />
               )}
 
               {applicableOffers && applicableOffers.length > 0 && (
-                <Box sx={{ mt: 2 }}>
+                <Box sx={{ mt: 1.5 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={700}>APPLICABLE OFFERS</Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.5 }}>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
                     {applicableOffers.map((o: any) => (
                       <Chip key={o.id} label={o.offer_name} size="small" color="success" />
                     ))}
                   </Stack>
                 </Box>
               )}
-            </CardContent>
-          </Card>
 
-          <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, mb: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Discounts</Typography>
+              <Divider sx={{ my: 2 }} />
+
+              {/* Discounts */}
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Discounts</Typography>
               <Stack direction="row" spacing={1} sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
                 {QUICK_DISCOUNTS.map((pct) => (
                   <Chip
@@ -743,12 +819,10 @@ export default function PosCheckoutPage() {
                   <Button variant="outlined" onClick={handleApplyVoucher}>Apply</Button>
                 )}
               </Stack>
-            </CardContent>
-          </Card>
 
-          <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>Payment</Typography>
+              <Divider sx={{ my: 2 }} />
+
+              {/* Payment / totals */}
               <Stack spacing={1}>
                 <Stack direction="row" justifyContent="space-between">
                   <Typography variant="body2" color="text.secondary">Subtotal</Typography>
@@ -773,9 +847,9 @@ export default function PosCheckoutPage() {
                   </Stack>
                 )}
                 <Divider />
-                <Stack direction="row" justifyContent="space-between">
+                <Stack direction="row" justifyContent="space-between" alignItems="baseline">
                   <Typography variant="h6">Total</Typography>
-                  <Typography variant="h6" fontWeight={800}>{formatCurrency(grandTotal)}</Typography>
+                  <Typography variant="h5" fontWeight={800} color="primary.main">{formatCurrency(grandTotal)}</Typography>
                 </Stack>
 
                 <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ mt: 1 }}>PAYMENT METHOD(S)</Typography>
@@ -822,6 +896,7 @@ export default function PosCheckoutPage() {
                   variant="contained" size="large" startIcon={<ReceiptLongIcon />}
                   disabled={checkoutMutation.isPending || !customer || cart.length === 0}
                   onClick={handleCheckout}
+                  sx={{ mt: 1 }}
                 >
                   {checkoutMutation.isPending ? "Processing..." : "Complete Sale"}
                 </Button>
@@ -879,8 +954,18 @@ export default function PosCheckoutPage() {
         customerName={lastReceipt?.customer?.name}
         lines={lastReceipt?.lines ?? []}
         total={lastReceipt?.subtotal ?? 0}
-        businessLogoUrl={posSettings?.receipt_business_logo_url}
+        payments={lastReceipt?.payments}
+        cashReceived={lastReceipt?.cashReceived}
         paperSize={posSettings?.receipt_paper_size}
+      />
+
+      <QuickAddCustomerDialog
+        open={quickAddCustomerOpen}
+        onClose={() => setQuickAddCustomerOpen(false)}
+        onCreated={(newCustomer) => {
+          queryClient.invalidateQueries({ queryKey: ["customers-all"] });
+          setCustomer(newCustomer);
+        }}
       />
     </FormPageLayout>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Box, Card, CardContent, Typography, Stack, Switch, FormControlLabel, Button, TextField, Divider } from "@mui/material";
+import { Box, Card, CardContent, Typography, Stack, Switch, FormControlLabel, Button, Divider } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
@@ -21,13 +21,11 @@ const TOGGLES: { key: string; label: string; helper: string }[] = [
 export default function PosSettingsPage() {
   const { data, isLoading } = useQuery({ queryKey: ["pos-settings"], queryFn: getPosSettings });
   const [values, setValues] = useState<Record<string, any>>({});
-  const [receiptBusinessLogo, setReceiptBusinessLogo] = useState("");
   const [receiptPaperSize, setReceiptPaperSize] = useState("80mm Thermal");
 
   useEffect(() => {
     if (data) {
       setValues(data);
-      setReceiptBusinessLogo(data.receipt_business_logo_url ?? "");
       setReceiptPaperSize(data.receipt_paper_size ?? "80mm Thermal");
     }
   }, [data]);
@@ -40,7 +38,6 @@ export default function PosSettingsPage() {
   const handleSave = () => {
     saveMutation.mutate({
       ...values,
-      receipt_business_logo_url: receiptBusinessLogo,
       receipt_paper_size: receiptPaperSize,
     });
   };
@@ -87,12 +84,10 @@ export default function PosSettingsPage() {
       <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
         <CardContent>
           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Receipt & Billing</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            The receipt logo is always your business logo from Setup → Company Setup — update it there to change every receipt.
+          </Typography>
           <Stack spacing={2}>
-            <TextField
-              label="Branch Logo URL" fullWidth size="small" value={receiptBusinessLogo}
-              onChange={(e) => setReceiptBusinessLogo(e.target.value)}
-              helperText="Shown at the top of every printed/PDF receipt for this branch"
-            />
             <Divider />
             <Typography variant="body2" fontWeight={600}>Default Receipt Paper Size</Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
