@@ -29,6 +29,10 @@ class QuotationRequest extends FormRequest
             'comments' => 'nullable|string',
             'quotation_date' => 'required|date_format:Y-m-d H:i:s',
             'delivery_date' => 'nullable|date_format:Y-m-d H:i:s',
+            // Was missing entirely — silently stripped by ->validated(), so
+            // the FA-quotation path always fell back to a hardcoded order_type
+            // of 1, which doesn't exist in sales_types, breaking every save.
+            'order_type' => 'nullable|integer|exists:sales_types,id',
             'ship_via' => 'nullable|string',
             'delivery_address' => 'nullable|string',
             'contact_phone' => 'nullable|string',

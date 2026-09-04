@@ -7,11 +7,12 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
-import { getOffers, createOffer, deleteOffer, getOfferPopularity } from "../../../api/Loyalty/loyaltyApi";
+import { getOffers, createOffer, updateOffer, deleteOffer, getOfferPopularity } from "../../../api/Loyalty/loyaltyApi";
 import { getLoyaltyTiers } from "../../../api/Loyalty/loyaltyApi";
 import { getItems } from "../../../api/Item/ItemApi";
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
@@ -28,6 +29,7 @@ export default function OffersPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [editingOffer, setEditingOffer] = useState<any>(null);
 
   // Target selections, kept as real objects (so we can show names) — collapsed
   // into the offer's single target_id string only on submit.
@@ -38,10 +40,12 @@ export default function OffersPage() {
 
   const { data: offers, isLoading } = useQuery({ queryKey: ["offers"], queryFn: getOffers });
   const { data: popularity } = useQuery({ queryKey: ["offer-popularity"], queryFn: getOfferPopularity });
-  const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems, enabled: open });
-  const { data: categories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories(), enabled: open });
-  const { data: tiers } = useQuery({ queryKey: ["loyalty-tiers"], queryFn: getLoyaltyTiers, enabled: open });
-  const { data: customers } = useQuery({ queryKey: ["customers-all"], queryFn: getCustomers, enabled: open });
+  // Not gated on `open` — Edit needs these loaded up front to pre-select the
+  // offer's current target the moment its dialog opens.
+  const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
+  const { data: categories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories() });
+  const { data: tiers } = useQuery({ queryKey: ["loyalty-tiers"], queryFn: getLoyaltyTiers });
+  const { data: customers } = useQuery({ queryKey: ["customers-all"], queryFn: getCustomers });
 
   // Look up product names for the target list shown in the offers table.
   const { data: allItemsForDisplay } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
@@ -49,16 +53,29 @@ export default function OffersPage() {
 
   const popularityMap = new Map<number, number>((popularity ?? []).map((p: any) => [p.offer_id, Number(p.redemption_count)]));
 
+  const closeDialog = () => {
+    setOpen(false);
+    setEditingOffer(null);
+    setForm(emptyForm);
+    setSelectedProducts([]);
+    setSelectedCategory(null);
+    setSelectedTier(null);
+    setSelectedCustomer(null);
+  };
+
   const createMutation = useMutation({
     mutationFn: createOffer,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["offers"] });
-      setOpen(false);
-      setForm(emptyForm);
-      setSelectedProducts([]);
-      setSelectedCategory(null);
-      setSelectedTier(null);
-      setSelectedCustomer(null);
+      closeDialog();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => updateOffer(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["offers"] });
+      closeDialog();
     },
   });
 
@@ -66,6 +83,38 @@ export default function OffersPage() {
     mutationFn: deleteOffer,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["offers"] }),
   });
+
+  const openAddDialog = () => {
+    setEditingOffer(null);
+    setForm(emptyForm);
+    setSelectedProducts([]);
+    setSelectedCategory(null);
+    setSelectedTier(null);
+    setSelectedCustomer(null);
+    setOpen(true);
+  };
+
+  const openEditDialog = (offer: any) => {
+    setEditingOffer(offer);
+    setForm({
+      offer_name: offer.offer_name,
+      offer_type: offer.offer_type,
+      discount_type: offer.discount_type,
+      discount_value: String(offer.discount_value ?? "0"),
+      valid_from: String(offer.valid_from).slice(0, 10),
+      valid_to: String(offer.valid_to).slice(0, 10),
+      min_purchase_amount: String(offer.min_purchase_amount ?? "0"),
+    });
+
+    // Pre-select the target so the Autocomplete shows the current value.
+    const ids = String(offer.target_id ?? "").split(",").map((s: string) => s.trim()).filter(Boolean);
+    setSelectedProducts(offer.offer_type === "product" ? (items ?? []).filter((i: any) => ids.includes(i.stock_id)) : []);
+    setSelectedCategory(offer.offer_type === "category" ? (categories ?? []).find((c: any) => String(c.category_id) === ids[0]) ?? null : null);
+    setSelectedTier(offer.offer_type === "tier" ? (tiers ?? []).find((t: any) => String(t.id) === ids[0]) ?? null : null);
+    setSelectedCustomer(offer.offer_type === "customer" ? (customers ?? []).find((c: any) => String(c.debtor_no) === ids[0]) ?? null : null);
+
+    setOpen(true);
+  };
 
   const resolveTargetId = (): string => {
     switch (form.offer_type) {
@@ -83,12 +132,17 @@ export default function OffersPage() {
   };
 
   const handleSubmit = () => {
-    createMutation.mutate({
+    const payload = {
       ...form,
       target_id: resolveTargetId(),
       discount_value: Number(form.discount_value) || 0,
       min_purchase_amount: Number(form.min_purchase_amount) || 0,
-    });
+    };
+    if (editingOffer) {
+      updateMutation.mutate({ id: editingOffer.id, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   const targetIsValid =
@@ -112,7 +166,7 @@ export default function OffersPage() {
           <PageTitle title="Offers & Discounts" />
           <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Offers & Discounts" }]} />
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Add Offer</Button>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openAddDialog}>Add Offer</Button>
       </Box>
 
       {isLoading ? <PageLoader /> : (
@@ -145,6 +199,9 @@ export default function OffersPage() {
                     <Chip label={offer.status} size="small" color={offer.status === "active" ? "success" : "default"} />
                   </TableCell>
                   <TableCell align="center">
+                    <IconButton size="small" onClick={() => openEditDialog(offer)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
                     <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(offer.id)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -159,8 +216,8 @@ export default function OffersPage() {
         </TableContainer>
       )}
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Offer</DialogTitle>
+      <Dialog open={open} onClose={closeDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingOffer ? "Edit Offer" : "Add Offer"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField label="Offer Name" fullWidth value={form.offer_name} onChange={(e) => setForm({ ...form, offer_name: e.target.value })} />
@@ -230,9 +287,13 @@ export default function OffersPage() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={!form.offer_name || !targetIsValid || createMutation.isPending} onClick={handleSubmit}>
-            {createMutation.isPending ? "Saving..." : "Save"}
+          <Button onClick={closeDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!form.offer_name || !targetIsValid || createMutation.isPending || updateMutation.isPending}
+            onClick={handleSubmit}
+          >
+            {(createMutation.isPending || updateMutation.isPending) ? "Saving..." : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

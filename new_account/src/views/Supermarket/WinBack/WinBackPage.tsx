@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, TextField, Table, TableHead, TableRow, TableCell, TableBody, TableContainer,
-  Paper, Typography, Stack, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip,
+  Paper, Typography, Stack, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Checkbox,
 } from "@mui/material";
 import CampaignIcon from "@mui/icons-material/Campaign";
 import EditIcon from "@mui/icons-material/Edit";
@@ -26,6 +26,11 @@ export default function WinBackPage() {
   // (customer has no phone number) without leaving this screen.
   const [editingDebtorNo, setEditingDebtorNo] = useState<number | null>(null);
   const [mobileDraft, setMobileDraft] = useState("");
+
+  // Which customers are picked for a bulk send — sending only ever goes to
+  // the customer(s) explicitly checked here (or a single row's own button),
+  // never to the whole visible list.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const { data: inactive, isLoading } = useQuery({
     queryKey: ["inactive-customers", days],
@@ -84,6 +89,32 @@ export default function WinBackPage() {
     setMobileDraft(currentMobile ?? "");
   };
 
+  const sendableCustomers = (inactive ?? []).filter((c: any) => !!c.mobile);
+  const allSendableSelected = sendableCustomers.length > 0 && sendableCustomers.every((c: any) => selected.has(c.debtor_no));
+
+  const toggleSelected = (debtorNo: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(debtorNo)) next.delete(debtorNo); else next.add(debtorNo);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelected(allSendableSelected ? new Set() : new Set(sendableCustomers.map((c: any) => c.debtor_no)));
+  };
+
+  const sendToSelected = () => {
+    selected.forEach((debtorNo) => {
+      sendMutation.mutate({
+        debtor_no: debtorNo,
+        offer_id: offerId ? Number(offerId) : undefined,
+        channel,
+      });
+    });
+    setSelected(new Set());
+  };
+
   return (
     <FormPageLayout>
       <Box sx={{ p: 2, boxShadow: 2, borderRadius: 1, mb: 2 }}>
@@ -118,6 +149,15 @@ export default function WinBackPage() {
         <Typography variant="caption" color="text.secondary">
           Note: SMS is sent live via Notify.lk. WhatsApp is not yet connected — those sends are logged only.
         </Typography>
+        <Button
+          variant="contained"
+          startIcon={<CampaignIcon />}
+          disabled={selected.size === 0 || sendMutation.isPending}
+          onClick={sendToSelected}
+          sx={{ ml: "auto !important" }}
+        >
+          Send to Selected ({selected.size})
+        </Button>
       </Stack>
 
       {isLoading ? <PageLoader /> : (
@@ -125,6 +165,14 @@ export default function WinBackPage() {
           <Table>
             <TableHead sx={{ backgroundColor: "var(--pallet-lighter-blue)" }}>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={allSendableSelected}
+                    indeterminate={selected.size > 0 && !allSendableSelected}
+                    disabled={sendableCustomers.length === 0}
+                    onChange={toggleSelectAll}
+                  />
+                </TableCell>
                 <TableCell>Customer</TableCell>
                 <TableCell>Mobile</TableCell>
                 <TableCell>Last Purchase</TableCell>
@@ -133,7 +181,14 @@ export default function WinBackPage() {
             </TableHead>
             <TableBody>
               {(inactive ?? []).map((c: any) => (
-                <TableRow key={c.debtor_no} hover>
+                <TableRow key={c.debtor_no} hover selected={selected.has(c.debtor_no)}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selected.has(c.debtor_no)}
+                      disabled={!c.mobile}
+                      onChange={() => toggleSelected(c.debtor_no)}
+                    />
+                  </TableCell>
                   <TableCell>{c.name}</TableCell>
                   <TableCell>
                     {editingDebtorNo === c.debtor_no ? (
@@ -192,7 +247,7 @@ export default function WinBackPage() {
                 </TableRow>
               ))}
               {(!inactive || inactive.length === 0) && (
-                <TableRow><TableCell colSpan={4} align="center"><Typography variant="body2">No inactive customers in this window.</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} align="center"><Typography variant="body2">No inactive customers in this window.</Typography></TableCell></TableRow>
               )}
             </TableBody>
           </Table>

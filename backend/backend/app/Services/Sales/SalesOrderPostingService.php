@@ -94,13 +94,29 @@ class SalesOrderPostingService
      */
     private function createHeader(array $data): SalesOrder
     {
+        // order_no has no DB default/auto-increment, so it must always be
+        // set proactively — leaving it unset previously threw MySQL error
+        // 1364 (not the duplicate-key 23000 the retry loop below watches
+        // for), so every first insert failed outright before the retry
+        // logic ever got a chance to run.
+        if (empty($data['order_no'])) {
+            $data['order_no'] = (int) (DB::table('sales_orders')->max('order_no') ?? 0) + 1;
+        }
+
         $attempts = 0;
         while ($attempts < 3) {
             try {
                 return SalesOrder::query()->create($data);
             } catch (\Illuminate\Database\QueryException $e) {
                 $attempts++;
-                if ($e->getCode() == '23000') {
+                // SQLSTATE 23000 covers every integrity-constraint violation
+                // (duplicate key AND foreign key failures alike) — only the
+                // MySQL-native 1062 is actually "order_no already taken".
+                // Retrying on anything else just masked the real error (e.g.
+                // an invalid branch_code) behind a misleading "unable to
+                // allocate order_no" message.
+                $mysqlErrorCode = $e->errorInfo[1] ?? null;
+                if ($mysqlErrorCode === 1062) {
                     $max = (int) (DB::table('sales_orders')->max('order_no') ?? 0);
                     $data['order_no'] = $max + 1;
                     continue;

@@ -25,6 +25,8 @@ import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryL
 import { getShippingCompanies } from "../../../api/ShippingCompany/ShippingCompanyApi";
 import { getBankAccounts } from "../../../api/BankAccount/BankAccountApi";
 import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/SalesInvoice/SalesInvoiceApi";
+import { createQuotation, printQuotationPdf } from "../../../api/Quotations/QuotationsApi";
+import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
 import { lookupBarcode, getLowStock } from "../../../api/Pos/posApi";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -61,6 +63,10 @@ interface PaymentLine {
   bank_account_id: number | "";
   amount: string;
 }
+
+// Strips comma separators back out of a display-formatted number (e.g.
+// "42,066" -> 42066) so the underlying cart value stays a clean number.
+const parseFormattedNumber = (value: string): number => Number(value.replace(/,/g, "")) || 0;
 
 export default function PosCheckoutPage() {
   const { formatCurrency } = useHomeCurrency();
@@ -453,6 +459,66 @@ export default function PosCheckoutPage() {
     });
   };
 
+  // "Give Quote" — a price estimate the customer can take away, not a real
+  // sale. Uses the ERP's already-existing Sales Quotation feature (real FA
+  // sales_orders record, trans_type 32) — recorded and retrievable, but
+  // deliberately posts no GL entries and deducts no stock, since nothing
+  // has actually been sold yet. Only becomes an accounting transaction if
+  // it's later converted into an actual sale.
+  const quoteMutation = useMutation({
+    mutationFn: createQuotation,
+    onSuccess: async (result) => {
+      notify.success(`Quotation #${result?.quotation?.order_no ?? ""} created — not a sale, no stock or accounts affected`);
+      try {
+        await printQuotationPdf(result?.quotation?.order_no);
+      } catch {
+        notify.error("Quotation created, but the printable copy failed to open — it's still saved and retrievable");
+      }
+    },
+    onError: (err: any) => {
+      notify.error(err?.response?.data?.message || err?.response?.data?.error || "Failed to create quotation");
+    },
+  });
+
+  const handleGiveQuote = () => {
+    if (!customer || cart.length === 0) {
+      notify.error("Select a customer and add at least one item before giving a quote");
+      return;
+    }
+
+    const salesTypeId = customer.sales_type?.id ?? customer.sales_type ?? 0;
+    const shipVia = shippingCompanies && shippingCompanies.length > 0 ? shippingCompanies[0].shipper_id : undefined;
+
+    if (!Number(salesTypeId)) {
+      notify.error("This customer has no price list (sales type) set — set one before giving a quote");
+      return;
+    }
+    if (!locCode) {
+      notify.error("Select a stock location first");
+      return;
+    }
+
+    quoteMutation.mutate({
+      quotation_number: `POSQ-${Date.now()}`,
+      trans_type: 32,
+      debtor_no: customer.debtor_no,
+      branch_code: branchCode || undefined,
+      reference: `POS-QUOTE-${Date.now()}`,
+      quotation_date: new Date().toISOString().slice(0, 19).replace("T", " "),
+      order_type: Number(salesTypeId),
+      ship_via: shipVia != null ? String(shipVia) : undefined,
+      from_stk_loc: locCode,
+      details: cart.map((l) => ({
+        stk_code: l.stock_id,
+        trans_type: 32,
+        description: l.description,
+        quantity: l.quantity,
+        unit_price: l.unit_price,
+        discount_percent: l.discount_percent,
+      })),
+    });
+  };
+
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
     setCouponChecking(true);
@@ -627,9 +693,9 @@ export default function PosCheckoutPage() {
                           <RemoveIcon fontSize="inherit" />
                         </IconButton>
                         <TextField
-                          type="number" size="small" value={l.quantity} sx={{ width: 56 }}
+                          type="text" inputMode="numeric" size="small" value={l.quantity.toLocaleString()} sx={{ width: 90 }}
                           inputProps={{ style: { textAlign: "center" } }}
-                          onChange={(e) => updateLine(l.stock_id, { quantity: Math.max(0, Number(e.target.value) || 0) })}
+                          onChange={(e) => updateLine(l.stock_id, { quantity: Math.max(0, parseFormattedNumber(e.target.value)) })}
                         />
                         <IconButton
                           size="small"
@@ -641,8 +707,8 @@ export default function PosCheckoutPage() {
                     </TableCell>
                     <TableCell align="right">
                       <TextField
-                        type="number" size="small" value={l.unit_price} sx={{ width: 90 }}
-                        onChange={(e) => updateLine(l.stock_id, { unit_price: Number(e.target.value) || 0 })}
+                        type="text" inputMode="numeric" size="small" value={l.unit_price.toLocaleString()} sx={{ width: 140 }}
+                        onChange={(e) => updateLine(l.stock_id, { unit_price: parseFormattedNumber(e.target.value) })}
                       />
                     </TableCell>
                     <TableCell align="right">
@@ -900,6 +966,18 @@ export default function PosCheckoutPage() {
                 >
                   {checkoutMutation.isPending ? "Processing..." : "Complete Sale"}
                 </Button>
+                <Tooltip title="Give the customer a price estimate — not a sale, no payment needed, nothing posted to accounts yet">
+                  <span>
+                    <Button
+                      fullWidth
+                      variant="outlined" size="large" startIcon={<RequestQuoteIcon />}
+                      disabled={quoteMutation.isPending || !customer || cart.length === 0}
+                      onClick={handleGiveQuote}
+                    >
+                      {quoteMutation.isPending ? "Creating Quote..." : "Give Quote"}
+                    </Button>
+                  </span>
+                </Tooltip>
               </Stack>
             </CardContent>
           </Card>

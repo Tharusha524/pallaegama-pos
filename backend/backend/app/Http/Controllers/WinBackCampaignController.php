@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CompanySetup;
 use App\Models\DebtorsMaster;
+use App\Models\ItemCategory;
+use App\Models\LoyaltyTier;
+use App\Models\Offer;
+use App\Models\StockMaster;
 use App\Models\WinBackCampaign;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -43,7 +48,8 @@ class WinBackCampaignController extends Controller
         ]);
 
         $customer = DebtorsMaster::find($data['debtor_no']);
-        $message = $data['message'] ?? 'A special offer for you!';
+        $offer = !empty($data['offer_id']) ? Offer::find($data['offer_id']) : null;
+        $message = $data['message'] ?? $this->buildOfferMessage($customer, $offer);
 
         $sendResult = $this->sendMessage($customer, $data['channel'], $message);
 
@@ -81,6 +87,62 @@ class WinBackCampaignController extends Controller
         }
         $campaign->update(['redeemed' => true]);
         return response()->json($campaign);
+    }
+
+    /**
+     * Composes a real win-back SMS from the customer's name and the selected
+     * offer's actual details (name, what it applies to, discount, expiry) —
+     * rather than a generic placeholder line. Falls back to a plain
+     * shop-branded message when no offer is selected.
+     */
+    private function buildOfferMessage(?DebtorsMaster $customer, ?Offer $offer): string
+    {
+        $firstName = trim(explode(' ', trim((string) ($customer->name ?? '')))[0] ?? '');
+        $greeting = $firstName !== '' ? "Hi {$firstName}," : 'Hi,';
+        $shopName = CompanySetup::query()->value('name') ?: 'us';
+
+        if (!$offer) {
+            return "{$greeting} we miss you at {$shopName}! Come back and see what's new. - {$shopName}";
+        }
+
+        $target = $this->describeOfferTarget($offer);
+        $discount = $offer->discount_type === 'percent'
+            ? "{$offer->discount_value}% off"
+            : "Rs. {$offer->discount_value} off";
+        $validTo = optional($offer->valid_to)->format('d/m/Y');
+
+        $onTarget = $target ? " on {$target}" : '';
+        $expiry = $validTo ? " Valid till {$validTo}." : '';
+
+        return "{$greeting} enjoy {$discount}{$onTarget} with our {$offer->offer_name}!{$expiry} - {$shopName}";
+    }
+
+    /**
+     * Human-readable description of what an offer applies to, matching the
+     * frontend's Offers table "Target" column logic.
+     */
+    private function describeOfferTarget(Offer $offer): ?string
+    {
+        $ids = array_filter(array_map('trim', explode(',', (string) $offer->target_id)));
+        if (empty($ids)) {
+            return null;
+        }
+
+        switch ($offer->offer_type) {
+            case 'product':
+                $names = StockMaster::whereIn('stock_id', $ids)->pluck('description')->all();
+                return $names ? implode(', ', $names) : null;
+            case 'category':
+                return ItemCategory::where('category_id', $ids[0])->value('description');
+            case 'tier':
+                $tierName = LoyaltyTier::where('id', $ids[0])->value('tier_name');
+                return $tierName ? "{$tierName} members" : null;
+            case 'customer':
+                // A specific-customer offer is inherently personal — no target phrase needed.
+                return null;
+            default:
+                return null;
+        }
     }
 
     /**

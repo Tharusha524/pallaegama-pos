@@ -12,6 +12,7 @@ use App\Services\Sales\SalesQuotationBridgeService;
 use App\Services\Pdf\TcpdfGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 class QuotationController extends Controller
@@ -80,8 +81,14 @@ class QuotationController extends Controller
                     'comments' => $data['comments'] ?? '',
                     'ord_date' => substr((string) $data['quotation_date'], 0, 10),
                     'delivery_date' => isset($data['delivery_date']) ? substr((string) $data['delivery_date'], 0, 10) : substr((string) $data['quotation_date'], 0, 10),
-                    'order_type' => (int) ($data['order_type'] ?? 1),
-                    'ship_via' => (int) ($data['ship_via'] ?? 1),
+                    // No hardcoded fallback id — that was assuming sales_type 1
+                    // always exists, which it doesn't have to. Fall back to
+                    // whichever sales type actually exists instead.
+                    'order_type' => (int) ($data['order_type'] ?? DB::table('sales_types')->min('id') ?? 0),
+                    // Same issue as order_type below — 1 isn't guaranteed to
+                    // exist in shipping_companies, so fall back to whichever
+                    // shipper actually does.
+                    'ship_via' => (int) ($data['ship_via'] ?? DB::table('shipping_companies')->min('shipper_id') ?? 0),
                     'delivery_address' => $data['delivery_address'] ?? '',
                     'freight_cost' => (float) ($data['freight_cost'] ?? 0),
                     'from_stk_loc' => $data['from_stk_loc'] ?? '',
@@ -240,6 +247,82 @@ class QuotationController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error deleting quotation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Print a real FA quotation (sales_orders, trans_type 32 — the genuine,
+     * accounting-integrated kind POS Checkout's "Give Quote" creates) as a
+     * PDF, reusing the exact same quotations.pdf template printPdf() below
+     * uses for the older, separate `quotations` table. That template can't
+     * read a sales_orders row directly (different shape entirely), so this
+     * builds a compatible stand-in object with the same property names.
+     */
+    public function printFaPdf(string $orderNo)
+    {
+        try {
+            $order = DB::table('sales_orders')
+                ->where('order_no', $orderNo)
+                ->where('trans_type', 32)
+                ->first();
+
+            if (!$order) {
+                return response()->json(['message' => 'Quotation not found'], 404);
+            }
+
+            $debtor = DB::table('debtors_master')->where('debtor_no', $order->debtor_no)->first();
+
+            $lines = DB::table('sales_order_details')
+                ->where('order_no', $orderNo)
+                ->where('trans_type', 32)
+                ->get()
+                ->map(function ($line) {
+                    $stock = DB::table('stock_master')->where('stock_id', $line->stk_code)->first();
+                    $netPrice = (float) $line->unit_price * (1 - (float) ($line->discount_percent ?? 0) / 100);
+
+                    return (object) [
+                        'stk_code' => $line->stk_code,
+                        'description' => $line->description,
+                        'quantity' => $line->quantity,
+                        'unit_price' => $line->unit_price,
+                        'discount_percent' => $line->discount_percent,
+                        'line_total' => round($netPrice * (float) $line->quantity, 2),
+                        'stock' => $stock ? (object) ['long_description' => $stock->long_description] : null,
+                    ];
+                });
+
+            $quotation = (object) [
+                'quotation_number' => $order->reference ?: ('QUOTE-' . $order->order_no),
+                'quotation_date' => \Carbon\Carbon::parse($order->ord_date),
+                'status' => 'draft',
+                'debtor' => (object) [
+                    'name' => $debtor->name ?? 'N/A',
+                    'address' => $debtor->address ?? '',
+                ],
+                'contact_email' => $order->contact_email,
+                'contact_phone' => $order->contact_phone,
+                'delivery_address' => $order->delivery_address,
+                'delivery_date' => $order->delivery_date ? \Carbon\Carbon::parse($order->delivery_date) : null,
+                'details' => $lines,
+                'freight_cost' => $order->freight_cost,
+                'total' => $order->total,
+                'comments' => $order->comments,
+            ];
+
+            return $this->pdf->downloadFromView(
+                'quotations.pdf',
+                [
+                    'quotation' => $quotation,
+                    'companyHeader' => CompanyReportHeader::forReports(),
+                ],
+                'quotation-' . $quotation->quotation_number . '.pdf',
+                'P'
+            );
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error generating PDF',
                 'error' => $e->getMessage()
             ], 500);
         }

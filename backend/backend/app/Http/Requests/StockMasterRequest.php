@@ -28,7 +28,7 @@ class StockMasterRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('stock_master', 'stock_id')->ignore($id)
+                Rule::unique('stock_master', 'stock_id')->ignore($id, 'stock_id')
             ],
 
             'category_id' => 'required|integer|exists:item_category,category_id',

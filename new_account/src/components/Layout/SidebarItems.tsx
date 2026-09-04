@@ -32,6 +32,7 @@ import BuildIcon from "@mui/icons-material/Build";
 import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import ScaleIcon from "@mui/icons-material/Scale";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import { getModulePermissionIds } from "../../permissions/navigationTree";
 
 export interface SidebarItem {
@@ -78,6 +79,10 @@ const baseSidebarItems: Array<SidebarItem> = [
       { title: "Sales Analytics", href: "/supermarket/sales-analytics", icon: <InsightsIcon fontSize="small" /> },
       { title: "Low Stock Alerts", href: "/supermarket/low-stock", icon: <WarningAmberIcon fontSize="small" /> },
       { title: "Product Variants", href: "/supermarket/product-variants", icon: <StyleIcon fontSize="small" /> },
+      { title: "Weigh & Print", href: "/supermarket/weigh-and-print", icon: <ScaleIcon fontSize="small" /> },
+      { title: "Quick Stock Receive", href: "/supermarket/quick-stock-receive", icon: <LocalShippingIcon fontSize="small" /> },
+      { title: "Suppliers", href: "/supermarket/suppliers", icon: <GroupsIcon fontSize="small" /> },
+      { title: "Category", href: "/supermarket/category", icon: <LocalOfferIcon fontSize="small" /> },
       { title: "Loyalty Tiers", href: "/supermarket/loyalty-tiers", icon: <LoyaltyIcon fontSize="small" /> },
       { title: "Loyalty Cards", href: "/supermarket/loyalty-cards", icon: <CardMembershipIcon fontSize="small" /> },
       { title: "Offers & Discounts", href: "/supermarket/offers", icon: <LocalOfferIcon fontSize="small" /> },
@@ -94,7 +99,6 @@ const baseSidebarItems: Array<SidebarItem> = [
       { title: "Service Tickets", href: "/supermarket/service-tickets", icon: <BuildIcon fontSize="small" /> },
       { title: "POS Settings", href: "/supermarket/pos-settings", icon: <SettingsSuggestIcon fontSize="small" /> },
       { title: "Reports", href: "/supermarket/reports", icon: <AssessmentIcon fontSize="small" /> },
-      { title: "Weigh & Print", href: "/supermarket/weigh-and-print", icon: <ScaleIcon fontSize="small" /> },
     ],
   },
   {

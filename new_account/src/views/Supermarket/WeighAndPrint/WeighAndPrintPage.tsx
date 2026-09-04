@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Box, Card, CardContent, Typography, Stack, TextField, Button, Autocomplete, Divider, Grid,
+  Box, Card, CardContent, Typography, Stack, TextField, Button, Autocomplete, Divider, Grid, IconButton,
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
+import EditIcon from "@mui/icons-material/Edit";
 import JsBarcode from "jsbarcode";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
-import { getItems } from "../../../api/Item/ItemApi";
+import { getItems, getItemById, updateItem } from "../../../api/Item/ItemApi";
 import { getCompanies } from "../../../api/CompanySetup/CompanySetupApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
+import { notify } from "../../../services/notificationService";
 
 /**
  * For loose/weighed items (produce, bulk goods) that have no manufacturer
@@ -26,9 +30,36 @@ export default function WeighAndPrintPage() {
   const [weight, setWeight] = useState("1");
   const barcodeRef = useRef<SVGSVGElement>(null);
 
+  const queryClient = useQueryClient();
   const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
   const { data: companies } = useQuery({ queryKey: ["company-setup-list"], queryFn: getCompanies });
   const company = companies?.[0];
+
+  // Quick "set price per kg" shortcut — skips the full Item Maintenance
+  // screen for the one field a cashier actually needs fixed on the spot.
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceDraft, setPriceDraft] = useState("");
+
+  const savePriceMutation = useMutation({
+    mutationFn: async ({ stockId, price }: { stockId: string; price: number }) => {
+      // updateItem requires the full item payload — fetch the current record
+      // and merge in just the price, rather than risk an incomplete payload.
+      const full = await getItemById(stockId);
+      return updateItem(stockId, { ...full, purchase_cost: price });
+    },
+    onSuccess: (_result, variables) => {
+      notify.success("Price updated");
+      setEditingPrice(false);
+      queryClient.invalidateQueries({ queryKey: ["items-all"] });
+      setProduct((prev: any) => (prev ? { ...prev, purchase_cost: variables.price } : prev));
+    },
+    onError: () => notify.error("Failed to update price"),
+  });
+
+  const startEditPrice = () => {
+    setPriceDraft(String(product?.purchase_cost ?? "0"));
+    setEditingPrice(true);
+  };
 
   const unitPrice = Number(product?.purchase_cost) || 0;
   const weightKg = Number(weight) || 0;
@@ -80,9 +111,35 @@ export default function WeighAndPrintPage() {
                   onChange={(e) => setWeight(e.target.value)}
                 />
                 {product && (
-                  <Typography variant="caption" color="text.secondary">
-                    Price per kg: {formatCurrency(unitPrice)}
-                  </Typography>
+                  editingPrice ? (
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <TextField
+                        size="small" type="number" autoFocus label="Price per kg"
+                        value={priceDraft}
+                        onChange={(e) => setPriceDraft(e.target.value)}
+                      />
+                      <IconButton
+                        size="small" color="success"
+                        disabled={savePriceMutation.isPending}
+                        onClick={() => savePriceMutation.mutate({ stockId: product.stock_id, price: Number(priceDraft) || 0 })}
+                      >
+                        <CheckIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => setEditingPrice(false)}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  ) : (
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="caption" color={unitPrice > 0 ? "text.secondary" : "error"}>
+                        Price per kg: {formatCurrency(unitPrice)}
+                        {unitPrice === 0 && " — set a price to print"}
+                      </Typography>
+                      <IconButton size="small" onClick={startEditPrice}>
+                        <EditIcon fontSize="inherit" />
+                      </IconButton>
+                    </Stack>
+                  )
                 )}
                 <Divider />
                 <Stack direction="row" justifyContent="space-between">

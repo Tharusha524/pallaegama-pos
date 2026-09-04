@@ -419,6 +419,7 @@ Route::apiResource('quotations', QuotationController::class);
 Route::post('quotations/{id}/send-email', [QuotationController::class, 'sendEmail']);
 Route::post('documents/send-email', [\App\Http\Controllers\TransactionDocumentEmailController::class, 'send']);
 Route::get('quotations/{id}/print-pdf', [QuotationController::class, 'printPdf']);
+Route::get('quotations-fa/{orderNo}/print-pdf', [QuotationController::class, 'printFaPdf']);
 Route::patch('quotations/{id}/status', [QuotationController::class, 'updateStatus']);
 Route::get('quotations-statistics', [QuotationController::class, 'statistics']);
 Route::apiResource('debtor-trans', DebtorTransController::class);

@@ -71,7 +71,11 @@ class SupplierRequest extends FormRequest
         $merged = [];
 
         foreach ($toEmpty as $field) {
-            if ($this->has($field) && ($this->input($field) === null || $this->input($field) === '')) {
+            // Default to '' whenever the field is missing entirely, not just
+            // when it's present-but-empty — these columns have no DB default,
+            // so a client that omits them (e.g. a minimal quick-create form)
+            // must still get a valid empty string, not have the key vanish.
+            if (! $this->has($field) || $this->input($field) === null || $this->input($field) === '') {
                 $merged[$field] = '';
             }
         }
