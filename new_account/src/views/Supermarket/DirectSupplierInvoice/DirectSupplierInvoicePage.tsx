@@ -38,7 +38,7 @@ export default function DirectSupplierInvoicePage() {
 
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers-all"], queryFn: getSuppliers });
   const { data: locations = [] } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
-  const { data: items = [] } = useQuery({ queryKey: ["items-all"], queryFn: () => getItems({}) });
+  const { data: items = [] } = useQuery({ queryKey: ["items-all"], queryFn: () => getItems() });
 
   const total = lines.reduce((sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0);
 

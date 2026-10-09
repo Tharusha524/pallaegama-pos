@@ -52,7 +52,7 @@ const DEFAULT_RS = {
   show_vat_number: false, shop_vat_number: "", show_date_time: true,
   show_invoice_id: true, show_cashier: true, show_shift_id: false, show_branch_name: false,
   show_discount_column: true, show_item_unit: false, show_offer_applied: false,
-  show_payment_info: true, show_change: true, show_card_type: false, show_coupon_used: false,
+  show_payment_info: true, show_change: true, show_card_type: false, show_coupon_used: false, show_currency_symbol: false,
   show_customer_name: true,
   show_thank_you: true, thank_you_message: "THANK YOU FOR YOUR BUSINESS!",
   show_footer: true, footer_text: "Developed by DIO Solutions",
@@ -77,11 +77,14 @@ const DEFAULT_RS = {
   label_discount: "Discount",
   label_total: "TOTAL",
   label_payment_info: "PAYMENT INFO",
+  label_total_due: "TOTAL",
   label_cash_received: "CASH RECEIVED",
   label_change: "CHANGE",
   label_customer: "CUSTOMER",
   label_coupon: "COUPON",
   label_voucher: "VOUCHER",
+  label_you_saved: "You Saved",
+  label_items: "Items",
 };
 
 function renderCustomFields(fields: CustomReceiptField[], position: string, fsMap: Record<string, number>) {
@@ -237,12 +240,10 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
           <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
           <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-            {DUMMY_PAYMENTS.map((p, i) => (
-              <Box key={i} sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
-                <span style={{ fontWeight: rs.weight_payment_lines }}>{p.method}{rs.show_card_type ? ` (${p.card_type_name})` : ""}</span>
-                <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{p.amount.toFixed(2)}</Typography>
-              </Box>
-            ))}
+            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+              <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
+              <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>520.00</Typography>
+            </Box>
             <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
               <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_cash_received}</span>
               <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{DUMMY_RECEIVED.toFixed(2)}</Typography>
@@ -259,7 +260,16 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
               </Box>
             )}
           </Stack>
+          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
+            <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_you_saved ?? "You Saved"}</span>
+            <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>50.00</Typography>
+          </Box>
           {renderCustomFields(rs.custom_fields ?? [], "after_payment", FONT_SIZE)}
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1 }} />
+          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
+            <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
+            <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{DUMMY_LINES.length}</Typography>
+          </Box>
         </>
       )}
 
@@ -452,6 +462,7 @@ export default function ReceiptCustomizePage() {
                 <SectionToggle label="Show Change Due" checked={!!rs.show_change} onChange={(v) => set("show_change", v)} />
                 <SectionToggle label="Show Card Type (Visa, Mastercard...)" checked={!!rs.show_card_type} onChange={(v) => set("show_card_type", v)} />
                 <SectionToggle label="Show Coupon / Voucher Code Used" checked={!!rs.show_coupon_used} onChange={(v) => set("show_coupon_used", v)} />
+                <SectionToggle label="Show Currency Symbol (e.g. LKR) on amounts" checked={!!rs.show_currency_symbol} onChange={(v) => set("show_currency_symbol", v)} />
                 <Divider sx={{ my: 0.5 }} />
                 <FontSizePicker label="Totals font size" value={rs.font_totals} onChange={(v) => set("font_totals", v)} />
                 <WeightSlider label="Subtotal / Discount weight" value={rs.weight_subtotal} onChange={(v) => set("weight_subtotal", v)} />
@@ -521,11 +532,14 @@ export default function ReceiptCustomizePage() {
                   { key: "label_discount", placeholder: "Discount" },
                   { key: "label_total", placeholder: "TOTAL" },
                   { key: "label_payment_info", placeholder: "PAYMENT INFO" },
+                  { key: "label_total_due", placeholder: "TOTAL" },
                   { key: "label_cash_received", placeholder: "CASH RECEIVED" },
                   { key: "label_change", placeholder: "CHANGE" },
                   { key: "label_customer", placeholder: "CUSTOMER" },
                   { key: "label_coupon", placeholder: "COUPON" },
                   { key: "label_voucher", placeholder: "VOUCHER" },
+                  { key: "label_you_saved", placeholder: "You Saved" },
+                  { key: "label_items", placeholder: "Items" },
                 ].map(({ key, placeholder }) => (
                   <TextField
                     key={key}

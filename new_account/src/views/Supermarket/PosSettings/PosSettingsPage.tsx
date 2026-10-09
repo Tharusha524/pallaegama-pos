@@ -39,6 +39,7 @@ export default function PosSettingsPage() {
   const [values, setValues] = useState<Record<string, any>>({});
   const [receiptPaperSize, setReceiptPaperSize] = useState("80mm Thermal");
   const [wholesalePin, setWholesalePin] = useState("");
+  const [thermalPrinterName, setThermalPrinterName] = useState("EPSON TM-T82 Receipt");
 
   // Item Units — Add/Edit/Delete the units (KG, PCS, LTR, ...) products are
   // measured in, same list used on Stock's "Apply Unit to Selected" and Set
@@ -122,6 +123,7 @@ export default function PosSettingsPage() {
       setValues(data);
       setReceiptPaperSize(data.receipt_paper_size ?? "80mm Thermal");
       setWholesalePin(data.wholesale_pin ?? "");
+      setThermalPrinterName(data.thermal_printer_name ?? "EPSON TM-T82 Receipt");
     }
   }, [data]);
 
@@ -135,6 +137,7 @@ export default function PosSettingsPage() {
       ...values,
       receipt_paper_size: receiptPaperSize,
       wholesale_pin: wholesalePin,
+      thermal_printer_name: thermalPrinterName,
     });
   };
 
@@ -205,6 +208,19 @@ export default function PosSettingsPage() {
                 </Button>
               ))}
             </Stack>
+            <Divider />
+            <Typography variant="body2" fontWeight={600}>Thermal Printer Name (Windows)</Typography>
+            <Typography variant="caption" color="text.secondary">
+              The exact name of the thermal printer as it appears in Windows → Devices and Printers.
+              Example: <b>EPSON Coupon Generator(TM-T82)</b>. This must match exactly for printing to work.
+            </Typography>
+            <TextField
+              size="small"
+              value={thermalPrinterName}
+              onChange={(e) => setThermalPrinterName(e.target.value)}
+              placeholder="e.g. EPSON Coupon Generator(TM-T82)"
+              sx={{ maxWidth: 400 }}
+            />
           </Stack>
         </CardContent>
       </Card>

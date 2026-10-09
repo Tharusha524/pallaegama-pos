@@ -54,9 +54,16 @@ export const updateWarrantyClaim = async (id: number | string, data: { status: s
   (await api.put(`/warranty-claims/${id}`, data)).data;
 
 // ---- Vouchers / Gift Cards ----
-export const getVouchers = async () => (await api.get("/vouchers")).data;
+export const getVouchers = async (params?: any) => (await api.get("/vouchers", { params })).data;
+export const getVoucherSummary = async () => (await api.get("/vouchers-summary")).data;
+export const getVoucherBatches = async () => (await api.get("/voucher-batches")).data;
 export const createVoucher = async (data: { debtor_no?: number; face_value: number; expiry_date?: string; note?: string }) =>
   (await api.post("/vouchers", data)).data;
+export const bulkGenerateVouchers = async (data: { card_count: number; face_value: number; expiry_date?: string; note?: string }) =>
+  (await api.post("/vouchers-bulk-generate", data)).data;
+export const activateVoucher = async (code: string, data?: { debtor_no?: number }) =>
+  (await api.post(`/vouchers/${code}/activate`, data ?? {})).data;
+export const cancelVoucher = async (code: string) => (await api.post(`/vouchers/${code}/cancel`)).data;
 export const getVoucherByCode = async (code: string) => (await api.get(`/vouchers/${code}`)).data;
 export const redeemVoucher = async (data: { voucher_code: string; amount: number; debtor_trans_no?: number; debtor_trans_type?: number }) =>
   (await api.post("/vouchers-redeem", data)).data;

@@ -296,7 +296,7 @@ import CustomerPaymentsSuccess from "./views/Sales/Transactions/CustomerPayments
 import ViewCustomerPayments from "./views/Sales/Transactions/CustomerPayments/ViewCustomerPayments";
 import CustomerCreditNotesSuccess from "./views/Sales/Transactions/CustomerCreditNotes/CustomerCreditNotesSuccess";
 import ViewCustomerCreditNotes from "./views/Sales/Transactions/CustomerCreditNotes/ViewCustomerCreditNotes";
-import ViewDirectInvoice from "./views/Sales/Transactions/DirectInvoice/ViewDirectInvoice";
+import ViewDirectInvoice from "./views/Sales/Transactions/DirectInvoice/viewDirectInvoice";
 import ViewSalesGLJournalEntries from "./views/Sales/Transactions/GLJournalEntries/ViewSalesGLJournalEntries";
 import ViewPurchasesGLJournalEntries from "./views/Purchases/Transactions/GLJournalEntries/ViewPurchasesGLJournalEntries";
 import ViewInventoryGLJournalEntries from "./views/ItemsAndInventory/Transactions/GLJournalEntries/ViewInventoryGLJournalEntries";

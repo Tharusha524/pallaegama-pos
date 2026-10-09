@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Divider, Stack } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
@@ -7,6 +7,8 @@ import { useHomeCurrency } from "../hooks/useHomeCurrency";
 import { getCompanies } from "../api/CompanySetup/CompanySetupApi";
 import useCurrentUser from "../hooks/useCurrentUser";
 import { resolveLogoSrc } from "../utils/logoUrl";
+import html2canvas from "html2canvas";
+import { invoke } from "@tauri-apps/api/core";
 
 interface ReceiptLine {
   description: string;
@@ -68,6 +70,23 @@ export default function PosReceiptDialog({
   const { formatCurrency } = useHomeCurrency();
   const { user } = useCurrentUser();
   const barcodeRef = useRef<SVGSVGElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const receiptHtml = (innerHTML: string) => `<!DOCTYPE html><html><head>
+    <meta charset="utf-8"/>
+    <style>
+      @page { size: 80mm auto; margin: 0; }
+      html, body { width: 80mm; margin: 0; padding: 0; background: #fff; overflow-x: hidden; }
+      body { padding: 2mm; font-family: monospace; font-size: 11px; color: #000; box-sizing: border-box; }
+      * { color: #000 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
+      img { max-width: 100%; display: block; margin: 0 auto; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      td, th { overflow: hidden; word-break: break-all; }
+      #pos-receipt-print-area { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: none !important; }
+      [class*="MuiStack"], [class*="MuiBox"] { width: 100% !important; max-width: 100% !important; flex-wrap: wrap !important; overflow: hidden !important; }
+      [style*="justify-content: space-between"] { display: flex !important; justify-content: space-between !important; width: 100% !important; }
+    </style>
+  </head><body>${innerHTML}</body></html>`;
 
   // Merge caller's settings over defaults so every key always exists.
   const rs = {
@@ -77,7 +96,7 @@ export default function PosReceiptDialog({
     show_invoice_id: true, show_cashier: true, show_date_time: true,
     show_shift_id: false, show_branch_name: false,
     show_discount_column: true, show_item_unit: false, show_offer_applied: false,
-    show_payment_info: true, show_change: true, show_card_type: false, show_coupon_used: false,
+    show_payment_info: true, show_change: true, show_card_type: false, show_coupon_used: false, show_currency_symbol: false,
     show_customer_name: true,
     show_thank_you: true, thank_you_message: "THANK YOU FOR YOUR BUSINESS!",
     show_footer: true, footer_text: "Developed by DIO Solutions",
@@ -91,10 +110,14 @@ export default function PosReceiptDialog({
     label_col_item: "ITEM", label_col_disc: "DISC", label_col_net: "NET", label_col_total: "TOTAL",
     label_unit_price: "UNIT PRICE", label_subtotal: "Subtotal", label_discount: "Discount",
     label_total: "TOTAL", label_payment_info: "PAYMENT INFO",
-    label_cash_received: "CASH RECEIVED", label_change: "CHANGE", label_customer: "CUSTOMER",
-    label_coupon: "COUPON", label_voucher: "VOUCHER",
+    label_total_due: "TOTAL", label_cash_received: "CASH RECEIVED", label_change: "CHANGE", label_customer: "CUSTOMER",
+    label_coupon: "COUPON", label_voucher: "VOUCHER", label_you_saved: "You Saved", label_items: "Items",
+    thermal_printer_name: "EPSON TM-T82 Receipt",
+    custom_fields: [] as any[],
     ...(receiptSettings ?? {}),
   };
+
+  const fmt = (v: number) => rs.show_currency_symbol ? formatCurrency(v, 2) : v.toFixed(2);
 
   const { data: companies } = useQuery({
     queryKey: ["company-setup-list"],
@@ -103,6 +126,78 @@ export default function PosReceiptDialog({
   });
   const company = companies?.[0];
   const logoSrc = resolveLogoSrc(company?.company_logo_url);
+  const now = new Date();
+  const subtotal = lines.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
+
+  const handlePrint = useCallback(() => {
+    const isTauriApp = !!(window as any).__TAURI_INTERNALS__;
+
+    if (isTauriApp) {
+      // Capture the receipt preview div as-is → scale to 576px (printer width) → ESC/POS
+      const printArea = document.getElementById('pos-receipt-print-area');
+      if (!printArea) { alert('Receipt preview not found.'); return; }
+
+      // Fetch all images with auth headers and replace their src with data URLs
+      // before html2canvas runs — prevents cross-origin fetch failures that
+      // would cause html2canvas to hang silently on the client machine.
+      const imgs = Array.from(printArea.querySelectorAll('img')) as HTMLImageElement[];
+      const token = localStorage.getItem('token');
+      const toDataUrlWithAuth = (img: HTMLImageElement): Promise<void> => {
+        if (!img.src || img.src.startsWith('data:') || img.src.startsWith('blob:')) return Promise.resolve();
+        return fetch(img.src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+          .then((r) => r.blob())
+          .then((blob) => new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => { img.src = reader.result as string; resolve(); };
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(blob);
+          }))
+          .catch(() => Promise.resolve());
+      };
+
+      Promise.all([document.fonts.ready, ...imgs.map(toDataUrlWithAuth)]).then(() =>
+        html2canvas(printArea, {
+          scale: 576 / printArea.offsetWidth,
+          backgroundColor: '#ffffff',
+          useCORS: false,
+          logging: false,
+          imageTimeout: 0,
+        })
+      ).then((canvas) => {
+        const base64 = canvas.toDataURL('image/png').split(',')[1];
+        return invoke('print_receipt_escpos', {
+            printerName: rs.thermal_printer_name || 'EPSON TM-T82 Receipt',
+            imageBase64: base64,
+            autoCut: true,
+          });
+      }).catch((err: any) => {
+        alert(`Print failed: ${err}\n\nMake sure the EPSON TM-T82 is connected and powered on.`);
+      });
+      return;
+    }
+
+    // Browser: open a blank window with only the receipt HTML
+    const printArea = document.getElementById("pos-receipt-print-area");
+    if (!printArea) return;
+    const win = window.open("", "_blank", "width=400,height=700");
+    if (!win) { window.print(); return; }
+    win.document.write(receiptHtml(printArea.innerHTML));
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 500);
+  }, [company, now, transNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml]);
+
+  // Keyboard: Enter = print, ↑/↓ = scroll receipt
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter") { e.preventDefault(); handlePrint(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); scrollRef.current?.scrollBy({ top: 80, behavior: "smooth" }); }
+      if (e.key === "ArrowUp")   { e.preventDefault(); scrollRef.current?.scrollBy({ top: -80, behavior: "smooth" }); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, handlePrint]);
 
   useEffect(() => {
     if (open && transNo && barcodeRef.current) {
@@ -122,13 +217,7 @@ export default function PosReceiptDialog({
     }
   }, [open, transNo]);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const isThermal = paperSize.includes("80mm");
-  const now = new Date();
-  const subtotal = lines.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
   const discountTotal = Math.max(0, subtotal - total);
   const paymentLines = payments && payments.length > 0 ? payments : [{ method: "CASH", amount: total }];
   const received = cashReceived ?? total;
@@ -137,33 +226,75 @@ export default function PosReceiptDialog({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle className="pos-receipt-no-print">{isQuote ? `Quotation #${transNo}` : `Receipt — Invoice #${transNo}`}</DialogTitle>
-      <DialogContent>
+      <DialogContent ref={scrollRef}>
         <style>{`
           @media print {
             @page { size: 80mm auto; margin: 0; }
-            body * { visibility: hidden; }
-            #pos-receipt-print-area, #pos-receipt-print-area * { visibility: visible; }
-            #pos-receipt-print-area {
-              position: absolute; top: 0; left: 0;
-              width: 80mm; max-width: 80mm;
-              margin: 0; padding: 4mm;
-              border: none;
+
+            /* Force browser to lay out at 80mm — no scaling */
+            html, body {
+              width: 80mm !important;
+              min-width: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
             }
-            /* Thermal print heads render thin/light text as faint or broken —
-               force everything bolder and fully black (not gray) so it comes
-               out crisp on paper. */
-            #pos-receipt-print-area, #pos-receipt-print-area * {
-              font-weight: 600 !important;
+
+            /* Hide every direct child of body */
+            body > * { display: none !important; }
+
+            /* Show only the portal div that contains the receipt */
+            body > *:has(#pos-receipt-print-area) { display: block !important; }
+
+            /* Strip MUI dialog chrome */
+            .MuiBackdrop-root { display: none !important; }
+            .MuiModal-root, .MuiDialog-root {
+              display: block !important;
+              position: static !important;
+            }
+            .MuiDialog-container {
+              display: block !important;
+              position: static !important;
+              height: auto !important;
+            }
+            .MuiDialog-paper {
+              display: block !important;
+              box-shadow: none !important;
+              margin: 0 !important;
+              max-height: none !important;
+              width: 80mm !important;
+              max-width: 80mm !important;
+              border-radius: 0 !important;
+              overflow: visible !important;
+            }
+            .MuiDialogTitle-root { display: none !important; }
+            .MuiDialogActions-root { display: none !important; }
+            .MuiDialogContent-root {
+              padding: 0 !important;
+              overflow: visible !important;
+            }
+
+            /* Receipt fills full 80mm */
+            .pos-receipt-no-print { display: none !important; }
+            #pos-receipt-print-area {
+              width: 80mm !important;
+              max-width: 80mm !important;
+              margin: 0 !important;
+              padding: 4mm !important;
+              border: none !important;
+              box-sizing: border-box !important;
+            }
+            #pos-receipt-print-area * {
               color: #000 !important;
+              font-weight: 600 !important;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            .pos-receipt-no-print { display: none !important; }
           }
         `}</style>
         <Box
           id="pos-receipt-print-area"
-          sx={{ fontFamily: "monospace", width: isThermal ? 280 : "100%", mx: "auto", p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+          sx={{ fontFamily: "'Poppins', sans-serif", width: isThermal ? 280 : "100%", mx: "auto", p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
         >
           {/* ---- Header ---- */}
           <Stack alignItems="center" spacing={0.25} sx={{ mb: 1 }}>
@@ -226,7 +357,6 @@ export default function PosReceiptDialog({
             <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_items] - 1, fontWeight: rs.weight_col_headers }}>
               <span>{rs.label_col_item}</span>
               <Box sx={{ display: "flex", gap: 2 }}>
-                {rs.show_discount_column && <span>{rs.label_col_disc}</span>}
                 <span>{rs.label_col_net}</span><span>{rs.label_col_total}</span>
               </Box>
             </Box>
@@ -245,7 +375,6 @@ export default function PosReceiptDialog({
                   <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_items], fontWeight: rs.weight_qty_line }}>
                     <span>{l.quantity} x{rs.show_item_unit && l.unit_name ? ` ${l.unit_name}` : ""}</span>
                     <Box sx={{ display: "flex", gap: 2 }}>
-                      {rs.show_discount_column && <span>{l.discount_percent > 0 ? `${l.discount_percent}%` : "-"}</span>}
                       <span>{netPrice.toFixed(2)}</span>
                       <span>{lineTotal.toFixed(2)}</span>
                     </Box>
@@ -260,11 +389,11 @@ export default function PosReceiptDialog({
 
           <Stack spacing={0.25} sx={{ my: 1 }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
-              <span>{rs.label_subtotal}</span><span>{formatCurrency(subtotal)}</span>
+              <span>{rs.label_subtotal}</span><span>{fmt(subtotal)}</span>
             </Box>
             {discountTotal > 0.001 && (
               <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
-                <span>{rs.label_discount}</span><span>-{formatCurrency(discountTotal)}</span>
+                <span>{rs.label_discount}</span><span>-{fmt(discountTotal)}</span>
               </Box>
             )}
           </Stack>
@@ -273,7 +402,7 @@ export default function PosReceiptDialog({
 
           <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
             <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_total}</Typography>
-            <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{formatCurrency(total)}</Typography>
+            <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{fmt(total)}</Typography>
           </Box>
 
           {!isQuote && rs.show_payment_info && (
@@ -281,20 +410,18 @@ export default function PosReceiptDialog({
               <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
               <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
               <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-                {paymentLines.map((p, i) => (
-                  <Box key={i} sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
-                    <span style={{ fontWeight: rs.weight_payment_lines }}>{p.method.toUpperCase()}{rs.show_card_type && (p as any).card_type_name ? ` (${(p as any).card_type_name})` : ""}</span>
-                    <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{formatCurrency(p.amount)}</Typography>
-                  </Box>
-                ))}
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+                  <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
+                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(total)}</Typography>
+                </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
                   <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_cash_received}</span>
-                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{formatCurrency(received)}</Typography>
+                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(received)}</Typography>
                 </Box>
                 {rs.show_change && change > 0.001 && (
                   <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
                     <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_change}</span>
-                    <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{formatCurrency(change)}</Typography>
+                    <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(change)}</Typography>
                   </Box>
                 )}
                 {rs.show_coupon_used && couponCode && (
@@ -308,7 +435,18 @@ export default function PosReceiptDialog({
                   </Box>
                 )}
               </Stack>
+              {discountTotal > 0.001 && (
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
+                  <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_you_saved ?? "You Saved"}</span>
+                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(discountTotal)}</Typography>
+                </Box>
+              )}
               {renderCustomFields(rs.custom_fields, "after_payment")}
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1 }} />
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
+                <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
+                <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{lines.length}</Typography>
+              </Box>
             </>
           )}
 

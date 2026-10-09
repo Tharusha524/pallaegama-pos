@@ -551,6 +551,11 @@ Route::apiResource('warranty-claims', WarrantyClaimController::class)->only(['in
 
 // ---- Vouchers / gift cards ----
 Route::apiResource('vouchers', VoucherController::class)->only(['index', 'store', 'show']);
+Route::get('vouchers-summary', [VoucherController::class, 'summary']);
+Route::get('voucher-batches', [VoucherController::class, 'batches']);
+Route::post('vouchers-bulk-generate', [VoucherController::class, 'bulkGenerate']);
+Route::post('vouchers/{code}/activate', [VoucherController::class, 'activate']);
+Route::post('vouchers/{code}/cancel', [VoucherController::class, 'cancel']);
 Route::post('vouchers-redeem', [VoucherController::class, 'redeem']);
 
 // ---- Discounts & Coupons ----

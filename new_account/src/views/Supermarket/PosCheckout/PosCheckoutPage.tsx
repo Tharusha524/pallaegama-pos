@@ -612,27 +612,38 @@ export default function PosCheckoutPage() {
     // from the combined items list, which falls back to the offline SQLite
     // snapshot (unit_price) when there's no server data, so it already has
     // a usable price.
-    let salePrice: number | undefined = selectedItem.sale_price;
-    if (!isOffline) {
-      const resolved = await resolveSellingPrice(String(selectedItem.stock_id));
-      if (resolved !== undefined) salePrice = resolved;
-    }
-    // The cashier can override the Selling Price shown after picking the
-    // item — only honor that override if they actually typed into it,
-    // otherwise keep using the real fetched/catalog price above.
-    const finalUnitPrice = manualSellingPriceTouched && manualSellingPrice !== ""
-      ? Number(manualSellingPrice) || 0
-      : Number(salePrice ?? selectedItem.purchase_cost) || 0;
+    const salePrice: number | undefined = selectedItem.sale_price;
+    const catalogPrice = Number(salePrice ?? selectedItem.purchase_cost) || 0;
     const discountRaw = Math.max(0, Number(manualDiscountInput) || 0);
-    const finalDiscountPercent = manualDiscountMode2 === "percent"
-      ? Math.min(100, discountRaw)
-      : (finalUnitPrice > 0 ? Math.min(100, (discountRaw / finalUnitPrice) * 100) : 0);
 
+    // Add to cart immediately with catalog price so the row appears instantly,
+    // then resolve promotional/sales pricing in the background and patch the
+    // price if a better one is found — cashier sees the correct price within
+    // ~0.5 s without any visible delay on Enter.
+    const initialUnitPrice = manualSellingPriceTouched && manualSellingPrice !== ""
+      ? Number(manualSellingPrice) || 0
+      : catalogPrice;
+    const initialDiscountPercent = manualDiscountMode2 === "percent"
+      ? Math.min(100, discountRaw)
+      : (initialUnitPrice > 0 ? Math.min(100, (discountRaw / initialUnitPrice) * 100) : 0);
+
+    const stockId = String(selectedItem.stock_id);
     addItemToCart(
       { ...selectedItem, sale_price: salePrice },
       Number(qty) || 1,
-      { unitPrice: finalUnitPrice, discountPercent: finalDiscountPercent }
+      { unitPrice: initialUnitPrice, discountPercent: initialDiscountPercent }
     );
+
+    if (!isOffline && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
+      resolveSellingPrice(stockId).then((resolved) => {
+        if (resolved !== undefined) {
+          const resolvedDiscountPercent = manualDiscountMode2 === "percent"
+            ? Math.min(100, discountRaw)
+            : (resolved > 0 ? Math.min(100, (discountRaw / resolved) * 100) : 0);
+          updateLine(stockId, { unit_price: Number(resolved), original_unit_price: Number(resolved), discount_percent: resolvedDiscountPercent });
+        }
+      }).catch(() => { /* keep catalog price on error */ });
+    }
     setSelectedItem(null);
     setQty("1");
     setManualSellingPrice("");
@@ -2041,9 +2052,7 @@ export default function PosCheckoutPage() {
               <TableHead>
                 <TableRow sx={{ "& .MuiTableCell-root": { backgroundColor: "#79c4faff" } }}>
                   <TableCell>Item</TableCell>
-                  <TableCell align="right">Stock</TableCell>
                   <TableCell align="center">Qty</TableCell>
-                  <TableCell align="right">MRP ({currencySymbol})</TableCell>
                   <TableCell align="right">Unit Price ({currencySymbol})</TableCell>
                   <TableCell align="right">Disc %</TableCell>
                   <TableCell align="right">Net Price ({currencySymbol})</TableCell>
@@ -2055,11 +2064,6 @@ export default function PosCheckoutPage() {
                 {cart.map((l) => (
                   <TableRow key={l.stock_id} hover sx={{ backgroundColor: "#e0dedeff" }}>
                     <TableCell>{l.description}</TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" color={(stockQtyByStockId.get(l.stock_id) ?? 0) <= 0 ? "error" : "text.secondary"}>
-                        {stockQtyByStockId.get(l.stock_id) ?? "—"}
-                      </Typography>
-                    </TableCell>
                     <TableCell align="center">
                       <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
                         <IconButton
@@ -2080,11 +2084,6 @@ export default function PosCheckoutPage() {
                           <AddIcon fontSize="inherit" />
                         </IconButton>
                       </Stack>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" color="text.secondary">
-                        {l.mrp_price != null ? formatNumber(l.mrp_price) : "—"}
-                      </Typography>
                     </TableCell>
                     <TableCell align="right">
                       <TextField
@@ -2162,7 +2161,7 @@ export default function PosCheckoutPage() {
                   </TableRow>
                 ))}
                 {cart.length === 0 && (
-                  <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4 }}><Typography variant="body2" color="text.secondary">Cart is empty — scan or search a product to begin.</Typography></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}><Typography variant="body2" color="text.secondary">Cart is empty — scan or search a product to begin.</Typography></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -2605,7 +2604,7 @@ export default function PosCheckoutPage() {
         cashReceived={lastReceipt?.cashReceived}
         paperSize={posSettings?.receipt_paper_size}
         isQuote={isQuoteReceipt}
-        receiptSettings={(() => { try { return posSettings?.receipt_settings ? JSON.parse(posSettings.receipt_settings) : undefined; } catch { return undefined; } })()}
+        receiptSettings={(() => { try { const s = posSettings?.receipt_settings ? JSON.parse(posSettings.receipt_settings) : {}; return { ...s, thermal_printer_name: posSettings?.thermal_printer_name }; } catch { return { thermal_printer_name: posSettings?.thermal_printer_name }; } })()}
         couponCode={lastReceipt?.couponCode}
         voucherCode={lastReceipt?.voucherCode}
         shiftId={lastReceipt?.shift_id}
