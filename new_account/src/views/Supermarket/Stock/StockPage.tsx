@@ -4,7 +4,7 @@ import {
   Box, Card, CardContent, Stack, TextField, Autocomplete, Table, TableHead, TableRow,
   TableCell, TableBody, TableContainer, Paper, Typography, Chip, InputAdornment, IconButton,
   Collapse, Button, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel,
-  Select, MenuItem, Grid, Tabs, Tab, Tooltip, Checkbox,
+  Select, MenuItem, Grid, Tabs, Tab, Tooltip, Checkbox, LinearProgress,
 } from "@mui/material";
 import * as XLSX from "xlsx";
 import SearchIcon from "@mui/icons-material/Search";
@@ -24,6 +24,7 @@ import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi
 import { getBrands } from "../../../api/Brands/BrandsApi";
 import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
 import { createStockAdjustment, getStockAdjustments } from "../../../api/Pos/posOpsApi";
+import { postInventoryAdjustment } from "../../../api/Inventory/InventoryTransactionApi";
 import { getStockDamages, recordStockDamage, deleteStockDamage } from "../../../api/Pos/posApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import { getItems, bulkCreateStockMasters, bulkUpdateUnits } from "../../../api/Item/ItemApi";
@@ -49,7 +50,7 @@ import {
  * inside this same row instead of a separate screen/tab.
  */
 export default function StockPage() {
-  const [tab, setTab] = useState<"products" | "damage" | "bulk-price" | "bulk-add">("products");
+  const [tab, setTab] = useState<"products" | "damage" | "bulk-price" | "bulk-add" | "bulk-qty">("products");
 
   return (
     <FormPageLayout>
@@ -66,11 +67,13 @@ export default function StockPage() {
         <Tab value="damage" label="Stock Damage" />
         <Tab value="bulk-price" label="Bulk Price Update" />
         <Tab value="bulk-add" label="Bulk Add Products" />
+        <Tab value="bulk-qty" label="Bulk Add Quantities" />
       </Tabs>
 
       {tab === "products" && <ProductsTab />}
       {tab === "damage" && <StockDamageTab />}
       {tab === "bulk-add" && <BulkAddProductsTab />}
+      {tab === "bulk-qty" && <BulkAddQuantitiesTab />}
       {tab === "bulk-price" && <BulkPriceUpdateTab />}
     </FormPageLayout>
   );
@@ -1034,6 +1037,167 @@ function BulkAddProductsTab() {
                 </Table>
               </TableContainer>
             )}
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BulkAddQuantitiesTab() {
+  const [rows, setRows] = useState<{ stock_id: string; description: string; quantity: number; standard_cost?: number }[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [locCode, setLocCode] = useState("");
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [results, setResults] = useState<{ success: number; errors: string[] } | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: locations } = useQuery({
+    queryKey: ["inventory-locations"],
+    queryFn: getInventoryLocations,
+  });
+
+  const handleFile = (file: File) => {
+    setFileName(file.name);
+    setResults(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const wb = XLSX.read(data, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const parsed: any[] = XLSX.utils.sheet_to_json(sheet);
+      const mapped = parsed
+        .filter((r) => String(r.stock_id ?? "").trim() && Number(r.quantity ?? r.qty ?? 0) !== 0)
+        .map((r) => ({
+          stock_id: String(r.stock_id).trim(),
+          description: String(r.description ?? "").trim(),
+          quantity: Number(r.quantity ?? r.qty ?? 0),
+          standard_cost: r.purchase_cost != null ? Number(r.purchase_cost) : undefined,
+        }));
+      setRows(mapped);
+      if (mapped.length === 0) notify.error("No valid rows — each row needs stock_id and quantity");
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const downloadTemplate = () => {
+    const example = [
+      { stock_id: "ITEM001", description: "Milk 1L", quantity: 100, purchase_cost: 130 },
+      { stock_id: "ITEM002", description: "Bread Loaf", quantity: 50, purchase_cost: 200 },
+    ];
+    const ws = XLSX.utils.json_to_sheet(example, { header: ["stock_id", "description", "quantity", "purchase_cost"] });
+    ws["!cols"] = [{ wch: 14 }, { wch: 24 }, { wch: 12 }, { wch: 16 }];
+    const wb2 = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb2, ws, "Qty Adjustment");
+    XLSX.writeFile(wb2, "bulk-add-quantities-template.xlsx");
+  };
+
+  const handleApply = async () => {
+    if (!locCode) { notify.error("Please select a location first"); return; }
+    if (!rows.length) { notify.error("No rows to process"); return; }
+    setProgress({ done: 0, total: rows.length });
+    const errors: string[] = [];
+    let success = 0;
+    const BATCH = 50;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH);
+      try {
+        await postInventoryAdjustment({
+          loc_code: locCode,
+          trans_date: new Date().toISOString().slice(0, 10),
+          reference: "BULK-QTY",
+          comments: "Bulk quantity adjustment via Stock page",
+          lines: batch.map((r) => ({ stock_id: r.stock_id, quantity: r.quantity, standard_cost: r.standard_cost })),
+        });
+        success += batch.length;
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || `Batch ${Math.floor(i / BATCH) + 1} failed`;
+        errors.push(msg);
+      }
+      setProgress({ done: Math.min(i + BATCH, rows.length), total: rows.length });
+    }
+    setProgress(null);
+    setResults({ success, errors });
+    queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+    if (errors.length === 0) notify.success(`Quantities added for ${success} items`);
+    else notify.error(`${errors.length} batch(es) failed — check results below`);
+  };
+
+  return (
+    <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+      <CardContent>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Bulk Add Quantities</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+          Download the template, fill in <b>stock_id</b> and <b>quantity</b> (required), plus optional <b>purchase_cost</b>, then upload to add stock via inventory adjustment.
+        </Typography>
+
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center" sx={{ mb: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Location</InputLabel>
+            <Select value={locCode} label="Location" onChange={(e) => setLocCode(e.target.value)}>
+              {(Array.isArray(locations) ? locations : []).map((l: any) => (
+                <MenuItem key={l.loc_code} value={l.loc_code}>{l.location_name ?? l.loc_code}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button variant="outlined" startIcon={<UploadFileIcon />} component="label">
+            Choose File
+            <input type="file" hidden accept=".xlsx,.xls" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          </Button>
+          {fileName && <Typography variant="body2">{fileName} — {rows.length} valid row(s)</Typography>}
+          <Button variant="outlined" size="small" onClick={downloadTemplate}>Download Template</Button>
+        </Stack>
+
+        {rows.length > 0 && (
+          <>
+            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 320, mb: 2 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Stock ID</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell align="right">Quantity</TableCell>
+                    <TableCell align="right">Purchase Cost</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{r.stock_id}</TableCell>
+                      <TableCell>{r.description || "—"}</TableCell>
+                      <TableCell align="right">{r.quantity}</TableCell>
+                      <TableCell align="right">{r.standard_cost ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {progress && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption">Processing {progress.done} / {progress.total}...</Typography>
+                <LinearProgress variant="determinate" value={(progress.done / progress.total) * 100} />
+              </Box>
+            )}
+
+            <Button
+              variant="contained"
+              onClick={handleApply}
+              disabled={!!progress || !locCode}
+            >
+              {progress ? "Processing..." : `Add Quantities (${rows.length} items)`}
+            </Button>
+          </>
+        )}
+
+        {results && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color={results.errors.length ? "error" : "success.main"}>
+              {results.errors.length === 0 ? "SUCCESS:" : "ERROR:"} {results.success} items processed{results.errors.length ? `, ${results.errors.length} batch(es) failed` : " successfully"}
+            </Typography>
+            {results.errors.map((e, i) => (
+              <Typography key={i} variant="caption" color="error" sx={{ display: "block" }}>{e}</Typography>
+            ))}
           </Box>
         )}
       </CardContent>

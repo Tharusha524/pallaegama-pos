@@ -34,7 +34,7 @@ import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
 import { lookupBarcode, getLowStock, getPosShifts } from "../../../api/Pos/posApi";
 import { getStockList } from "../../../api/Inventory/StockListApi";
-import { getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
+import { getSalesPricing, getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
 import { getPromotionalPrices } from "../../../api/PromotionalPrice/PromotionalPriceApi";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
@@ -343,6 +343,18 @@ export default function PosCheckoutPage() {
   // page, and falls back to the same offline snapshot when there's no
   // connection, so it's never a live-only lookup that can block the sale.
   const { data: stockListFromApi } = useQuery({ queryKey: ["stock-list-all"], queryFn: () => getStockList(), refetchInterval: 60_000, staleTime: 0 });
+  const { data: allSalesPricing } = useQuery({ queryKey: ["sales-pricing-pos-preload"], queryFn: getSalesPricing, staleTime: 60_000 });
+  const salesPricingMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!Array.isArray(allSalesPricing)) return map;
+    for (const p of allSalesPricing) {
+      const sid = String(p.stock_id ?? "");
+      // eslint-disable-next-line eqeqeq
+      const price = Number(p.price ?? 0);
+      if (sid && price > 0) map.set(sid, price);
+    }
+    return map;
+  }, [allSalesPricing]);
   const [offlineStockList, setOfflineStockList] = useState<any[]>([]);
   useEffect(() => {
     if (!isDesktopApp()) return;
@@ -583,6 +595,10 @@ export default function PosCheckoutPage() {
       );
       if (activePromo) return Number(activePromo.promo_price);
     } catch { /* fall through */ }
+    // Use pre-loaded pricing map first — avoids a per-item API call and
+    // prevents the purchase_cost flash on the cart row.
+    const preloaded = salesPricingMap.get(stockId);
+    if (preloaded !== undefined) return preloaded;
     try {
       const pricing = await getSalesPricingByStockId(stockId);
       // eslint-disable-next-line eqeqeq
@@ -613,7 +629,10 @@ export default function PosCheckoutPage() {
     // snapshot (unit_price) when there's no server data, so it already has
     // a usable price.
     const salePrice: number | undefined = selectedItem.sale_price;
-    const catalogPrice = Number(salePrice ?? selectedItem.purchase_cost) || 0;
+    // Use pre-loaded selling price map so the cart row shows the correct
+    // selling price immediately — no purchase_cost flash.
+    const preloadedPrice = salesPricingMap.get(String(selectedItem.stock_id));
+    const catalogPrice = Number(salePrice ?? preloadedPrice ?? selectedItem.purchase_cost) || 0;
     const discountRaw = Math.max(0, Number(manualDiscountInput) || 0);
 
     // Add to cart immediately with catalog price so the row appears instantly,
@@ -1537,7 +1556,8 @@ export default function PosCheckoutPage() {
                 onChange={(_, val) => {
                   setSelectedItem(val);
                   setLastViewedProduct(val);
-                  setManualSellingPrice(val ? String(Number(val.sale_price ?? val.purchase_cost) || 0) : "");
+                  const preloadedSp = val ? salesPricingMap.get(String(val.stock_id)) : undefined;
+                  setManualSellingPrice(val ? String(Number(preloadedSp ?? val.sale_price ?? val.purchase_cost) || 0) : "");
                   setManualSellingPriceTouched(false);
                   setManualDiscountInput("");
                   setManualDiscountMode2("percent");
@@ -1934,9 +1954,8 @@ export default function PosCheckoutPage() {
                     onChange={(_, val) => {
                       setSelectedItem(val);
                       setLastViewedProduct(val);
-                      // Prefill Selling Price with the catalog price — the
-                      // cashier can still override it, tracked via "touched".
-                      setManualSellingPrice(val ? String(Number(val.sale_price ?? val.purchase_cost) || 0) : "");
+                      const preloadedSp2 = val ? salesPricingMap.get(String(val.stock_id)) : undefined;
+                      setManualSellingPrice(val ? String(Number(preloadedSp2 ?? val.sale_price ?? val.purchase_cost) || 0) : "");
                       setManualSellingPriceTouched(false);
                       setManualDiscountInput("");
                       setManualDiscountMode2("percent");
@@ -2604,7 +2623,7 @@ export default function PosCheckoutPage() {
         cashReceived={lastReceipt?.cashReceived}
         paperSize={posSettings?.receipt_paper_size}
         isQuote={isQuoteReceipt}
-        receiptSettings={(() => { try { const s = posSettings?.receipt_settings ? JSON.parse(posSettings.receipt_settings) : {}; return { ...s, thermal_printer_name: posSettings?.thermal_printer_name }; } catch { return { thermal_printer_name: posSettings?.thermal_printer_name }; } })()}
+        receiptSettings={(() => { try { const s = posSettings?.receipt_settings ? JSON.parse(posSettings.receipt_settings) : {}; return { ...s, thermal_printer_name: posSettings?.thermal_printer_name, terminal_id: posSettings?.terminal_id }; } catch { return { thermal_printer_name: posSettings?.thermal_printer_name, terminal_id: posSettings?.terminal_id }; } })()}
         couponCode={lastReceipt?.couponCode}
         voucherCode={lastReceipt?.voucherCode}
         shiftId={lastReceipt?.shift_id}

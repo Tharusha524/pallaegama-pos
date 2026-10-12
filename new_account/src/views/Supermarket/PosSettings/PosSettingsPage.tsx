@@ -40,6 +40,7 @@ export default function PosSettingsPage() {
   const [receiptPaperSize, setReceiptPaperSize] = useState("80mm Thermal");
   const [wholesalePin, setWholesalePin] = useState("");
   const [thermalPrinterName, setThermalPrinterName] = useState("EPSON TM-T82 Receipt");
+  const [terminalId, setTerminalId] = useState("POS-01");
 
   // Item Units — Add/Edit/Delete the units (KG, PCS, LTR, ...) products are
   // measured in, same list used on Stock's "Apply Unit to Selected" and Set
@@ -124,6 +125,7 @@ export default function PosSettingsPage() {
       setReceiptPaperSize(data.receipt_paper_size ?? "80mm Thermal");
       setWholesalePin(data.wholesale_pin ?? "");
       setThermalPrinterName(data.thermal_printer_name ?? "EPSON TM-T82 Receipt");
+      setTerminalId(data.terminal_id ?? "POS-01");
     }
   }, [data]);
 
@@ -138,6 +140,7 @@ export default function PosSettingsPage() {
       receipt_paper_size: receiptPaperSize,
       wholesale_pin: wholesalePin,
       thermal_printer_name: thermalPrinterName,
+      terminal_id: terminalId,
     });
   };
 
@@ -220,6 +223,17 @@ export default function PosSettingsPage() {
               onChange={(e) => setThermalPrinterName(e.target.value)}
               placeholder="e.g. EPSON Coupon Generator(TM-T82)"
               sx={{ maxWidth: 400 }}
+            />
+            <Divider sx={{ my: 1 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+              Terminal ID — shown on the receipt to identify which POS terminal printed it.
+            </Typography>
+            <TextField
+              size="small"
+              value={terminalId}
+              onChange={(e) => setTerminalId(e.target.value)}
+              placeholder="e.g. POS-01"
+              sx={{ maxWidth: 200 }}
             />
           </Stack>
         </CardContent>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Typography, Stack, Switch, FormControlLabel, Button, Divider,
   TextField, Select, MenuItem, FormControl, Paper, Slider, IconButton,
@@ -62,6 +62,7 @@ const DEFAULT_RS = {
   weight_item_name: 700, weight_unit_price: 400, weight_qty_line: 400,
   weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
   weight_customer: 400, weight_thank_you: 700, weight_footer: 400,
+  font_you_saved: "medium", weight_you_saved: 700,
   custom_fields: [] as CustomReceiptField[],
   // Editable labels
   label_invoice_id: "Invoice ID",
@@ -85,6 +86,7 @@ const DEFAULT_RS = {
   label_voucher: "VOUCHER",
   label_you_saved: "You Saved",
   label_items: "Items",
+  label_currency_prefix: "LKR",
 };
 
 function renderCustomFields(fields: CustomReceiptField[], position: string, fsMap: Record<string, number>) {
@@ -100,8 +102,8 @@ function renderCustomFields(fields: CustomReceiptField[], position: string, fsMa
 }
 
 const DUMMY_LINES = [
-  { description: "Milk 1L", quantity: 2, unit_price: 150, discount_percent: 0, unit_name: "PCS" },
-  { description: "Bread Loaf", quantity: 1, unit_price: 220, discount_percent: 5, unit_name: "PCS" },
+  { stock_id: "ITEM001", description: "Milk 1L", quantity: 2, unit_price: 150, discount_percent: 0, unit_name: "PCS", mrp_price: 159 },
+  { description: "Bread Loaf", quantity: 1, unit_price: 220, discount_percent: 5, unit_name: "PCS", mrp_price: 233.2 },
 ];
 const DUMMY_PAYMENTS = [{ method: "CASH IN HAND", amount: 570, card_type_name: "Visa" }];
 const DUMMY_TOTAL = 559;
@@ -160,11 +162,6 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
         {rs.show_vat_number && rs.shop_vat_number && (
           <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>VAT: {rs.shop_vat_number}</Typography>
         )}
-        {rs.show_date_time && (
-          <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>
-            {now.toLocaleDateString()} {now.toLocaleTimeString()}
-          </Typography>
-        )}
       </Stack>
 
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
@@ -172,7 +169,9 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
 
       <Stack spacing={0.25} sx={{ my: 1 }}>
         {rs.show_invoice_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_invoice_id}: 26</Typography>}
+        {rs.show_date_time && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{`Date-Time  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>}
         {rs.show_cashier && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_cashier}: Admin</Typography>}
+        {rs.terminal_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>Terminal: {rs.terminal_id}</Typography>}
         {rs.show_shift_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_shift}: 3</Typography>}
         {rs.show_branch_name && company?.name && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_branch}: {company.name}</Typography>}
         {renderCustomFields(rs.custom_fields ?? [], "after_invoice", FONT_SIZE)}
@@ -182,45 +181,52 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
 
       {/* Items */}
       <Box sx={{ my: 1 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_items] - 1, fontWeight: rs.weight_col_headers }}>
-          <span>{rs.label_col_item}</span>
-          <Box sx={{ display: "flex", gap: 2 }}>
-            {rs.show_discount_column && <span>{rs.label_col_disc}</span>}
-            <span>{rs.label_col_net}</span><span>{rs.label_col_total}</span>
-          </Box>
-        </Box>
-        {DUMMY_LINES.map((l, i) => {
-          const net = l.unit_price * (1 - l.discount_percent / 100);
-          const tot = l.quantity * net;
-          return (
-            <Box key={i} sx={{ mt: 1 }}>
-              <Typography fontSize={FONT_SIZE[rs.font_items] + 1} fontWeight={rs.weight_item_name}>{l.description}</Typography>
-              <Typography fontSize={FONT_SIZE[rs.font_items] - 1} fontWeight={rs.weight_unit_price} color="text.secondary">
-                {rs.label_unit_price} {l.unit_price.toFixed(2)}{rs.show_item_unit ? ` / ${l.unit_name}` : ""}
-              </Typography>
-              {rs.show_offer_applied && i === 1 && (
-                <Typography fontSize={FONT_SIZE[rs.font_items] - 1} color="success.main">Offer: Member 5% Off</Typography>
-              )}
-              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_items], fontWeight: rs.weight_qty_line }}>
-                <span>{l.quantity} x{rs.show_item_unit ? ` ${l.unit_name}` : ""}</span>
-                <Box sx={{ display: "flex", gap: 2 }}>
-                  {rs.show_discount_column && <span>{l.discount_percent > 0 ? `${l.discount_percent}%` : "-"}</span>}
-                  <span>{net.toFixed(2)}</span>
-                  <span>{tot.toFixed(2)}</span>
-                </Box>
-              </Box>
-            </Box>
-          );
-        })}
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: FONT_SIZE[rs.font_items] - 1 }}>
+          <colgroup>
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "25%" }} />
+          </colgroup>
+          <thead>
+            <tr style={{ fontWeight: rs.weight_col_headers }}>
+              <td>{rs.label_col_item}</td>
+              <td style={{ textAlign: "right" }}>{rs.label_col_mrp ?? "MRP"}</td>
+              <td style={{ textAlign: "right" }}>{rs.label_col_net}</td>
+              <td style={{ textAlign: "right" }}>{rs.label_col_total}</td>
+            </tr>
+          </thead>
+          <tbody>
+            {DUMMY_LINES.map((l, i) => {
+              const net = l.unit_price * (1 - l.discount_percent / 100);
+              const tot = l.quantity * net;
+              return (
+                <>
+                  <tr key={`name-${i}`}>
+                    <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: FONT_SIZE[rs.font_items] + 1 }}>
+                      {(l as any).stock_id ? `${(l as any).stock_id} - ${l.description}` : l.description}
+                      {rs.show_offer_applied && i === 1 && (
+                        <div style={{ fontSize: FONT_SIZE[rs.font_items] - 1, color: "green" }}>Offer: Member 5% Off</div>
+                      )}
+                    </td>
+                  </tr>
+                  <tr key={`qty-${i}`} style={{ fontWeight: rs.weight_qty_line, fontSize: FONT_SIZE[rs.font_items] }}>
+                    <td>{l.quantity} x{rs.show_item_unit ? ` ${l.unit_name}` : ""}</td>
+                    <td style={{ textAlign: "right" }}>{l.mrp_price.toFixed(2)}</td>
+                    <td style={{ textAlign: "right" }}>{net.toFixed(2)}</td>
+                    <td style={{ textAlign: "right" }}>{tot.toFixed(2)}</td>
+                  </tr>
+                </>
+              );
+            })}
+          </tbody>
+        </table>
       </Box>
 
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
       {renderCustomFields(rs.custom_fields ?? [], "after_items", FONT_SIZE)}
 
       <Stack spacing={0.25} sx={{ my: 1 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
-          <span>{rs.label_subtotal}</span><span>{subtotal.toFixed(2)}</span>
-        </Box>
         {discountTotal > 0.001 && (
           <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
             <span>{rs.label_discount}</span><span>-{discountTotal.toFixed(2)}</span>
@@ -232,7 +238,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
 
       <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
         <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_total}</Typography>
-        <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>LKR {DUMMY_TOTAL.toFixed(2)}</Typography>
+        <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{DUMMY_TOTAL.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
       </Box>
 
       {rs.show_payment_info && (
@@ -260,15 +266,18 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
               </Box>
             )}
           </Stack>
-          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
-            <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_you_saved ?? "You Saved"}</span>
-            <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>50.00</Typography>
+          <Box sx={{ my: 0.5 }}>
+            <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
+            <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
+              <span>{rs.label_you_saved ?? "You Saved"}</span>
+              <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>50.00</Typography>
+            </Box>
           </Box>
           {renderCustomFields(rs.custom_fields ?? [], "after_payment", FONT_SIZE)}
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1 }} />
           <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
             <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
-            <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{DUMMY_LINES.length}</Typography>
+            <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{String(DUMMY_LINES.length).padStart(2, "0")}</Typography>
           </Box>
         </>
       )}
@@ -352,6 +361,7 @@ function WeightSlider({ label, value, onChange }: { label: string; value: number
 
 export default function ReceiptCustomizePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: settingsData } = useQuery({ queryKey: ["pos-settings"], queryFn: getPosSettings });
   const { data: companies } = useQuery({ queryKey: ["company-setup-list"], queryFn: getCompanies });
   const company = companies?.[0];
@@ -371,7 +381,7 @@ export default function ReceiptCustomizePage() {
 
   const saveMutation = useMutation({
     mutationFn: () => updatePosSettings({ ...settingsData, receipt_settings: rs }),
-    onSuccess: () => notify.success("Receipt settings saved"),
+    onSuccess: () => { notify.success("Receipt settings saved"); queryClient.invalidateQueries({ queryKey: ["pos-settings"] }); },
     onError: () => notify.error("Failed to save"),
   });
 
@@ -468,6 +478,9 @@ export default function ReceiptCustomizePage() {
                 <WeightSlider label="Subtotal / Discount weight" value={rs.weight_subtotal} onChange={(v) => set("weight_subtotal", v)} />
                 <WeightSlider label="Total amount weight" value={rs.weight_total} onChange={(v) => set("weight_total", v)} />
                 <WeightSlider label="Payment lines weight" value={rs.weight_payment_lines} onChange={(v) => set("weight_payment_lines", v)} />
+                <Divider sx={{ my: 0.5 }} />
+                <FontSizePicker label="You Saved font size" value={rs.font_you_saved ?? "medium"} onChange={(v) => set("font_you_saved", v)} />
+                <WeightSlider label="You Saved weight" value={rs.weight_you_saved ?? 700} onChange={(v) => set("weight_you_saved", v)} />
               </Stack>
             </CardContent>
           </Card>
@@ -524,13 +537,14 @@ export default function ReceiptCustomizePage() {
                   { key: "label_shift", placeholder: "Shift" },
                   { key: "label_branch", placeholder: "Branch" },
                   { key: "label_col_item", placeholder: "ITEM (column header)" },
-                  { key: "label_col_disc", placeholder: "DISC (column header)" },
+                  { key: "label_col_mrp", placeholder: "MRP (column header)" },
                   { key: "label_col_net", placeholder: "NET (column header)" },
                   { key: "label_col_total", placeholder: "TOTAL (column header)" },
                   { key: "label_unit_price", placeholder: "UNIT PRICE" },
                   { key: "label_subtotal", placeholder: "Subtotal" },
                   { key: "label_discount", placeholder: "Discount" },
                   { key: "label_total", placeholder: "TOTAL" },
+                  { key: "label_currency_prefix", placeholder: "LKR (currency prefix on total)" },
                   { key: "label_payment_info", placeholder: "PAYMENT INFO" },
                   { key: "label_total_due", placeholder: "TOTAL" },
                   { key: "label_cash_received", placeholder: "CASH RECEIVED" },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+﻿import { useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Divider, Stack } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
@@ -11,10 +11,12 @@ import html2canvas from "html2canvas";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ReceiptLine {
+  stock_id?: string;
   description: string;
   quantity: number;
   unit_price: number;
   discount_percent: number;
+  mrp_price?: number | null;
 }
 
 interface ReceiptPaymentLine {
@@ -71,6 +73,7 @@ export default function PosReceiptDialog({
   const { user } = useCurrentUser();
   const barcodeRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const cachedBase64Ref = useRef<string | null>(null);
 
   const receiptHtml = (innerHTML: string) => `<!DOCTYPE html><html><head>
     <meta charset="utf-8"/>
@@ -107,15 +110,26 @@ export default function PosReceiptDialog({
     weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
     weight_customer: 400, weight_thank_you: 700, weight_footer: 400,
     label_invoice_id: "Invoice ID", label_cashier: "Cashier", label_shift: "Shift", label_branch: "Branch",
-    label_col_item: "ITEM", label_col_disc: "DISC", label_col_net: "NET", label_col_total: "TOTAL",
+    label_col_item: "ITEM", label_col_disc: "DISC", label_col_mrp: "MRP", label_col_net: "NET", label_col_total: "TOTAL",
     label_unit_price: "UNIT PRICE", label_subtotal: "Subtotal", label_discount: "Discount",
     label_total: "TOTAL", label_payment_info: "PAYMENT INFO",
     label_total_due: "TOTAL", label_cash_received: "CASH RECEIVED", label_change: "CHANGE", label_customer: "CUSTOMER",
     label_coupon: "COUPON", label_voucher: "VOUCHER", label_you_saved: "You Saved", label_items: "Items",
+    font_you_saved: "medium" as string, weight_you_saved: 700 as number,
+    terminal_id: "" as string,
+    label_currency_prefix: "LKR",
     thermal_printer_name: "EPSON TM-T82 Receipt",
     custom_fields: [] as any[],
     ...(receiptSettings ?? {}),
   };
+  // Replace regular spaces with non-breaking spaces in labels that render
+  // via html2canvas — regular spaces collapse on some WebView/font combos.
+  const nbsp = (s: string) => s.replace(/ /g, " ");
+  rs.label_invoice_id = nbsp(rs.label_invoice_id ?? "Invoice ID");
+  rs.label_cashier = nbsp(rs.label_cashier ?? "Cashier");
+  rs.label_shift = nbsp(rs.label_shift ?? "Shift");
+  rs.label_branch = nbsp(rs.label_branch ?? "Branch");
+  rs.footer_text = nbsp(rs.footer_text ?? "Developed by DIO Solutions");
 
   const fmt = (v: number) => rs.show_currency_symbol ? formatCurrency(v, 2) : v.toFixed(2);
 
@@ -155,6 +169,21 @@ export default function PosReceiptDialog({
           .catch(() => Promise.resolve());
       };
 
+      const sendToPrinter = (base64: string) =>
+        invoke('print_receipt_escpos', {
+          printerName: rs.thermal_printer_name || 'EPSON TM-T82 Receipt',
+          imageBase64: base64,
+          autoCut: true,
+        }).catch((err: any) => {
+          alert(`Print failed: ${err}\n\nMake sure the EPSON TM-T82 is connected and powered on.`);
+        });
+
+      // Use pre-rendered canvas if available — avoids the 2-3s html2canvas delay.
+      if (cachedBase64Ref.current) {
+        sendToPrinter(cachedBase64Ref.current);
+        return;
+      }
+
       Promise.all([document.fonts.ready, ...imgs.map(toDataUrlWithAuth)]).then(() =>
         html2canvas(printArea, {
           scale: 576 / printArea.offsetWidth,
@@ -164,12 +193,7 @@ export default function PosReceiptDialog({
           imageTimeout: 0,
         })
       ).then((canvas) => {
-        const base64 = canvas.toDataURL('image/png').split(',')[1];
-        return invoke('print_receipt_escpos', {
-            printerName: rs.thermal_printer_name || 'EPSON TM-T82 Receipt',
-            imageBase64: base64,
-            autoCut: true,
-          });
+        sendToPrinter(canvas.toDataURL('image/png').split(',')[1]);
       }).catch((err: any) => {
         alert(`Print failed: ${err}\n\nMake sure the EPSON TM-T82 is connected and powered on.`);
       });
@@ -217,8 +241,47 @@ export default function PosReceiptDialog({
     }
   }, [open, transNo]);
 
+  // Pre-render the receipt canvas as soon as the dialog opens so print is instant.
+  useEffect(() => {
+    if (!open || !(window as any).__TAURI_INTERNALS__) return;
+    if (!company) return; // wait for company data before pre-rendering
+    cachedBase64Ref.current = null;
+    const timer = setTimeout(() => {
+      const printArea = document.getElementById('pos-receipt-print-area');
+      if (!printArea) return;
+      const imgs = Array.from(printArea.querySelectorAll('img')) as HTMLImageElement[];
+      const token = localStorage.getItem('token');
+      const toDataUrl = (img: HTMLImageElement): Promise<void> => {
+        if (!img.src || img.src.startsWith('data:') || img.src.startsWith('blob:')) return Promise.resolve();
+        return fetch(img.src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+          .then((r) => r.blob())
+          .then((blob) => new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => { img.src = reader.result as string; resolve(); };
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(blob);
+          }))
+          .catch(() => Promise.resolve());
+      };
+      Promise.all([document.fonts.ready, ...imgs.map(toDataUrl)])
+        .then(() => html2canvas(printArea, { scale: 576 / printArea.offsetWidth, backgroundColor: '#ffffff', useCORS: false, logging: false, imageTimeout: 0 }))
+        .then((canvas) => { cachedBase64Ref.current = canvas.toDataURL('image/png').split(',')[1]; })
+        .catch(() => { /* pre-render failed — handlePrint will re-render */ });
+    }, 300); // small delay so DOM is fully painted
+    return () => clearTimeout(timer);
+  }, [open, transNo, company]);
+
   const isThermal = paperSize.includes("80mm");
   const discountTotal = Math.max(0, subtotal - total);
+
+  // MRP savings = sum of (mrp_price - unit_price) * quantity for all items that have mrp_price set
+  const mrpSavings = lines.reduce((sum, l: any) => {
+    if (l.mrp_price != null && Number(l.mrp_price) > 0) {
+      const netPrice = l.unit_price * (1 - l.discount_percent / 100);
+      return sum + Math.max(0, (Number(l.mrp_price) - netPrice) * l.quantity);
+    }
+    return sum;
+  }, 0);
   const paymentLines = payments && payments.length > 0 ? payments : [{ method: "CASH", amount: total }];
   const received = cashReceived ?? total;
   const change = Math.max(0, received - total);
@@ -323,12 +386,9 @@ export default function PosReceiptDialog({
             {rs.show_vat_number && rs.shop_vat_number && (
               <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>VAT: {rs.shop_vat_number}</Typography>
             )}
-            {rs.show_date_time && (
-              <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{now.toLocaleDateString()} {now.toLocaleTimeString()}</Typography>
-            )}
           </Stack>
 
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
           {renderCustomFields(rs.custom_fields, "after_header")}
 
           {isQuote && (
@@ -336,61 +396,77 @@ export default function PosReceiptDialog({
           )}
           <Stack spacing={0.25} sx={{ my: 1 }}>
             {rs.show_invoice_id && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
+            )}
+            {rs.show_date_time && (
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Date-Time\u00A0\u00A0:\u00A0\u00A0${now.toLocaleDateString("en-GB").replace(/\//g, "-")}\u00A0\u00A0${now.toLocaleTimeString()}`}</Typography>
             )}
             {rs.show_cashier && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{rs.label_cashier}: {user?.first_name || user?.email || "—"}</Typography>
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_cashier}:\u00A0${user?.first_name || user?.email || "—"}`}</Typography>
+            )}
+            {rs.terminal_id && (
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Terminal:\u00A0${rs.terminal_id}`}</Typography>
             )}
             {rs.show_shift_id && shiftId && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{rs.label_shift}: {shiftId}</Typography>
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_shift}:\u00A0${shiftId}`}</Typography>
             )}
             {rs.show_branch_name && company?.name && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{rs.label_branch}: {company.name}</Typography>
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_branch}:\u00A0${company.name}`}</Typography>
             )}
             {renderCustomFields(rs.custom_fields, "after_invoice")}
           </Stack>
 
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
 
           {/* ---- Line items ---- */}
           <Box sx={{ my: 1 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_items] - 1, fontWeight: rs.weight_col_headers }}>
-              <span>{rs.label_col_item}</span>
-              <Box sx={{ display: "flex", gap: 2 }}>
-                <span>{rs.label_col_net}</span><span>{rs.label_col_total}</span>
-              </Box>
-            </Box>
-            {lines.map((l: any, i) => {
-              const netPrice = l.unit_price * (1 - l.discount_percent / 100);
-              const lineTotal = l.quantity * netPrice;
-              return (
-                <Box key={i} sx={{ mt: 1 }}>
-                  <Typography fontSize={FONT_SIZE[rs.font_items] + 1} fontWeight={rs.weight_item_name}>{l.description}</Typography>
-                  <Typography fontSize={FONT_SIZE[rs.font_items] - 1} fontWeight={rs.weight_unit_price} color="text.secondary">
-                    {rs.label_unit_price} {l.unit_price.toFixed(2)}{rs.show_item_unit && l.unit_name ? ` / ${l.unit_name}` : ""}
-                  </Typography>
-                  {rs.show_offer_applied && l.offer_name && (
-                    <Typography fontSize={FONT_SIZE[rs.font_items] - 1} color="success.main">Offer: {l.offer_name}</Typography>
-                  )}
-                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_items], fontWeight: rs.weight_qty_line }}>
-                    <span>{l.quantity} x{rs.show_item_unit && l.unit_name ? ` ${l.unit_name}` : ""}</span>
-                    <Box sx={{ display: "flex", gap: 2 }}>
-                      <span>{netPrice.toFixed(2)}</span>
-                      <span>{lineTotal.toFixed(2)}</span>
-                    </Box>
-                  </Box>
-                </Box>
-              );
-            })}
+            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: FONT_SIZE[rs.font_items] - 1 }}>
+              <colgroup>
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "25%" }} />
+              </colgroup>
+              <thead>
+                <tr style={{ fontWeight: rs.weight_col_headers }}>
+                  <td>{rs.label_col_item}</td>
+                  <td style={{ textAlign: "right" }}>{rs.label_col_mrp ?? "MRP"}</td>
+                  <td style={{ textAlign: "right" }}>{rs.label_col_net}</td>
+                  <td style={{ textAlign: "right" }}>{rs.label_col_total}</td>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l: any, i) => {
+                  const netPrice = l.unit_price * (1 - l.discount_percent / 100);
+                  const lineTotal = l.quantity * netPrice;
+                  const mrp = l.mrp_price != null ? Number(l.mrp_price) : null;
+                  return (
+                    <>
+                      <tr key={`name-${i}`}>
+                        <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: FONT_SIZE[rs.font_items] + 1 }}>
+                          {l.stock_id ? `${l.stock_id} - ${l.description}` : l.description}
+                          {rs.show_offer_applied && l.offer_name && (
+                            <div style={{ fontSize: FONT_SIZE[rs.font_items] - 1, color: "green" }}>Offer: {l.offer_name}</div>
+                          )}
+                        </td>
+                      </tr>
+                      <tr key={`qty-${i}`} style={{ fontWeight: rs.weight_qty_line, fontSize: FONT_SIZE[rs.font_items] }}>
+                        <td>{l.quantity} x{rs.show_item_unit && l.unit_name ? ` ${l.unit_name}` : ""}</td>
+                        <td style={{ textAlign: "right" }}>{mrp !== null ? mrp.toFixed(2) : "—"}</td>
+                        <td style={{ textAlign: "right" }}>{netPrice.toFixed(2)}</td>
+                        <td style={{ textAlign: "right" }}>{lineTotal.toFixed(2)}</td>
+                      </tr>
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
           </Box>
 
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
           {renderCustomFields(rs.custom_fields, "after_items")}
 
           <Stack spacing={0.25} sx={{ my: 1 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
-              <span>{rs.label_subtotal}</span><span>{fmt(subtotal)}</span>
-            </Box>
             {discountTotal > 0.001 && (
               <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
                 <span>{rs.label_discount}</span><span>-{fmt(discountTotal)}</span>
@@ -398,16 +474,16 @@ export default function PosReceiptDialog({
             )}
           </Stack>
 
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
-
           <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
             <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_total}</Typography>
-            <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{fmt(total)}</Typography>
+            <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>
+              {rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Typography>
           </Box>
 
           {!isQuote && rs.show_payment_info && (
             <>
-              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
               <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
               <Stack spacing={0.25} sx={{ mt: 0.5 }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
@@ -435,31 +511,34 @@ export default function PosReceiptDialog({
                   </Box>
                 )}
               </Stack>
-              {discountTotal > 0.001 && (
-                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
-                  <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_you_saved ?? "You Saved"}</span>
-                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(discountTotal)}</Typography>
+              {mrpSavings > 0.001 && (
+                <Box sx={{ my: 0.5 }}>
+                  <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
+                  <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
+                    <span>{rs.label_you_saved ?? "You Saved"}</span>
+                    <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>{fmt(mrpSavings)}</Typography>
+                  </Box>
                 </Box>
               )}
               {renderCustomFields(rs.custom_fields, "after_payment")}
-              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1 }} />
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1 }} />
               <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
                 <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
-                <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{lines.length}</Typography>
+                <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{String(lines.length).padStart(2, "0")}</Typography>
               </Box>
             </>
           )}
 
           {rs.show_customer_name && (
             <>
-              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
               <Typography fontWeight={rs.weight_customer} fontSize={FONT_SIZE[rs.font_footer] + 2} sx={{ mt: 1.5, display: "block" }}>
                 {rs.label_customer} {customerName ? customerName.toUpperCase() : "WALK-IN"}
               </Typography>
             </>
           )}
 
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
 
           {!isQuote && rs.show_thank_you && (
             <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={FONT_SIZE[rs.font_footer] + 3} sx={{ mt: 2 }}>
@@ -492,3 +571,4 @@ export default function PosReceiptDialog({
     </Dialog>
   );
 }
+
