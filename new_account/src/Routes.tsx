@@ -43,6 +43,7 @@ import ReturnsPage from "./views/Supermarket/Returns/ReturnsPage";
 import PosShiftPage from "./views/Supermarket/PosShift/PosShiftPage";
 import PosCheckoutPage from "./views/Supermarket/PosCheckout/PosCheckoutPage";
 import StockAdjustmentsPage from "./views/Supermarket/StockAdjustments/StockAdjustmentsPage";
+import BulkStockAdjustmentPage from "./views/Supermarket/StockAdjustments/BulkStockAdjustmentPage";
 import StockTransfersPage from "./views/Supermarket/StockTransfers/StockTransfersPage";
 import InventoryAuditsPage from "./views/Supermarket/InventoryAudits/InventoryAuditsPage";
 import OfflineEntriesPage from "./views/Supermarket/OfflineEntries/OfflineEntriesPage";
@@ -51,6 +52,8 @@ import VouchersPage from "./views/Supermarket/Vouchers/VouchersPage";
 import CustomerSegmentsPage from "./views/Supermarket/CustomerSegments/CustomerSegmentsPage";
 import ProductVariantsPage from "./views/Supermarket/ProductVariants/ProductVariantsPage";
 import SetPricePage from "./views/Supermarket/SetPrice/SetPricePage";
+import MrpSetupPage from "./views/Supermarket/SetPrice/MrpSetupPage";
+import AddItemPage from "./views/Supermarket/AddItem/AddItemPage";
 import SuppliersPage from "./views/Supermarket/Suppliers/SuppliersPage";
 import SupermarketCategoriesPage from "./views/Supermarket/ItemCategories/SupermarketCategoriesPage";
 import PurchasePage from "./views/Supermarket/Purchase/PurchasePage";
@@ -557,6 +560,7 @@ const AppRoutes = () => {
         <Route path="/supermarket" element={withLayout(MainLayout, SupermarketHub)} />
         <Route path="/supermarket/pos-checkout" element={withLayout(MainLayout, PosCheckoutPage)} />
         <Route path="/supermarket/stock-adjustments" element={withLayout(MainLayout, StockAdjustmentsPage)} />
+        <Route path="/supermarket/bulk-stock-adjustment" element={withLayout(MainLayout, BulkStockAdjustmentPage)} />
         <Route path="/supermarket/stock-transfers" element={withLayout(MainLayout, StockTransfersPage)} />
         <Route path="/supermarket/inventory-audits" element={withLayout(MainLayout, InventoryAuditsPage)} />
         <Route path="/supermarket/offline-entries" element={withLayout(MainLayout, OfflineEntriesPage)} />
@@ -573,6 +577,8 @@ const AppRoutes = () => {
         <Route path="/supermarket/price-labels" element={withLayout(MainLayout, PriceLabelsPage)} />
         <Route path="/supermarket/promotional-prices" element={withLayout(MainLayout, PromotionalPricesPage)} />
         <Route path="/supermarket/set-price" element={withLayout(MainLayout, SetPricePage)} />
+        <Route path="/supermarket/mrp-setup" element={withLayout(MainLayout, MrpSetupPage)} />
+        <Route path="/supermarket/add-item" element={withLayout(MainLayout, AddItemPage)} />
         <Route path="/supermarket/suppliers" element={withLayout(MainLayout, SuppliersPage)} />
         <Route path="/supermarket/category" element={withLayout(MainLayout, SupermarketCategoriesPage)} />
         <Route path="/supermarket/purchase" element={withLayout(MainLayout, PurchasePage)} />

@@ -15,6 +15,7 @@ import TuneIcon from "@mui/icons-material/Tune";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
+import EditIcon from "@mui/icons-material/Edit";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
@@ -526,16 +527,64 @@ function ProductDetailPanel({ product }: { product: any }) {
   const queryClient = useQueryClient();
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [locCode, setLocCode] = useState("");
   const [movementType, setMovementType] = useState<"add" | "reduce" | "override">("add");
   const [quantity, setQuantity] = useState("0");
   const [reason, setReason] = useState("");
+
+  const emptyEditForm = () => ({
+    description: product.description ?? "",
+    category_name: product.category_name ?? "",
+    subcategory_name: product.subcategory_name ?? "",
+    brand_name: product.brand_name ?? "",
+    unit_id: product.units ?? "",
+    purchase_cost: String(product.purchase_cost ?? ""),
+    selling_price: String(product.selling_price ?? ""),
+    mrp_price: String(product.mrp_price ?? ""),
+    barcode: product.barcode ?? "",
+  });
+
+  const [editForm, setEditForm] = useState(emptyEditForm);
 
   const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations, enabled: adjustOpen });
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ["stock-adjustments", product.stock_id],
     queryFn: () => getStockAdjustments(product.stock_id),
     enabled: historyOpen,
+  });
+
+  const { data: editCategories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories(), enabled: editOpen });
+  const { data: editSubcategories } = useQuery({ queryKey: ["subcategories"], queryFn: () => getSubcategories(), enabled: editOpen });
+  const { data: editBrands } = useQuery({ queryKey: ["brands"], queryFn: () => getBrands(), enabled: editOpen });
+  const { data: editUnits } = useQuery({ queryKey: ["item-units"], queryFn: () => getItemUnits(), enabled: editOpen });
+
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      const price = Number(editForm.selling_price) || 0;
+      await bulkUpsertSalesPricing([{
+        stock_id: product.stock_id,
+        currency_id: 8,
+        sales_type_id: 3,
+        price,
+        description: editForm.description || undefined,
+        purchase_cost: editForm.purchase_cost !== "" ? Number(editForm.purchase_cost) : undefined,
+        mrp_price: editForm.mrp_price !== "" ? Number(editForm.mrp_price) : undefined,
+        category: editForm.category_name || undefined,
+        subcategory: editForm.subcategory_name || undefined,
+        brand: editForm.brand_name || undefined,
+        barcode: editForm.barcode || undefined,
+      }]);
+      if (editForm.unit_id && String(editForm.unit_id) !== String(product.units)) {
+        await bulkUpdateUnits([product.stock_id], Number(editForm.unit_id));
+      }
+    },
+    onSuccess: () => {
+      notify.success("Item updated");
+      queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+      setEditOpen(false);
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to update item"),
   });
 
   const adjustMutation = useMutation({
@@ -592,6 +641,9 @@ function ProductDetailPanel({ product }: { product: any }) {
       </Grid>
 
       <Stack direction="row" spacing={1} alignItems="center">
+        <Button size="small" variant="outlined" startIcon={<EditIcon />} onClick={() => { setEditForm(emptyEditForm()); setEditOpen(true); }}>
+          Edit Item
+        </Button>
         <Button size="small" variant="outlined" startIcon={<TuneIcon />} onClick={() => setAdjustOpen(true)}>
           Adjust Stock
         </Button>
@@ -601,6 +653,69 @@ function ProductDetailPanel({ product }: { product: any }) {
           </IconButton>
         </Tooltip>
       </Stack>
+
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Item — {product.stock_id}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Description" fullWidth value={editForm.description}
+              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+            />
+            <Autocomplete
+              options={(editCategories ?? []).map((c: any) => c.description ?? "")}
+              freeSolo
+              value={editForm.category_name}
+              onInputChange={(_, val) => setEditForm({ ...editForm, category_name: val })}
+              renderInput={(p) => <TextField {...p} label="Category" />}
+            />
+            <Autocomplete
+              options={(editSubcategories ?? []).map((s: any) => s.name ?? "")}
+              freeSolo
+              value={editForm.subcategory_name}
+              onInputChange={(_, val) => setEditForm({ ...editForm, subcategory_name: val })}
+              renderInput={(p) => <TextField {...p} label="Subcategory" />}
+            />
+            <Autocomplete
+              options={(editBrands ?? []).map((b: any) => b.name ?? "")}
+              freeSolo
+              value={editForm.brand_name}
+              onInputChange={(_, val) => setEditForm({ ...editForm, brand_name: val })}
+              renderInput={(p) => <TextField {...p} label="Brand" />}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Unit</InputLabel>
+              <Select value={editForm.unit_id} label="Unit" onChange={(e) => setEditForm({ ...editForm, unit_id: e.target.value })}>
+                {(editUnits ?? []).map((u: any) => (
+                  <MenuItem key={u.id} value={u.id}>{u.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Purchase Cost (LKR)" type="number" fullWidth value={editForm.purchase_cost}
+              onChange={(e) => setEditForm({ ...editForm, purchase_cost: e.target.value })}
+            />
+            <TextField
+              label="Selling Price (LKR)" type="number" fullWidth value={editForm.selling_price}
+              onChange={(e) => setEditForm({ ...editForm, selling_price: e.target.value })}
+            />
+            <TextField
+              label="MRP Price (LKR)" type="number" fullWidth value={editForm.mrp_price}
+              onChange={(e) => setEditForm({ ...editForm, mrp_price: e.target.value })}
+            />
+            <TextField
+              label="Barcode" fullWidth value={editForm.barcode}
+              onChange={(e) => setEditForm({ ...editForm, barcode: e.target.value })}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={editMutation.isPending} onClick={() => editMutation.mutate()}>
+            {editMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Adjustment History — {product.description}</DialogTitle>

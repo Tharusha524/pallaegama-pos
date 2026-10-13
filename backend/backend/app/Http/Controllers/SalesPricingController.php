@@ -153,12 +153,13 @@ class SalesPricingController extends Controller
     private function applyOptionalProductFields(array $row, string $stockId): void
     {
         try {
-            $productFields = array_intersect_key($row, array_flip(['description', 'mrp_price', 'expiry_date']));
+            $productFields = array_intersect_key($row, array_flip(['description', 'mrp_price', 'expiry_date', 'purchase_cost']));
 
             $validator = Validator::make($productFields, [
                 'description' => ['nullable', 'string', 'max:200'],
                 'mrp_price' => ['nullable', 'numeric', 'min:0'],
                 'expiry_date' => ['nullable', 'date'],
+                'purchase_cost' => ['nullable', 'numeric', 'min:0'],
             ]);
 
             $updates = $validator->fails() ? [] : $validator->validated();

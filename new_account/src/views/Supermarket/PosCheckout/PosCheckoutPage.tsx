@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { transliterate as singlishToSinhala } from "singlish-pro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Grid, Card, CardContent, Typography, Table, TableHead, TableRow, TableCell, TableBody,
@@ -179,7 +180,7 @@ export default function PosCheckoutPage() {
   const [manualSellingPrice, setManualSellingPrice] = useState("");
   const [manualSellingPriceTouched, setManualSellingPriceTouched] = useState(false);
   const [manualDiscountInput, setManualDiscountInput] = useState("");
-  const [manualDiscountMode2, setManualDiscountMode2] = useState<"percent" | "amount">("percent");
+  const [manualDiscountMode2, setManualDiscountMode2] = useState<"percent" | "amount">("amount");
   const customerInputRef = useRef<HTMLInputElement>(null);
   const paymentAmountInputRef = useRef<HTMLInputElement>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -315,6 +316,18 @@ export default function PosCheckoutPage() {
 
   const customers = customersFromApi && customersFromApi.length > 0 ? customersFromApi : offlineCustomers;
   const items = itemsFromApi && itemsFromApi.length > 0 ? itemsFromApi : offlineItems;
+
+  // Filter items by original typed text OR Singlish→Sinhala transliteration
+  const singlishFilterOptions = (options: any[], { inputValue }: { inputValue: string }) => {
+    if (!inputValue) return options;
+    const raw = inputValue.toLowerCase();
+    let sinhala = "";
+    try { sinhala = singlishToSinhala(inputValue, { finalize: true }); } catch { /* ignore */ }
+    return options.filter((o: any) => {
+      const label = `${o.stock_id} ${o.description}`.toLowerCase();
+      return label.includes(raw) || (sinhala && label.includes(sinhala));
+    });
+  };
 
   // Default every sale to "Walk-in Customer" — a cashier should never be
   // forced to pick a named customer just to ring up a simple cash sale.
@@ -579,6 +592,7 @@ export default function PosCheckoutPage() {
           variant_name: variant?.variant_name,
           mrp_price: item.mrp_price != null ? Number(item.mrp_price) : undefined,
           original_unit_price: catalogPrice,
+          discount_mode: "amount" as "percent" | "amount",
           wholesale_qty_threshold: item.wholesale_qty_threshold != null ? Number(item.wholesale_qty_threshold) : undefined,
           wholesale_price: item.wholesale_price != null ? Number(item.wholesale_price) : undefined,
         },
@@ -668,7 +682,7 @@ export default function PosCheckoutPage() {
     setManualSellingPrice("");
     setManualSellingPriceTouched(false);
     setManualDiscountInput("");
-    setManualDiscountMode2("percent");
+    setManualDiscountMode2("amount");
     // Keyboard-only flow (no mouse/scanner): Code -> Enter -> Qty -> Enter ->
     // added to cart -> back to Code automatically, ready for the next item.
     setTimeout(() => itemSearchInputRef.current?.focus(), 0);
@@ -929,6 +943,21 @@ export default function PosCheckoutPage() {
       }
       if (e.key === "F12") {
         e.preventDefault();
+        // If focus is on the item search field, auto-select the "වෙනත්" misc item
+        if (document.activeElement === itemSearchInputRef.current) {
+          const wenathItem = (items ?? []).find((i: any) =>
+            String(i.description ?? "").includes("වෙනත්") ||
+            String(i.description ?? "").includes("වේනත්") ||
+            String(i.stock_id ?? "").toUpperCase().startsWith("SMI79")
+          );
+          if (wenathItem) {
+            setSelectedItem(wenathItem);
+          } else {
+            notify.error("\"වෙනත්\" item not found in product list");
+          }
+          return;
+        }
+        // Otherwise: New Bill shortcut
         if (s.cart.length === 0 || window.confirm("Start a new bill? Current cart will be cleared.")) {
           s.resetSaleState();
         }
@@ -1551,6 +1580,7 @@ export default function PosCheckoutPage() {
                 sx={{ flex: "1 1 220px" }}
                 options={items ?? []}
                 getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
+                filterOptions={singlishFilterOptions}
                 autoHighlight
                 value={selectedItem}
                 onChange={(_, val) => {
@@ -1560,7 +1590,7 @@ export default function PosCheckoutPage() {
                   setManualSellingPrice(val ? String(Number(preloadedSp ?? val.sale_price ?? val.purchase_cost) || 0) : "");
                   setManualSellingPriceTouched(false);
                   setManualDiscountInput("");
-                  setManualDiscountMode2("percent");
+                  setManualDiscountMode2("amount");
                   if (val && !isOffline) {
                     resolveSellingPrice(String(val.stock_id)).then((sp) => {
                       if (sp != null) {
@@ -1663,7 +1693,7 @@ export default function PosCheckoutPage() {
               <TableCell>Item</TableCell>
               <TableCell align="center">Qty</TableCell>
               <TableCell align="right">Unit Price</TableCell>
-              <TableCell align="right">Disc %</TableCell>
+              <TableCell align="right">Disc</TableCell>
               <TableCell align="right">Net Price</TableCell>
               <TableCell align="right">Line Total</TableCell>
               <TableCell align="center">—</TableCell>
@@ -1949,6 +1979,7 @@ export default function PosCheckoutPage() {
                     sx={{ flex: 2 }}
                     options={items ?? []}
                     getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
+                    filterOptions={singlishFilterOptions}
                     autoHighlight
                     value={selectedItem}
                     onChange={(_, val) => {
@@ -1958,7 +1989,7 @@ export default function PosCheckoutPage() {
                       setManualSellingPrice(val ? String(Number(preloadedSp2 ?? val.sale_price ?? val.purchase_cost) || 0) : "");
                       setManualSellingPriceTouched(false);
                       setManualDiscountInput("");
-                      setManualDiscountMode2("percent");
+                      setManualDiscountMode2("amount");
                       if (val && !isOffline) {
                         resolveSellingPrice(String(val.stock_id)).then((sp) => {
                           if (sp != null) {
@@ -2073,7 +2104,7 @@ export default function PosCheckoutPage() {
                   <TableCell>Item</TableCell>
                   <TableCell align="center">Qty</TableCell>
                   <TableCell align="right">Unit Price ({currencySymbol})</TableCell>
-                  <TableCell align="right">Disc %</TableCell>
+                  <TableCell align="right">Disc</TableCell>
                   <TableCell align="right">Net Price ({currencySymbol})</TableCell>
                   <TableCell align="right">Line Total ({currencySymbol})</TableCell>
                   <TableCell align="center">—</TableCell>

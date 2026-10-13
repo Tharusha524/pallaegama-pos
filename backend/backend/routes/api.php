@@ -472,6 +472,19 @@ Route::delete('card-types/{id}', [CardTypeController::class, 'destroy']);
 Route::post('card-types/tag-payment', [CardTypeController::class, 'tagPayment']);
 Route::get('offers-popularity', [OfferController::class, 'popularity']);
 
+// Public — mobile app fetches active offers with images (no auth needed)
+Route::get('mobile/offers', [OfferController::class, 'mobileOffers']);
+
+// ---- Mobile Promotions (admin CRUD) ----
+Route::apiResource('mobile-promotions', \App\Http\Controllers\MobilePromotionController::class)->only(['index', 'store', 'destroy']);
+Route::post('mobile-promotions/{id}/update', [\App\Http\Controllers\MobilePromotionController::class, 'update']);
+Route::post('mobile-promotions/{id}/send-sms', [\App\Http\Controllers\MobilePromotionController::class, 'sendSms']);
+Route::get('mobile-promotions-sms-count', [\App\Http\Controllers\MobilePromotionController::class, 'smsRecipientCount']);
+
+// ---- Mobile Promotions (public — customer mobile app, no auth needed) ----
+Route::get('mobile/promotions', [\App\Http\Controllers\MobilePromotionController::class, 'mobileIndex']);
+Route::get('mobile/promotions/{id}', [\App\Http\Controllers\MobilePromotionController::class, 'mobileShow']);
+
 // ---- Customer mobile app: self-service auth + "me" endpoints ----
 // Additive only: new controllers/routes/columns/tables. Does not modify any
 // existing ERP/accounting controller, route, or table structure.
@@ -491,6 +504,7 @@ Route::middleware(['auth:sanctum', 'customer.auth'])->prefix('customer')->group(
     Route::get('me/loyalty/history', [\App\Http\Controllers\CustomerMeController::class, 'loyaltyHistory']);
 
     Route::get('me/offers', [\App\Http\Controllers\CustomerMeController::class, 'offers']);
+    Route::get('me/offers-active', [OfferController::class, 'mobileOffers']);
 
     Route::get('me/purchases', [\App\Http\Controllers\CustomerMeController::class, 'purchases']);
     Route::get('me/purchases/{transNo}', [\App\Http\Controllers\CustomerMeController::class, 'receipt']);

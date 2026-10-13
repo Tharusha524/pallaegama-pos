@@ -63,7 +63,7 @@ export const updateSalesPricing = async (
 // Bulk update — many {stock_id, currency_id, sales_type_id, price} rows in one request
 export const bulkUpsertSalesPricing = async (rows: Array<{
   stock_id: string; currency_id: number; sales_type_id: number; price: number;
-  description?: string; mrp_price?: number; expiry_date?: string; category?: string; subcategory?: string;
+  description?: string; purchase_cost?: number; mrp_price?: number; expiry_date?: string; category?: string; subcategory?: string;
   brand?: string; barcode?: string;
 }>) => {
   try {

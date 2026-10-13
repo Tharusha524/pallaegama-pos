@@ -1,4 +1,5 @@
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import LocalMallOutlinedIcon from "@mui/icons-material/LocalMallOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
@@ -99,7 +100,9 @@ const baseSidebarItems: Array<SidebarItem> = [
     requiredPermission: getModulePermissionIds("Smart Supermarket"),
     nestedItems: [
       { title: "Category", href: "/supermarket/category", icon: <LocalOfferIcon fontSize="small" /> },
+      { title: "Add Item", href: "/supermarket/add-item", icon: <AddCircleOutlineIcon fontSize="small" /> },
       { title: "Set Price", href: "/supermarket/set-price", icon: <PriceChangeIcon fontSize="small" /> },
+      { title: "MRP Price Setup", href: "/supermarket/mrp-setup", icon: <PriceChangeIcon fontSize="small" /> },
       { title: "Weigh & Print", href: "/supermarket/weigh-and-print", icon: <ScaleIcon fontSize="small" /> },
       { title: "Price Labels", href: "/supermarket/price-labels", icon: <PrintIcon fontSize="small" /> },
       { title: "Promotional Prices", href: "/supermarket/promotional-prices", icon: <LocalOfferIcon fontSize="small" /> },
@@ -117,6 +120,7 @@ const baseSidebarItems: Array<SidebarItem> = [
       // { title: "Stock Damage", href: "/supermarket/stock-damage", icon: <ReportProblemIcon fontSize="small" /> },
       // Stock Adjustments — merged into the "Stock" page's Adjustments tab, one button instead of two.
       // { title: "Stock Adjustments", href: "/supermarket/stock-adjustments", icon: <InventoryIcon fontSize="small" /> },
+      { title: "Bulk Stock Adjustment", href: "/supermarket/bulk-stock-adjustment", icon: <InventoryIcon fontSize="small" /> },
       { title: "Stock Transfers", href: "/supermarket/stock-transfers", icon: <SwapHorizIcon fontSize="small" /> },
       { title: "Inventory Audits", href: "/supermarket/inventory-audits", icon: <FactCheckIcon fontSize="small" /> },
     ],
