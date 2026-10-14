@@ -32,9 +32,44 @@ export const getLoyaltyPointsHistory = async (debtorNo: number | string) =>
   (await api.get(`/loyalty-points/${debtorNo}/history`)).data;
 
 // ---- Offers ----
+export interface OfferInput {
+  offer_name: string;
+  coupon_code?: string;
+  offer_type: string;
+  target_id?: string;
+  discount_type: string;
+  discount_value: number;
+  valid_from: string;
+  valid_to: string;
+  min_purchase_amount?: number;
+  max_total_uses?: number;
+  max_uses_per_customer?: number;
+  status?: string;
+  image?: File | null;
+  remove_image?: boolean;
+}
+
+const toOfferFormData = (data: OfferInput): FormData => {
+  const fd = new FormData();
+  Object.entries(data).forEach(([k, v]) => {
+    if (k === "image") {
+      if (v instanceof File) fd.append("image", v);
+    } else if (k === "remove_image") {
+      if (v) fd.append("remove_image", "1");
+    } else if (v !== undefined && v !== null) {
+      fd.append(k, String(v));
+    }
+  });
+  return fd;
+};
+
+const multipart = { headers: { "Content-Type": "multipart/form-data" } };
+
 export const getOffers = async () => (await api.get("/offers")).data;
-export const createOffer = async (data: any) => (await api.post("/offers", data)).data;
-export const updateOffer = async (id: number | string, data: any) => (await api.put(`/offers/${id}`, data)).data;
+export const createOffer = async (data: OfferInput) =>
+  (await api.post("/offers", toOfferFormData(data), multipart)).data;
+export const updateOffer = async (id: number | string, data: OfferInput) =>
+  (await api.put(`/offers/${id}`, toOfferFormData(data), multipart)).data;
 export const deleteOffer = async (id: number | string) => (await api.delete(`/offers/${id}`)).data;
 export const getApplicableOffers = async (params: { debtor_no?: number; stock_id?: string; category_id?: string }) =>
   (await api.get("/offers-applicable", { params })).data;

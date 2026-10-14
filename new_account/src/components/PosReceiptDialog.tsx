@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Divider, Stack } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
@@ -74,6 +74,7 @@ export default function PosReceiptDialog({
   const barcodeRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const cachedBase64Ref = useRef<string | null>(null);
+  const [printed, setPrinted] = useState(false);
 
   const receiptHtml = (innerHTML: string) => `<!DOCTYPE html><html><head>
     <meta charset="utf-8"/>
@@ -109,7 +110,7 @@ export default function PosReceiptDialog({
     weight_item_name: 700, weight_unit_price: 400, weight_qty_line: 400,
     weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
     weight_customer: 400, weight_thank_you: 700, weight_footer: 400,
-    label_invoice_id: "Invoice ID", label_cashier: "Cashier", label_shift: "Shift", label_branch: "Branch",
+    label_invoice_id: "Invoice ID", label_cashier: "Cashier", label_shift: "Shift", label_branch: "Branch", label_date_time: "Date-Time",
     label_col_item: "ITEM", label_col_disc: "DISC", label_col_mrp: "MRP", label_col_net: "NET", label_col_total: "TOTAL",
     label_unit_price: "UNIT PRICE", label_subtotal: "Subtotal", label_discount: "Discount",
     label_total: "TOTAL", label_payment_info: "PAYMENT INFO",
@@ -211,17 +212,24 @@ export default function PosReceiptDialog({
     setTimeout(() => { win.print(); win.close(); }, 500);
   }, [company, now, transNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml]);
 
-  // Keyboard: Enter = print, ↑/↓ = scroll receipt
+  // Reset printed state when dialog opens
+  useEffect(() => { if (open) setPrinted(false); }, [open]);
+
+  // Keyboard: 1st Enter = print, 2nd Enter = close (new bill), ↑/↓ = scroll
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter") { e.preventDefault(); handlePrint(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!printed) { handlePrint(); setPrinted(true); }
+        else { onClose(); }
+      }
       if (e.key === "ArrowDown") { e.preventDefault(); scrollRef.current?.scrollBy({ top: 80, behavior: "smooth" }); }
       if (e.key === "ArrowUp")   { e.preventDefault(); scrollRef.current?.scrollBy({ top: -80, behavior: "smooth" }); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, handlePrint]);
+  }, [open, printed, handlePrint, onClose]);
 
   useEffect(() => {
     if (open && transNo && barcodeRef.current) {
@@ -399,7 +407,7 @@ export default function PosReceiptDialog({
               <Typography fontSize={FONT_SIZE[rs.font_header]}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
             )}
             {rs.show_date_time && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Date-Time\u00A0\u00A0:\u00A0\u00A0${now.toLocaleDateString("en-GB").replace(/\//g, "-")}\u00A0\u00A0${now.toLocaleTimeString()}`}</Typography>
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_date_time ?? "Date-Time"}\u00A0\u00A0:\u00A0\u00A0${now.toLocaleDateString("en-GB").replace(/\//g, "-")}\u00A0\u00A0${now.toLocaleTimeString()}`}</Typography>
             )}
             {rs.show_cashier && (
               <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_cashier}:\u00A0${user?.first_name || user?.email || "—"}`}</Typography>
@@ -513,15 +521,15 @@ export default function PosReceiptDialog({
               </Stack>
               {mrpSavings > 0.001 && (
                 <Box sx={{ my: 0.5 }}>
-                  <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
+                  <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1, borderColor: "text.primary" }} />
                   <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
                     <span>{rs.label_you_saved ?? "You Saved"}</span>
                     <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>{fmt(mrpSavings)}</Typography>
                   </Box>
+                  <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1, borderColor: "text.primary" }} />
                 </Box>
               )}
               {renderCustomFields(rs.custom_fields, "after_payment")}
-              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1 }} />
               <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
                 <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
                 <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{String(lines.length).padStart(2, "0")}</Typography>

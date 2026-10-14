@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Typography, Stack, Switch, FormControlLabel, Button, Divider, TextField,
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, IconButton, Chip,
-  Dialog, DialogTitle, DialogContent, DialogActions,
+  Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import AddIcon from "@mui/icons-material/Add";
@@ -179,6 +179,22 @@ export default function PosSettingsPage() {
                 }
               />
             ))}
+            <Box sx={{ pt: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 280 }}>
+                <InputLabel>After item select, cursor goes to</InputLabel>
+                <Select
+                  label="After item select, cursor goes to"
+                  value={values["focus_after_item_select"] ?? "discount"}
+                  onChange={(e) => setValues({ ...values, focus_after_item_select: e.target.value })}
+                >
+                  <MenuItem value="discount">Discount field</MenuItem>
+                  <MenuItem value="selling_price">Selling Price field</MenuItem>
+                </Select>
+              </FormControl>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                "Selling Price" mode hides the Discount field — cashier types the final price directly
+              </Typography>
+            </Box>
           </Stack>
         </CardContent>
       </Card>

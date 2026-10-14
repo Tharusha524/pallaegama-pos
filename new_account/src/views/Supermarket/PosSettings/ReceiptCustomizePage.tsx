@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Typography, Stack, Switch, FormControlLabel, Button, Divider,
@@ -87,6 +87,7 @@ const DEFAULT_RS = {
   label_you_saved: "You Saved",
   label_items: "Items",
   label_currency_prefix: "LKR",
+  label_date_time: "Date-Time",
 };
 
 function renderCustomFields(fields: CustomReceiptField[], position: string, fsMap: Record<string, number>) {
@@ -169,7 +170,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
 
       <Stack spacing={0.25} sx={{ my: 1 }}>
         {rs.show_invoice_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_invoice_id}: 26</Typography>}
-        {rs.show_date_time && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{`Date-Time  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>}
+        {rs.show_date_time && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_date_time ?? "Date-Time"}  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>}
         {rs.show_cashier && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_cashier}: Admin</Typography>}
         {rs.terminal_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>Terminal: {rs.terminal_id}</Typography>}
         {rs.show_shift_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_shift}: 3</Typography>}
@@ -267,14 +268,14 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
             )}
           </Stack>
           <Box sx={{ my: 0.5 }}>
-            <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
+            <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
             <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
               <span>{rs.label_you_saved ?? "You Saved"}</span>
               <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>50.00</Typography>
             </Box>
+            <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
           </Box>
           {renderCustomFields(rs.custom_fields ?? [], "after_payment", FONT_SIZE)}
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1 }} />
           <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
             <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
             <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{String(DUMMY_LINES.length).padStart(2, "0")}</Typography>
@@ -424,6 +425,7 @@ export default function ReceiptCustomizePage() {
                 <SectionToggle label="Show VAT / Tax Number" checked={!!rs.show_vat_number} onChange={(v) => set("show_vat_number", v)} />
                 {rs.show_vat_number && <TextField label="VAT Number" size="small" sx={{ ml: 4, maxWidth: 280, mt: 0.5 }} value={rs.shop_vat_number} onChange={(e) => set("shop_vat_number", e.target.value)} />}
                 <SectionToggle label="Show Date & Time" checked={!!rs.show_date_time} onChange={(v) => set("show_date_time", v)} />
+                {rs.show_date_time && <TextField label="Date/Time label" size="small" sx={{ ml: 4, maxWidth: 280, mt: 0.5 }} value={rs.label_date_time ?? "Date-Time"} onChange={(e) => set("label_date_time", e.target.value)} />}
                 <Divider sx={{ my: 0.5 }} />
                 <FontSizePicker label="Header font size" value={rs.font_header} onChange={(v) => set("font_header", v)} />
                 <WeightSlider label="Shop name weight" value={rs.weight_shop_name} onChange={(v) => set("weight_shop_name", v)} />

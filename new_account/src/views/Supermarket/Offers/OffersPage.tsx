@@ -1,18 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
   TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, IconButton, Typography,
-  FormControl, InputLabel, Select, MenuItem, Chip, Autocomplete,
+  FormControl, InputLabel, Select, MenuItem, Chip, Autocomplete, Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import ImageIcon from "@mui/icons-material/Image";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
-import { getOffers, createOffer, updateOffer, deleteOffer, getOfferPopularity } from "../../../api/Loyalty/loyaltyApi";
+import { getOffers, createOffer, updateOffer, deleteOffer, getOfferPopularity, type OfferInput } from "../../../api/Loyalty/loyaltyApi";
 import { getLoyaltyTiers } from "../../../api/Loyalty/loyaltyApi";
 import { getItems } from "../../../api/Item/ItemApi";
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
@@ -32,6 +34,11 @@ export default function OffersPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingOffer, setEditingOffer] = useState<any>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+
+  useEffect(() => () => { if (imagePreview && imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview); }, [imagePreview]);
 
   // Target selections, kept as real objects (so we can show names) — collapsed
   // into the offer's single target_id string only on submit.
@@ -64,6 +71,9 @@ export default function OffersPage() {
     setSelectedCategory(null);
     setSelectedTier(null);
     setSelectedCustomer(null);
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveImage(false);
   };
 
   const createMutation = useMutation({
@@ -116,6 +126,9 @@ export default function OffersPage() {
     setSelectedTier(offer.offer_type === "tier" ? (tiers ?? []).find((t: any) => String(t.id) === ids[0]) ?? null : null);
     setSelectedCustomer(offer.offer_type === "customer" ? (customers ?? []).find((c: any) => String(c.debtor_no) === ids[0]) ?? null : null);
 
+    setImageFile(null);
+    setImagePreview(offer.image_url ?? null);
+    setRemoveImage(false);
     setOpen(true);
   };
 
@@ -135,17 +148,26 @@ export default function OffersPage() {
   };
 
   const handleSubmit = () => {
-    const payload = {
+    const payload: any = {
       ...form,
       target_id: resolveTargetId(),
       discount_value: Number(form.discount_value) || 0,
       min_purchase_amount: Number(form.min_purchase_amount) || 0,
+      image: imageFile,
+      remove_image: removeImage,
     };
     if (editingOffer) {
       updateMutation.mutate({ id: editingOffer.id, data: payload });
     } else {
       createMutation.mutate(payload);
     }
+  };
+
+  const onPickImage = (file: File | undefined) => {
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setRemoveImage(false);
   };
 
   const targetIsValid =
@@ -178,6 +200,7 @@ export default function OffersPage() {
           <Table>
             <TableHead sx={{ backgroundColor: "var(--pallet-lighter-blue)" }}>
               <TableRow>
+                <TableCell>Image</TableCell>
                 <TableCell>Offer Name</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Target</TableCell>
@@ -192,6 +215,11 @@ export default function OffersPage() {
             <TableBody>
               {(offers ?? []).map((offer: any) => (
                 <TableRow key={offer.id} hover>
+                  <TableCell>
+                    {offer.image_url
+                      ? <img src={offer.image_url} alt="" style={{ width: 56, height: 40, objectFit: "cover", borderRadius: 4, display: "block" }} />
+                      : <Box sx={{ width: 56, height: 40, borderRadius: 1, bgcolor: "grey.100", display: "flex", alignItems: "center", justifyContent: "center" }}><ImageIcon sx={{ color: "grey.400", fontSize: 20 }} /></Box>}
+                  </TableCell>
                   <TableCell>{offer.offer_name}</TableCell>
                   <TableCell>{offer.offer_type}</TableCell>
                   <TableCell>{displayTarget(offer)}</TableCell>
@@ -215,7 +243,7 @@ export default function OffersPage() {
                 </TableRow>
               ))}
               {(!offers || offers.length === 0) && (
-                <TableRow><TableCell colSpan={9} align="center"><Typography variant="body2">No offers configured yet.</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} align="center"><Typography variant="body2">No offers configured yet.</Typography></TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -291,6 +319,30 @@ export default function OffersPage() {
               <TextField label="Valid To" type="date" fullWidth value={form.valid_to} onChange={(e) => setForm({ ...form, valid_to: e.target.value })} InputLabelProps={{ shrink: true }} />
             </Stack>
             <TextField label="Min Purchase Amount" type="number" fullWidth value={form.min_purchase_amount} onChange={(e) => setForm({ ...form, min_purchase_amount: e.target.value })} />
+
+            {/* Image upload for mobile app display */}
+            <Box>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Promotion Image (shown in mobile app)</Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button component="label" variant="outlined" size="small" startIcon={<PhotoCameraIcon />}>
+                  {imagePreview ? "Change Image" : "Upload Image"}
+                  <input hidden type="file" accept="image/*" onChange={(e) => { onPickImage(e.target.files?.[0]); e.target.value = ""; }} />
+                </Button>
+                {imagePreview && (
+                  <Button size="small" color="error" onClick={() => {
+                    setImageFile(null);
+                    setImagePreview(null);
+                    setRemoveImage(!!editingOffer?.image_url);
+                  }}>Remove</Button>
+                )}
+              </Stack>
+              {imagePreview && (
+                <Box sx={{ mt: 1 }}>
+                  <img src={imagePreview} alt="preview" style={{ maxWidth: "100%", maxHeight: 160, borderRadius: 6, objectFit: "cover" }} />
+                </Box>
+              )}
+              <Typography variant="caption" color="text.secondary">JPG/PNG up to 5MB. Wide images look best.</Typography>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>

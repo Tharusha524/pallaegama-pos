@@ -9,6 +9,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import DownloadIcon from "@mui/icons-material/Download";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
@@ -54,6 +55,13 @@ export default function AddItemPage() {
   };
 
   const addRow = () => setRows((prev) => [...prev, emptyRow()]);
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([["Item Code", "Description", "Category", "Subcategory", "Brand", "Unit", "Purchase Cost", "Selling Price", "MRP Price", "Barcode"]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Items");
+    XLSX.writeFile(wb, "add_items_template.xlsx");
+  };
   const deleteRow = (id: number) => setRows((prev) => prev.filter((r) => r._id !== id));
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,6 +115,9 @@ export default function AddItemPage() {
 
       <Stack direction="row" spacing={1} mb={2} flexWrap="wrap">
         <Button variant="contained" startIcon={<AddIcon />} onClick={addRow}>Add Row</Button>
+        <Button variant="outlined" startIcon={<DownloadIcon />} onClick={downloadTemplate}>
+          Download Template
+        </Button>
         <Button
           variant="outlined" component="label" startIcon={<UploadFileIcon />}
         >

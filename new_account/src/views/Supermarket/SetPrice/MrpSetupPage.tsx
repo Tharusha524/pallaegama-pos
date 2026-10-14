@@ -79,7 +79,7 @@ export default function MrpSetupPage() {
   };
 
   const applyBulkMrp = async () => {
-    const markup = Number(bulkMarkup) || 6;
+    const markup = bulkMarkup === "" ? 6 : Number(bulkMarkup);
     const targets = filteredStock.filter((s: any) => bulkSelected.has(s.stock_id));
     if (!targets.length) return;
     setBulkProgress({ done: 0, total: targets.length });

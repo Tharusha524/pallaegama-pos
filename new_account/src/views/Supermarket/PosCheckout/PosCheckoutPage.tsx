@@ -76,7 +76,7 @@ interface CartLine {
   // UI-only: lets the cashier type the line discount as a flat amount
   // instead of a percentage — discount_percent (above) stays the single
   // source of truth used for Net Price/Line Total and what's posted.
-  discount_mode?: "percent" | "amount";
+  discount_mode?: "percent" | "amount" | "net";
   discount_input?: string;
   variant_id?: number;
   variant_name?: string;
@@ -174,13 +174,14 @@ export default function PosCheckoutPage() {
   const itemSearchInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const lineDiscountInputRef = useRef<HTMLInputElement>(null);
+  const sellingPriceInputRef = useRef<HTMLInputElement>(null);
   // Selling Price / Discount shown next to manual item search once an item
   // is picked — keyboard flow: Item -> Enter -> Discount -> Enter -> Qty ->
   // Enter -> added to cart. Discount starts blank (treated as 0 if left as is).
   const [manualSellingPrice, setManualSellingPrice] = useState("");
   const [manualSellingPriceTouched, setManualSellingPriceTouched] = useState(false);
   const [manualDiscountInput, setManualDiscountInput] = useState("");
-  const [manualDiscountMode2, setManualDiscountMode2] = useState<"percent" | "amount">("amount");
+  const [manualDiscountMode2, setManualDiscountMode2] = useState<"percent" | "amount" | "net">("net");
   const customerInputRef = useRef<HTMLInputElement>(null);
   const paymentAmountInputRef = useRef<HTMLInputElement>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -531,10 +532,13 @@ export default function PosCheckoutPage() {
   const changeDue = Math.max(0, totalPaid - grandTotal);
   const balanceRemaining = Math.max(0, grandTotal - totalPaid);
 
-  // Keep the scan field focused after a scan-driven cart update so a
-  // handheld/USB scanner can keep firing without the cashier clicking back in.
+  // Focus search field on page load.
+  useEffect(() => { setTimeout(() => itemSearchInputRef.current?.focus(), 200); }, []);
+
+  // After each item is added to the cart, return focus to the search field
+  // so the cashier can immediately scan or type the next item.
   useEffect(() => {
-    scanInputRef.current?.focus();
+    itemSearchInputRef.current?.focus();
   }, [cart.length]);
 
   // Default the first payment line to the cash account, and keep its amount
@@ -592,7 +596,7 @@ export default function PosCheckoutPage() {
           variant_name: variant?.variant_name,
           mrp_price: item.mrp_price != null ? Number(item.mrp_price) : undefined,
           original_unit_price: catalogPrice,
-          discount_mode: "amount" as "percent" | "amount",
+          discount_mode: "net" as "percent" | "amount" | "net",
           wholesale_qty_threshold: item.wholesale_qty_threshold != null ? Number(item.wholesale_qty_threshold) : undefined,
           wholesale_price: item.wholesale_price != null ? Number(item.wholesale_price) : undefined,
         },
@@ -653,12 +657,37 @@ export default function PosCheckoutPage() {
     // then resolve promotional/sales pricing in the background and patch the
     // price if a better one is found — cashier sees the correct price within
     // ~0.5 s without any visible delay on Enter.
-    const initialUnitPrice = manualSellingPriceTouched && manualSellingPrice !== ""
-      ? Number(manualSellingPrice) || 0
-      : catalogPrice;
-    const initialDiscountPercent = manualDiscountMode2 === "percent"
-      ? Math.min(100, discountRaw)
-      : (initialUnitPrice > 0 ? Math.min(100, (discountRaw / initialUnitPrice) * 100) : 0);
+    const focusMode = posSettings?.focus_after_item_select ?? "discount";
+    const initialUnitPrice = focusMode === "selling_price"
+      ? catalogPrice
+      : (manualSellingPriceTouched && manualSellingPrice !== "" ? Number(manualSellingPrice) || 0 : catalogPrice);
+    const typedSellingPrice = manualSellingPriceTouched && manualSellingPrice !== "" ? Number(manualSellingPrice) || 0 : catalogPrice;
+    const initialDiscountPercent = focusMode === "selling_price"
+      ? (catalogPrice > 0 ? Math.min(100, Math.max(0, (catalogPrice - typedSellingPrice) / catalogPrice * 100)) : 0)
+      : manualDiscountMode2 === "percent"
+        ? Math.min(100, discountRaw)
+        : manualDiscountMode2 === "net"
+          ? (manualDiscountInput.trim() === "" ? 0 : (initialUnitPrice > 0 ? Math.min(100, ((initialUnitPrice - discountRaw) / initialUnitPrice) * 100) : 0))
+          : (initialUnitPrice > 0 ? Math.min(100, (discountRaw / initialUnitPrice) * 100) : 0);
+
+    // Compute effective net price for validation
+    const effectiveNetPrice = focusMode === "selling_price"
+      ? typedSellingPrice
+      : manualDiscountMode2 === "net" && manualDiscountInput.trim() !== ""
+        ? Math.max(0, discountRaw)
+        : initialUnitPrice * (1 - initialDiscountPercent / 100);
+
+    const mrp = selectedItem.mrp_price != null ? Number(selectedItem.mrp_price) : null;
+    const purchaseCost = selectedItem.purchase_cost != null ? Number(selectedItem.purchase_cost) : null;
+
+    if (mrp !== null && mrp > 0 && effectiveNetPrice > mrp) {
+      notify.error(`Selling price cannot exceed MRP (${mrp.toFixed(2)})`);
+      return;
+    }
+    if (purchaseCost !== null && purchaseCost > 0 && effectiveNetPrice < purchaseCost) {
+      notify.error(`Selling price cannot be lower than purchase cost (${purchaseCost.toFixed(2)})`);
+      return;
+    }
 
     const stockId = String(selectedItem.stock_id);
     addItemToCart(
@@ -672,7 +701,9 @@ export default function PosCheckoutPage() {
         if (resolved !== undefined) {
           const resolvedDiscountPercent = manualDiscountMode2 === "percent"
             ? Math.min(100, discountRaw)
-            : (resolved > 0 ? Math.min(100, (discountRaw / resolved) * 100) : 0);
+            : manualDiscountMode2 === "net"
+              ? (manualDiscountInput.trim() === "" ? 0 : (resolved > 0 ? Math.min(100, ((resolved - discountRaw) / resolved) * 100) : 0))
+              : (resolved > 0 ? Math.min(100, (discountRaw / resolved) * 100) : 0);
           updateLine(stockId, { unit_price: Number(resolved), original_unit_price: Number(resolved), discount_percent: resolvedDiscountPercent });
         }
       }).catch(() => { /* keep catalog price on error */ });
@@ -682,7 +713,7 @@ export default function PosCheckoutPage() {
     setManualSellingPrice("");
     setManualSellingPriceTouched(false);
     setManualDiscountInput("");
-    setManualDiscountMode2("amount");
+    setManualDiscountMode2("net");
     // Keyboard-only flow (no mouse/scanner): Code -> Enter -> Qty -> Enter ->
     // added to cart -> back to Code automatically, ready for the next item.
     setTimeout(() => itemSearchInputRef.current?.focus(), 0);
@@ -694,14 +725,35 @@ export default function PosCheckoutPage() {
    * stays focused for continuous scanning and looks the code up against
    * item_codes (barcode) then stock_master (item code) on Enter.
    */
+  const focusAfterItemSelect = () => {
+    const mode = posSettings?.focus_after_item_select ?? "discount";
+    if (mode === "selling_price") {
+      setTimeout(() => { sellingPriceInputRef.current?.focus(); sellingPriceInputRef.current?.select(); }, 0);
+    } else {
+      setTimeout(() => { lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select(); }, 0);
+    }
+  };
+
+  const selectItemFromBarcode = (item: any) => {
+    setSelectedItem(item);
+    setLastViewedProduct(item);
+    const preloadedSp = salesPricingMap.get(String(item.stock_id));
+    setManualSellingPrice(String(Number(preloadedSp ?? item.sale_price ?? item.purchase_cost) || 0));
+    setManualSellingPriceTouched(false);
+    setManualDiscountInput("");
+    setManualDiscountMode2("net");
+    if (!isOffline) {
+      resolveSellingPrice(String(item.stock_id)).then((sp) => {
+        if (sp != null) { setManualSellingPrice(String(Number(sp))); setManualSellingPriceTouched(false); }
+      }).catch(() => {});
+    }
+    focusAfterItemSelect();
+  };
+
   const scanAndAddCode = async (code: string) => {
     const trimmed = code.trim();
     if (!trimmed) return;
 
-    // Offline: skip the live API entirely and match against the local
-    // SQLite snapshot (synced down the last time we were online). Only
-    // covers the item's own code, not foreign/variant barcodes — those need
-    // a live lookup and simply won't resolve until back online.
     if (isOffline) {
       try {
         const local = await findProductByBarcode(trimmed);
@@ -709,9 +761,7 @@ export default function PosCheckoutPage() {
           notify.error(`No offline product found for code "${trimmed}"`);
           return;
         }
-        addItemToCart({ stock_id: local.stock_id, description: local.description, sale_price: local.unit_price }, Number(qty) || 1);
-        setLastViewedProduct({ stock_id: local.stock_id, description: local.description, sale_price: local.unit_price });
-        notify.success(`Added: ${local.description}`);
+        selectItemFromBarcode({ stock_id: local.stock_id, description: local.description, sale_price: local.unit_price });
       } catch {
         notify.error("Offline lookup failed");
       }
@@ -728,9 +778,7 @@ export default function PosCheckoutPage() {
         notify.error(`"${result.description}" is out of stock`);
         return;
       }
-      addItemToCart(result, Number(qty) || 1);
-      setLastViewedProduct(result);
-      notify.success(`Added: ${result.description}`);
+      selectItemFromBarcode(result);
     } catch (err: any) {
       const message = err?.response?.data?.message || `No product found for code "${trimmed}"`;
       notify.error(message);
@@ -743,9 +791,7 @@ export default function PosCheckoutPage() {
       setBarcodeMatches(null);
       return;
     }
-    addItemToCart(item, Number(qty) || 1);
-    setLastViewedProduct(item);
-    notify.success(`Added: ${item.description}`);
+    selectItemFromBarcode(item);
     setBarcodeMatches(null);
   };
 
@@ -911,29 +957,12 @@ export default function PosCheckoutPage() {
       // software the client is used to. These work regardless of focus,
       // same as Enter below, since a scanner/keyboard-only cashier
       // shouldn't need the mouse for common actions.
-      if (e.key === "F9") {
-        e.preventDefault();
-        scanInputRef.current?.focus();
-        return;
-      }
-      if (e.key === "Home") {
-        // Matches the client's old till software: Home swaps focus between
-        // the Barcode Scanner and the manual Item Code/Search field — away
-        // from whichever one you're currently on, toward the other. Doesn't
-        // touch Home's normal cursor behavior in any other input (Qty,
-        // Payment Amount, Customer, Coupon/Voucher, Discount, ...).
-        const active = document.activeElement;
+      if (e.key === "F9" || e.key === "Home") {
         const target = e.target as HTMLElement | null;
-        const isOtherInput =
-          (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") &&
-          active !== scanInputRef.current && active !== itemSearchInputRef.current;
-        if (isOtherInput) return;
+        const isOtherInput = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+        if (e.key === "Home" && isOtherInput && target !== itemSearchInputRef.current) return;
         e.preventDefault();
-        if (active === scanInputRef.current) {
-          itemSearchInputRef.current?.focus();
-        } else {
-          scanInputRef.current?.focus();
-        }
+        itemSearchInputRef.current?.focus();
         return;
       }
       if (e.key === "F11") {
@@ -1560,20 +1589,6 @@ export default function PosCheckoutPage() {
       <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, flexShrink: 0 }}>
         <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
           <Stack spacing={0.75}>
-            <TextField
-              inputRef={scanInputRef}
-              label="Barcode Scanner"
-              placeholder="Scan a barcode — cursor here, scan, item adds automatically"
-              size="small"
-              fullWidth
-              value={scanCode}
-              onChange={(e) => setScanCode(e.target.value)}
-              onKeyDown={handleScanKeyDown}
-              InputProps={{
-                startAdornment: <QrCodeScannerIcon sx={{ mr: 1, color: "text.secondary" }} />,
-                sx: { minHeight: 44 },
-              }}
-            />
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               <Autocomplete
                 size="small"
@@ -1590,7 +1605,7 @@ export default function PosCheckoutPage() {
                   setManualSellingPrice(val ? String(Number(preloadedSp ?? val.sale_price ?? val.purchase_cost) || 0) : "");
                   setManualSellingPriceTouched(false);
                   setManualDiscountInput("");
-                  setManualDiscountMode2("amount");
+                  setManualDiscountMode2("net");
                   if (val && !isOffline) {
                     resolveSellingPrice(String(val.stock_id)).then((sp) => {
                       if (sp != null) {
@@ -1599,7 +1614,7 @@ export default function PosCheckoutPage() {
                       }
                     }).catch(() => { });
                   }
-                  if (val) setTimeout(() => { lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select(); }, 0);
+                  if (val) focusAfterItemSelect();
                 }}
                 renderInput={(params) => (
                   <TextField
@@ -1618,39 +1633,69 @@ export default function PosCheckoutPage() {
                         paymentAmountInputRef.current?.focus();
                         paymentAmountInputRef.current?.select();
                       }
+                      if (e.key === "Enter") {
+                        const val = itemSearchInputRef.current?.value ?? "";
+                        if (/^\d{4,}$/.test(val.trim())) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          scanAndAddCode(val.trim());
+                        }
+                      }
                     }}
                   />
                 )}
               />
               {selectedItem && (
                 <>
+                  {selectedItem.mrp_price != null && (
+                    <TextField
+                      label="MRP" size="small" sx={{ width: 90, "& .MuiInputBase-root": { minHeight: 44 } }}
+                      value={Number(selectedItem.mrp_price).toFixed(2)}
+                      InputProps={{ readOnly: true }}
+                    />
+                  )}
                   <TextField
+                    inputRef={sellingPriceInputRef}
                     label="Selling Price" type="number" size="small" sx={{ width: 100, "& .MuiInputBase-root": { minHeight: 44 } }}
                     value={manualSellingPrice}
                     onChange={(e) => { setManualSellingPrice(e.target.value); setManualSellingPriceTouched(true); }}
-                  />
-                  <TextField
-                    inputRef={lineDiscountInputRef}
-                    label="Discount" type="number" size="small" sx={{ width: 80, "& .MuiInputBase-root": { minHeight: 44 } }}
-                    placeholder="0"
-                    value={manualDiscountInput}
-                    onChange={(e) => setManualDiscountInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
                       e.preventDefault();
-                      qtyInputRef.current?.focus();
-                      qtyInputRef.current?.select();
+                      if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") {
+                        qtyInputRef.current?.focus(); qtyInputRef.current?.select();
+                      } else {
+                        lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select();
+                      }
                     }}
                   />
-                  <FormControl size="small" sx={{ width: 64 }}>
-                    <Select
-                      value={manualDiscountMode2}
-                      onChange={(e) => setManualDiscountMode2(e.target.value as "percent" | "amount")}
-                    >
-                      <MenuItem value="percent">%</MenuItem>
-                      <MenuItem value="amount">Rs</MenuItem>
-                    </Select>
-                  </FormControl>
+                  {(posSettings?.focus_after_item_select ?? "discount") !== "selling_price" && (
+                    <>
+                      <TextField
+                        inputRef={lineDiscountInputRef}
+                        label="Discount" type="number" size="small" sx={{ width: 80, "& .MuiInputBase-root": { minHeight: 44 } }}
+                        placeholder="0"
+                        value={manualDiscountInput}
+                        onChange={(e) => setManualDiscountInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          qtyInputRef.current?.focus();
+                          qtyInputRef.current?.select();
+                        }}
+                      />
+                      <FormControl size="small" sx={{ width: 64 }}>
+                        <Select
+                          value={manualDiscountMode2}
+                          onChange={(e) => setManualDiscountMode2(e.target.value as "percent" | "amount" | "net")}
+                        >
+                          <MenuItem value="net">Net</MenuItem>
+                          <MenuItem value="percent">%</MenuItem>
+                          <MenuItem value="amount">Rs</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </>
+                  )}
                 </>
               )}
               <TextField
@@ -1659,6 +1704,26 @@ export default function PosCheckoutPage() {
                 onChange={(e) => setQty(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && selectedItem) { e.preventDefault(); addToCart(); } }}
               />
+              {selectedItem && (() => {
+                const _catalogPrice = Number(selectedItem.sale_price ?? salesPricingMap.get(String(selectedItem.stock_id)) ?? selectedItem.purchase_cost) || 0;
+                const unitPrice = manualSellingPriceTouched && manualSellingPrice !== ""
+                  ? Number(manualSellingPrice) || 0
+                  : _catalogPrice;
+                const discRaw = Number(manualDiscountInput) || 0;
+                const netPrice = manualDiscountInput.trim() === "" || manualDiscountMode2 !== "net"
+                  ? (manualDiscountMode2 === "percent"
+                      ? unitPrice * (1 - Math.min(100, discRaw) / 100)
+                      : manualDiscountMode2 === "amount"
+                        ? Math.max(0, unitPrice - discRaw)
+                        : unitPrice)
+                  : Math.max(0, discRaw);
+                const lineTotal = netPrice * (Number(qty) || 1);
+                return (
+                  <Typography sx={{ minWidth: 90, textAlign: "right", color: "success.main", fontWeight: 700, fontSize: 15 }}>
+                    {lineTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                );
+              })()}
               <Button
                 variant="contained" startIcon={<AddShoppingCartIcon />} onClick={addToCart} disabled={!selectedItem}
                 sx={{ minHeight: 44, px: 2.5 }}
@@ -1961,19 +2026,6 @@ export default function PosCheckoutPage() {
           <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, mb: 2, flexShrink: 0 }}>
             <CardContent>
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <TextField
-                    inputRef={scanInputRef}
-                    label="Barcode Scanner"
-                    placeholder="Scan a barcode — cursor here, scan, item adds automatically"
-                    size="small"
-                    fullWidth
-                    value={scanCode}
-                    onChange={(e) => setScanCode(e.target.value)}
-                    onKeyDown={handleScanKeyDown}
-                    InputProps={{ startAdornment: <QrCodeScannerIcon sx={{ mr: 1, color: "text.secondary" }} /> }}
-                  />
-                </Stack>
                 <Stack direction="row" spacing={2} alignItems="flex-start">
                   <Autocomplete
                     sx={{ flex: 2 }}
@@ -1989,7 +2041,7 @@ export default function PosCheckoutPage() {
                       setManualSellingPrice(val ? String(Number(preloadedSp2 ?? val.sale_price ?? val.purchase_cost) || 0) : "");
                       setManualSellingPriceTouched(false);
                       setManualDiscountInput("");
-                      setManualDiscountMode2("amount");
+                      setManualDiscountMode2("net");
                       if (val && !isOffline) {
                         resolveSellingPrice(String(val.stock_id)).then((sp) => {
                           if (sp != null) {
@@ -1998,8 +2050,7 @@ export default function PosCheckoutPage() {
                           }
                         }).catch(() => { });
                       }
-                      // Keyboard-only flow: pick item -> Enter -> Discount -> Enter -> Qty.
-                      if (val) setTimeout(() => { lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select(); }, 0);
+                      if (val) focusAfterItemSelect();
                     }}
                     renderOption={(props, option: any) => (
                       <Box component="li" {...props} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1 }}>
@@ -2022,19 +2073,18 @@ export default function PosCheckoutPage() {
                           itemSearchInputRef.current = node;
                         }}
                         onKeyDown={(e) => {
-                          // "END" — old till software's shortcut to finish item
-                          // entry and jump straight to the payment amount,
-                          // same as pressing F6. Only fires when the field is
-                          // empty and ready for the next item (not mid-type).
                           if (e.key === "End" && !selectedItem && !itemSearchInputRef.current?.value) {
                             e.preventDefault();
-                            // Keep it pre-filled to the exact total, but
-                            // select the whole value — one Backspace (or
-                            // just typing) clears it instantly, so the
-                            // cashier can type what cash was actually
-                            // handed over (e.g. 3000 for a 2900 bill).
                             paymentAmountInputRef.current?.focus();
                             paymentAmountInputRef.current?.select();
+                          }
+                          if (e.key === "Enter") {
+                            const val = itemSearchInputRef.current?.value ?? "";
+                            if (/^\d{4,}$/.test(val.trim())) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              scanAndAddCode(val.trim());
+                            }
                           }
                         }}
                       />
@@ -2042,33 +2092,55 @@ export default function PosCheckoutPage() {
                   />
                   {selectedItem && (
                     <>
+                      {selectedItem.mrp_price != null && (
+                        <TextField
+                          label="MRP" size="small" sx={{ width: 95 }}
+                          value={Number(selectedItem.mrp_price).toFixed(2)}
+                          InputProps={{ readOnly: true }}
+                        />
+                      )}
                       <TextField
+                        inputRef={sellingPriceInputRef}
                         label="Selling Price" type="number" size="small" sx={{ width: 110 }}
                         value={manualSellingPrice}
                         onChange={(e) => { setManualSellingPrice(e.target.value); setManualSellingPriceTouched(true); }}
-                      />
-                      <TextField
-                        inputRef={lineDiscountInputRef}
-                        label="Discount" type="number" size="small" sx={{ width: 90 }}
-                        placeholder="0"
-                        value={manualDiscountInput}
-                        onChange={(e) => setManualDiscountInput(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key !== "Enter") return;
                           e.preventDefault();
-                          qtyInputRef.current?.focus();
-                          qtyInputRef.current?.select();
+                          if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") {
+                            qtyInputRef.current?.focus(); qtyInputRef.current?.select();
+                          } else {
+                            lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select();
+                          }
                         }}
                       />
-                      <FormControl size="small" sx={{ width: 68 }}>
-                        <Select
-                          value={manualDiscountMode2}
-                          onChange={(e) => setManualDiscountMode2(e.target.value as "percent" | "amount")}
-                        >
-                          <MenuItem value="percent">%</MenuItem>
-                          <MenuItem value="amount">Rs</MenuItem>
-                        </Select>
-                      </FormControl>
+                      {(posSettings?.focus_after_item_select ?? "discount") !== "selling_price" && (
+                        <>
+                          <TextField
+                            inputRef={lineDiscountInputRef}
+                            label="Discount" type="number" size="small" sx={{ width: 90 }}
+                            placeholder="0"
+                            value={manualDiscountInput}
+                            onChange={(e) => setManualDiscountInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              qtyInputRef.current?.focus();
+                              qtyInputRef.current?.select();
+                            }}
+                          />
+                          <FormControl size="small" sx={{ width: 68 }}>
+                            <Select
+                              value={manualDiscountMode2}
+                              onChange={(e) => setManualDiscountMode2(e.target.value as "percent" | "amount" | "net")}
+                            >
+                              <MenuItem value="net">Net</MenuItem>
+                              <MenuItem value="percent">%</MenuItem>
+                              <MenuItem value="amount">Rs</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </>
+                      )}
                     </>
                   )}
                   <TextField
@@ -2076,6 +2148,26 @@ export default function PosCheckoutPage() {
                     onChange={(e) => setQty(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && selectedItem) { e.preventDefault(); addToCart(); } }}
                   />
+                  {selectedItem && (() => {
+                    const _catalogPrice2 = Number(selectedItem.sale_price ?? salesPricingMap.get(String(selectedItem.stock_id)) ?? selectedItem.purchase_cost) || 0;
+                    const unitPrice = manualSellingPriceTouched && manualSellingPrice !== ""
+                      ? Number(manualSellingPrice) || 0
+                      : _catalogPrice2;
+                    const discRaw = Number(manualDiscountInput) || 0;
+                    const netPrice = manualDiscountInput.trim() === "" || manualDiscountMode2 !== "net"
+                      ? (manualDiscountMode2 === "percent"
+                          ? unitPrice * (1 - Math.min(100, discRaw) / 100)
+                          : manualDiscountMode2 === "amount"
+                            ? Math.max(0, unitPrice - discRaw)
+                            : unitPrice)
+                      : Math.max(0, discRaw);
+                    const lineTotal = netPrice * (Number(qty) || 1);
+                    return (
+                      <Typography sx={{ minWidth: 90, textAlign: "right", color: "success.main", fontWeight: 700, fontSize: 15 }}>
+                        {lineTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Typography>
+                    );
+                  })()}
                   <Button variant="contained" startIcon={<AddShoppingCartIcon />} onClick={addToCart} disabled={!selectedItem}>
                     Add
                   </Button>
@@ -2168,6 +2260,13 @@ export default function PosCheckoutPage() {
                     </TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                        {(l.discount_mode ?? "net") === "net" ? (
+                          <Typography fontSize={13} sx={{ width: 70, textAlign: "right", pt: 0.5 }}>
+                            {l.unit_price > 0 && l.discount_percent > 0
+                              ? (l.unit_price * l.discount_percent / 100).toFixed(2)
+                              : "0.00"}
+                          </Typography>
+                        ) : (
                         <TextField
                           type="number" size="small" sx={{ width: 70 }}
                           value={l.discount_input ?? (l.discount_percent || "")}
@@ -2176,17 +2275,21 @@ export default function PosCheckoutPage() {
                             const raw = e.target.value;
                             const mode = l.discount_mode ?? "percent";
                             const val = Math.max(0, Number(raw) || 0);
-                            const pct = mode === "percent" ? Math.min(100, val) : (l.unit_price > 0 ? Math.min(100, (val / l.unit_price) * 100) : 0);
+                            const pct = mode === "percent"
+                              ? Math.min(100, val)
+                              : (l.unit_price > 0 ? Math.min(100, (val / l.unit_price) * 100) : 0);
                             updateLine(l.stock_id, { discount_input: raw, discount_percent: pct });
                           }}
                         />
+                        )}
                         <FormControl size="small" sx={{ width: 68 }}>
                           <Select
-                            value={l.discount_mode ?? "percent"}
+                            value={l.discount_mode ?? "net"}
                             onChange={(e) => {
-                              updateLine(l.stock_id, { discount_mode: e.target.value as "percent" | "amount", discount_input: "", discount_percent: 0 });
+                              updateLine(l.stock_id, { discount_mode: e.target.value as "percent" | "amount" | "net", discount_input: "", discount_percent: 0 });
                             }}
                           >
+                            <MenuItem value="net">Net</MenuItem>
                             <MenuItem value="percent">%</MenuItem>
                             <MenuItem value="amount">Rs</MenuItem>
                           </Select>
@@ -2645,7 +2748,7 @@ export default function PosCheckoutPage() {
 
       <PosReceiptDialog
         open={receiptOpen}
-        onClose={() => setReceiptOpen(false)}
+        onClose={() => { setReceiptOpen(false); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
         transNo={lastReceipt?.trans_no}
         customerName={lastReceipt?.customer?.name}
         lines={lastReceipt?.lines ?? []}

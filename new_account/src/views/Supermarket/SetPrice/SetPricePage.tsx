@@ -32,6 +32,8 @@ export default function SetPricePage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+
+  // ---- Individual product state ----
   const [search, setSearch] = useState("");
   const [product, setProduct] = useState<any>(null);
   const [margin, setMargin] = useState("20");
@@ -192,12 +194,17 @@ export default function SetPricePage() {
 
   return (
     <FormPageLayout>
-      <Box sx={{ p: 2, boxShadow: 2, borderRadius: 1, mb: 2 }}>
-        <PageTitle title="Set Price" />
-        <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Set Price" }]} />
-        <Typography variant="caption" color="text.secondary">
-          Set the selling price for products already purchased and in stock — separate from purchase cost. POS Checkout charges this price.
-        </Typography>
+      <Box sx={{ p: 2, boxShadow: 2, borderRadius: 1, mb: 2, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Box>
+          <PageTitle title="Set Price" />
+          <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Set Price" }]} />
+          <Typography variant="caption" color="text.secondary">
+            Set the selling price for products already purchased and in stock — separate from purchase cost. POS Checkout charges this price.
+          </Typography>
+        </Box>
+        <Button variant="outlined" startIcon={<PriceChangeIcon />} onClick={() => navigate("/supermarket/mrp-setup")}>
+          MRP Price Setup
+        </Button>
       </Box>
 
       <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
