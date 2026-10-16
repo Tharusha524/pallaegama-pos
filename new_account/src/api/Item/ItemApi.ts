@@ -82,6 +82,22 @@ export const bulkUpdateUnits = async (stockIds: string[], unitId: number) => {
   return response.data;
 };
 
+export interface SafeDeleteResult {
+  deleted: string[];
+  blocked: { stock_id: string; description?: string; reason: string }[];
+}
+
+/** Deletes only never-used products; used ones come back in `blocked`. */
+export const safeDeleteStockMasters = async (stockIds: string[]): Promise<SafeDeleteResult> => {
+  const response = await api.post(`${API_URL}/safe-delete`, { stock_ids: stockIds });
+  return response.data;
+};
+
+export const bulkInactivateStockMasters = async (stockIds: string[]) => {
+  const response = await api.patch(`${API_URL}/bulk-inactive`, { stock_ids: stockIds });
+  return response.data;
+};
+
 export const updateEoqSettings = async (
   stockId: string,
   orderingCost: number | null,

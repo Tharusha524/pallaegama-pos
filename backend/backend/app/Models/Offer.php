@@ -22,7 +22,15 @@ class Offer extends Model
         'max_uses_per_customer',
         'times_used',
         'status',
+        'image_path',
     ];
+
+    protected $appends = ['image_url'];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        return $this->image_path ? url('api/storage-file/' . $this->image_path) : null;
+    }
 
     protected $casts = [
         'discount_value' => 'decimal:2',

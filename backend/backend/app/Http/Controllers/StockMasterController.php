@@ -9,6 +9,7 @@ use App\Models\StockMaster;
 use App\Repositories\All\StockMaster\StockMasterInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -98,6 +99,7 @@ class StockMasterController extends Controller
         $rules['subcategory_id'] = 'nullable|integer';
         $rules['brand_id'] = 'nullable|integer';
         $rules['units'] = 'nullable|integer|exists:item_units,id';
+        $rules['mrp_price'] = 'nullable|numeric|min:0';
         foreach (array_keys($accountingDefaults) as $key) {
             $rules[$key] = 'nullable';
         }
@@ -305,6 +307,98 @@ class StockMasterController extends Controller
 
         $updated = StockMaster::whereIn('stock_id', $validated['stock_ids'])
             ->update(['units' => $validated['units']]);
+
+        return response()->json(['updated' => $updated]);
+    }
+
+    /**
+     * Delete products only if they were never used. Anything with sales,
+     * purchases, stock moves, stock on hand or BOM links is kept and reported
+     * back as "blocked" so the user can make it Inactive instead — deleting a
+     * used item would leave invoices and stock/accounting reports pointing at
+     * a product that no longer exists.
+     */
+    public function safeDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'stock_ids' => ['required', 'array', 'min:1'],
+            'stock_ids.*' => ['string'],
+        ]);
+
+        // table => column holding the stock id
+        $historyTables = [
+            'stock_moves' => 'stock_id',
+            'debtor_trans_details' => 'stock_id',
+            'sales_order_details' => 'stk_code',
+            'purch_order_details' => 'item_code',
+            'grn_items' => 'item_code',
+            'supp_invoice_items' => 'stock_id',
+            'wo_requirements' => 'stock_id',
+        ];
+        // Setup-only rows that belong to the product and go with it.
+        $setupTables = ['item_codes', 'sales_pricing', 'purch_data', 'promotional_prices', 'item_variants', 'loc_stock'];
+
+        $deleted = [];
+        $blocked = [];
+
+        foreach (array_unique($validated['stock_ids']) as $stockId) {
+            $stock = StockMaster::find($stockId);
+            if (! $stock) {
+                $blocked[] = ['stock_id' => $stockId, 'reason' => 'Product not found.'];
+                continue;
+            }
+
+            $reason = null;
+            foreach ($historyTables as $table => $column) {
+                if (Schema::hasTable($table) && DB::table($table)->where($column, $stockId)->exists()) {
+                    $reason = 'Has sales, purchase or stock history.';
+                    break;
+                }
+            }
+            if (! $reason && Schema::hasTable('loc_stock')
+                && DB::table('loc_stock')->where('stock_id', $stockId)->where('quantity', '!=', 0)->exists()) {
+                $reason = 'Has stock on hand.';
+            }
+            if (! $reason && Schema::hasTable('bom')
+                && DB::table('bom')->where('parent', $stockId)->orWhere('component', $stockId)->exists()) {
+                $reason = 'Used in a bill of materials.';
+            }
+            if ($reason) {
+                $blocked[] = ['stock_id' => $stockId, 'description' => $stock->description, 'reason' => $reason];
+                continue;
+            }
+
+            try {
+                DB::transaction(function () use ($stockId, $stock, $setupTables) {
+                    foreach ($setupTables as $table) {
+                        if (Schema::hasTable($table)) {
+                            DB::table($table)->where('stock_id', $stockId)->delete();
+                        }
+                    }
+                    $stock->delete();
+                });
+                if ($stock->image) {
+                    Storage::disk('public')->delete($stock->image);
+                }
+                $deleted[] = $stockId;
+            } catch (\Throwable $e) {
+                // e.g. a foreign key from a table not listed above
+                $blocked[] = ['stock_id' => $stockId, 'description' => $stock->description, 'reason' => 'Linked to other records.'];
+            }
+        }
+
+        return response()->json(['deleted' => $deleted, 'blocked' => $blocked]);
+    }
+
+    /** Mark many products Inactive at once — the safe alternative to deleting a used item. */
+    public function bulkInactive(Request $request)
+    {
+        $validated = $request->validate([
+            'stock_ids' => ['required', 'array', 'min:1'],
+            'stock_ids.*' => ['string'],
+        ]);
+
+        $updated = StockMaster::whereIn('stock_id', $validated['stock_ids'])->update(['inactive' => 1]);
 
         return response()->json(['updated' => $updated]);
     }

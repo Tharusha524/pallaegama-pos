@@ -24,6 +24,9 @@ function ManualBulkTab() {
   const queryClient = useQueryClient();
   const [locCode, setLocCode] = useState("");
   const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterSubcategory, setFilterSubcategory] = useState("");
+  const [filterBrand, setFilterBrand] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [qtyMap, setQtyMap] = useState<Record<string, string>>({});
   const [commonQty, setCommonQty] = useState("");
@@ -40,14 +43,20 @@ function ManualBulkTab() {
     return raw.filter((s: any) => Number(s.mb_flag ?? 0) !== 3); // exclude service items
   }, [allStock]);
 
+  const categories = useMemo(() => [...new Set(stockList.map((s: any) => s.category ?? "").filter(Boolean))].sort(), [stockList]);
+  const subcategories = useMemo(() => [...new Set(stockList.filter((s: any) => !filterCategory || s.category === filterCategory).map((s: any) => s.subcategory ?? "").filter(Boolean))].sort(), [stockList, filterCategory]);
+  const brands = useMemo(() => [...new Set(stockList.filter((s: any) => (!filterCategory || s.category === filterCategory) && (!filterSubcategory || s.subcategory === filterSubcategory)).map((s: any) => s.brand ?? "").filter(Boolean))].sort(), [stockList, filterCategory, filterSubcategory]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return stockList;
-    return stockList.filter((s: any) =>
-      String(s.stock_id ?? "").toLowerCase().includes(q) ||
-      String(s.description ?? "").toLowerCase().includes(q)
-    );
-  }, [stockList, search]);
+    return stockList.filter((s: any) => {
+      if (filterCategory && s.category !== filterCategory) return false;
+      if (filterSubcategory && s.subcategory !== filterSubcategory) return false;
+      if (filterBrand && s.brand !== filterBrand) return false;
+      if (!q) return true;
+      return String(s.stock_id ?? "").toLowerCase().includes(q) || String(s.description ?? "").toLowerCase().includes(q);
+    });
+  }, [stockList, search, filterCategory, filterSubcategory, filterBrand]);
 
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -110,8 +119,8 @@ function ManualBulkTab() {
   return (
     <Box>
       {/* Top controls */}
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center" sx={{ mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
+        <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>Location</InputLabel>
           <Select value={locCode} label="Location" onChange={(e) => setLocCode(e.target.value)}>
             {(Array.isArray(locations) ? locations : []).map((l: any) => (
@@ -121,9 +130,30 @@ function ManualBulkTab() {
         </FormControl>
         <TextField
           size="small" placeholder="Search by item ID or name" value={search}
-          onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 260 }}
+          onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 220 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
         />
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Category</InputLabel>
+          <Select value={filterCategory} label="Category" onChange={(e) => { setFilterCategory(e.target.value); setFilterSubcategory(""); setFilterBrand(""); }}>
+            <MenuItem value="">All</MenuItem>
+            {categories.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Subcategory</InputLabel>
+          <Select value={filterSubcategory} label="Subcategory" onChange={(e) => { setFilterSubcategory(e.target.value); setFilterBrand(""); }}>
+            <MenuItem value="">All</MenuItem>
+            {subcategories.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Brand</InputLabel>
+          <Select value={filterBrand} label="Brand" onChange={(e) => setFilterBrand(e.target.value)}>
+            <MenuItem value="">All</MenuItem>
+            {brands.map((b) => <MenuItem key={b} value={b}>{b}</MenuItem>)}
+          </Select>
+        </FormControl>
       </Stack>
 
       {/* Common qty bar */}

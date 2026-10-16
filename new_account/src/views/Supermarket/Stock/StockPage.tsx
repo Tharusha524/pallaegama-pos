@@ -28,7 +28,10 @@ import { createStockAdjustment, getStockAdjustments } from "../../../api/Pos/pos
 import { postInventoryAdjustment } from "../../../api/Inventory/InventoryTransactionApi";
 import { getStockDamages, recordStockDamage, deleteStockDamage } from "../../../api/Pos/posApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
-import { getItems, bulkCreateStockMasters, bulkUpdateUnits } from "../../../api/Item/ItemApi";
+import {
+  getItems, bulkCreateStockMasters, bulkUpdateUnits, safeDeleteStockMasters, bulkInactivateStockMasters,
+  type SafeDeleteResult,
+} from "../../../api/Item/ItemApi";
 import { getItemUnits } from "../../../api/ItemUnit/ItemUnitApi";
 import { bulkUpsertSalesPricing } from "../../../api/SalesPricing/SalesPricingApi";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
@@ -164,6 +167,46 @@ function ProductsTab() {
     onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to apply unit"),
   });
 
+  // Delete flow: confirm → server deletes only never-used items → for the
+  // rest, offer Make Inactive (keeps sales/stock history intact).
+  const [deleteTargets, setDeleteTargets] = useState<{ stock_id: string; description: string }[]>([]);
+  const [deleteResult, setDeleteResult] = useState<SafeDeleteResult | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => safeDeleteStockMasters(deleteTargets.map((t) => t.stock_id)),
+    onSuccess: (result) => {
+      setDeleteTargets([]);
+      setSelectedStockIds((prev) => {
+        const next = new Set(prev);
+        result.deleted.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (result.deleted.length > 0) {
+        setExpandedStockId(null);
+        notify.success(`${result.deleted.length} product(s) deleted`);
+        queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+        queryClient.invalidateQueries({ queryKey: ["stock-list-all"] });
+      }
+      if (result.blocked.length > 0) setDeleteResult(result);
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to delete product(s)"),
+  });
+
+  const inactiveMutation = useMutation({
+    mutationFn: (stockIds: string[]) => bulkInactivateStockMasters(stockIds),
+    onSuccess: (_, stockIds) => {
+      notify.success(`${stockIds.length} product(s) made inactive`);
+      setDeleteResult(null);
+      setSelectedStockIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+      queryClient.invalidateQueries({ queryKey: ["stock-list-all"] });
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to make product(s) inactive"),
+  });
+
+  const askDelete = (items: any[]) =>
+    setDeleteTargets(items.map((s: any) => ({ stock_id: String(s.stock_id), description: String(s.description ?? "") })));
+
   const handleExportExcel = () => {
     const rows = (stock ?? []).map((s: any) => ({
       Product: s.description,
@@ -217,6 +260,13 @@ function ProductsTab() {
                 onClick={() => bulkUnitMutation.mutate()}
               >
                 {bulkUnitMutation.isPending ? "Applying..." : "Apply Unit to Selected"}
+              </Button>
+              <Button
+                variant="outlined" color="error" startIcon={<DeleteIcon />}
+                disabled={isOffline || deleteMutation.isPending}
+                onClick={() => askDelete((stock ?? []).filter((s: any) => selectedStockIds.has(s.stock_id)))}
+              >
+                Delete Selected
               </Button>
               <Button variant="text" onClick={() => setSelectedStockIds(new Set())}>Clear Selection</Button>
             </Stack>
@@ -310,7 +360,7 @@ function ProductsTab() {
                     <TableRow>
                       <TableCell colSpan={9} sx={{ py: 0, borderBottom: isOpen ? undefined : "none" }}>
                         <Collapse in={isOpen} timeout="auto" unmountOnExit>
-                          <ProductDetailPanel product={s} />
+                          <ProductDetailPanel product={s} onDelete={isOffline ? undefined : () => askDelete([s])} />
                         </Collapse>
                       </TableCell>
                     </TableRow>
@@ -324,6 +374,64 @@ function ProductsTab() {
           </Table>
         </TableContainer>
       )}
+
+      <Dialog open={deleteTargets.length > 0} onClose={() => !deleteMutation.isPending && setDeleteTargets([])} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete {deleteTargets.length === 1 ? "product" : `${deleteTargets.length} products`}?</DialogTitle>
+        <DialogContent>
+          {deleteTargets.length === 1 ? (
+            <Typography variant="body2">
+              Delete <b>{deleteTargets[0].description}</b> ({deleteTargets[0].stock_id})? This can't be undone.
+            </Typography>
+          ) : (
+            <Typography variant="body2">This can't be undone.</Typography>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+            Products that already have sales, purchases or stock are not deleted — you can make them Inactive instead.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTargets([])} disabled={deleteMutation.isPending}>Cancel</Button>
+          <Button color="error" variant="contained" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
+            {deleteMutation.isPending ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!deleteResult} onClose={() => !inactiveMutation.isPending && setDeleteResult(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {deleteResult && deleteResult.deleted.length > 0
+            ? `${deleteResult.deleted.length} deleted, ${deleteResult.blocked.length} kept`
+            : "Product(s) not deleted"}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            These products have history, so they were kept to protect your sales and stock records:
+          </Typography>
+          <Table size="small">
+            <TableBody>
+              {(deleteResult?.blocked ?? []).map((b) => (
+                <TableRow key={b.stock_id}>
+                  <TableCell>{b.description ?? b.stock_id} ({b.stock_id})</TableCell>
+                  <TableCell><Typography variant="caption" color="text.secondary">{b.reason}</Typography></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+            Make Inactive stops them being scanned at the POS and hides them from the Stock list, while keeping all history.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteResult(null)} disabled={inactiveMutation.isPending}>Close</Button>
+          <Button
+            variant="contained"
+            disabled={inactiveMutation.isPending || !(deleteResult?.blocked ?? []).some((b) => b.reason !== "Product not found.")}
+            onClick={() => inactiveMutation.mutate((deleteResult?.blocked ?? []).filter((b) => b.reason !== "Product not found.").map((b) => b.stock_id))}
+          >
+            {inactiveMutation.isPending ? "Saving..." : "Make Inactive"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
@@ -522,7 +630,7 @@ function StockDamageTab() {
 // ---------------------------------------------------------------------------
 // Expanded row: full product details + an "Adjust Stock" action.
 // ---------------------------------------------------------------------------
-function ProductDetailPanel({ product }: { product: any }) {
+function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: () => void }) {
   const { formatCurrency } = useHomeCurrency();
   const queryClient = useQueryClient();
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -647,6 +755,11 @@ function ProductDetailPanel({ product }: { product: any }) {
         <Button size="small" variant="outlined" startIcon={<TuneIcon />} onClick={() => setAdjustOpen(true)}>
           Adjust Stock
         </Button>
+        {onDelete && (
+          <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={onDelete}>
+            Delete Item
+          </Button>
+        )}
         <Tooltip title="Adjustment History">
           <IconButton size="small" onClick={() => setHistoryOpen(true)}>
             <HistoryIcon fontSize="small" />

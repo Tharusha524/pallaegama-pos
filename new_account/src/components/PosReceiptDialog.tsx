@@ -10,6 +10,42 @@ import { resolveLogoSrc } from "../utils/logoUrl";
 import html2canvas from "html2canvas";
 import { invoke } from "@tauri-apps/api/core";
 
+// Elements html2canvas must keep when cloning: page styles/fonts live in <head>.
+const RECEIPT_KEEP_TAGS = new Set(["HEAD", "STYLE", "LINK", "META", "TITLE", "BASE"]);
+
+/** Renders the receipt div to a base64 PNG (576px wide) for the thermal printer. */
+function renderReceiptImage(printArea: HTMLElement): Promise<string> {
+  // Fetch images with auth headers and inline them as data URLs — prevents
+  // cross-origin fetch failures that make html2canvas hang silently.
+  const imgs = Array.from(printArea.querySelectorAll("img")) as HTMLImageElement[];
+  const token = localStorage.getItem("token");
+  const toDataUrl = (img: HTMLImageElement): Promise<void> => {
+    if (!img.src || img.src.startsWith("data:") || img.src.startsWith("blob:")) return Promise.resolve();
+    return fetch(img.src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => r.blob())
+      .then((blob) => new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => { img.src = reader.result as string; resolve(); };
+        reader.onerror = () => resolve();
+        reader.readAsDataURL(blob);
+      }))
+      .catch(() => Promise.resolve());
+  };
+  return Promise.all([document.fonts.ready, ...imgs.map(toDataUrl)])
+    .then(() => html2canvas(printArea, {
+      scale: 576 / printArea.offsetWidth,
+      backgroundColor: "#ffffff",
+      useCORS: false,
+      logging: false,
+      imageTimeout: 0,
+      // html2canvas clones the whole page by default; the POS page is large, so
+      // clone only the receipt (plus its ancestors and the page styles).
+      ignoreElements: (el) =>
+        !(RECEIPT_KEEP_TAGS.has(el.tagName) || el.contains(printArea) || printArea.contains(el)),
+    }))
+    .then((canvas) => canvas.toDataURL("image/png").split(",")[1]);
+}
+
 interface ReceiptLine {
   stock_id?: string;
   description: string;
@@ -74,7 +110,28 @@ export default function PosReceiptDialog({
   const barcodeRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const cachedBase64Ref = useRef<string | null>(null);
+  // The in-progress render, shared by the pre-render and Print so a fast
+  // Enter never starts a second html2canvas run alongside the first.
+  const pendingRenderRef = useRef<Promise<string> | null>(null);
+  // Bumped per receipt so a late render of the previous receipt is discarded.
+  const renderKeyRef = useRef(0);
   const [printed, setPrinted] = useState(false);
+
+  const startRender = useCallback((): Promise<string> | null => {
+    if (pendingRenderRef.current) return pendingRenderRef.current;
+    const printArea = document.getElementById("pos-receipt-print-area");
+    if (!printArea) return null;
+    const key = renderKeyRef.current;
+    const render = renderReceiptImage(printArea).then((base64) => {
+      if (renderKeyRef.current === key) cachedBase64Ref.current = base64;
+      return base64;
+    });
+    render.catch(() => {
+      if (renderKeyRef.current === key && pendingRenderRef.current === render) pendingRenderRef.current = null;
+    });
+    pendingRenderRef.current = render;
+    return render;
+  }, []);
 
   const receiptHtml = (innerHTML: string) => `<!DOCTYPE html><html><head>
     <meta charset="utf-8"/>
@@ -148,28 +205,6 @@ export default function PosReceiptDialog({
     const isTauriApp = !!(window as any).__TAURI_INTERNALS__;
 
     if (isTauriApp) {
-      // Capture the receipt preview div as-is → scale to 576px (printer width) → ESC/POS
-      const printArea = document.getElementById('pos-receipt-print-area');
-      if (!printArea) { alert('Receipt preview not found.'); return; }
-
-      // Fetch all images with auth headers and replace their src with data URLs
-      // before html2canvas runs — prevents cross-origin fetch failures that
-      // would cause html2canvas to hang silently on the client machine.
-      const imgs = Array.from(printArea.querySelectorAll('img')) as HTMLImageElement[];
-      const token = localStorage.getItem('token');
-      const toDataUrlWithAuth = (img: HTMLImageElement): Promise<void> => {
-        if (!img.src || img.src.startsWith('data:') || img.src.startsWith('blob:')) return Promise.resolve();
-        return fetch(img.src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-          .then((r) => r.blob())
-          .then((blob) => new Promise<void>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => { img.src = reader.result as string; resolve(); };
-            reader.onerror = () => resolve();
-            reader.readAsDataURL(blob);
-          }))
-          .catch(() => Promise.resolve());
-      };
-
       const sendToPrinter = (base64: string) =>
         invoke('print_receipt_escpos', {
           printerName: rs.thermal_printer_name || 'EPSON TM-T82 Receipt',
@@ -185,19 +220,19 @@ export default function PosReceiptDialog({
         return;
       }
 
-      Promise.all([document.fonts.ready, ...imgs.map(toDataUrlWithAuth)]).then(() =>
-        html2canvas(printArea, {
-          scale: 576 / printArea.offsetWidth,
-          backgroundColor: '#ffffff',
-          useCORS: false,
-          logging: false,
-          imageTimeout: 0,
+      // Not ready yet: reuse the render already in progress (or start one).
+      const render = startRender();
+      if (!render) { alert('Receipt preview not found.'); return; }
+      render
+        .catch(() => {
+          // The shared render failed — try once more on its own.
+          pendingRenderRef.current = null;
+          return startRender() ?? Promise.reject(new Error('Receipt preview not found.'));
         })
-      ).then((canvas) => {
-        sendToPrinter(canvas.toDataURL('image/png').split(',')[1]);
-      }).catch((err: any) => {
-        alert(`Print failed: ${err}\n\nMake sure the EPSON TM-T82 is connected and powered on.`);
-      });
+        .then((base64) => sendToPrinter(base64))
+        .catch((err: any) => {
+          alert(`Print failed: ${err}\n\nMake sure the EPSON TM-T82 is connected and powered on.`);
+        });
       return;
     }
 
@@ -210,7 +245,7 @@ export default function PosReceiptDialog({
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); win.close(); }, 500);
-  }, [company, now, transNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml]);
+  }, [company, now, transNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml, startRender]);
 
   // Reset printed state when dialog opens
   useEffect(() => { if (open) setPrinted(false); }, [open]);
@@ -252,44 +287,26 @@ export default function PosReceiptDialog({
   // Pre-render the receipt canvas as soon as the dialog opens so print is instant.
   useEffect(() => {
     if (!open || !(window as any).__TAURI_INTERNALS__) return;
-    if (!company) return; // wait for company data before pre-rendering
+    // New receipt (or company details changed): drop the previous image first.
+    renderKeyRef.current += 1;
     cachedBase64Ref.current = null;
+    pendingRenderRef.current = null;
+    if (!company) return; // wait for company data before pre-rendering
     const timer = setTimeout(() => {
-      const printArea = document.getElementById('pos-receipt-print-area');
-      if (!printArea) return;
-      const imgs = Array.from(printArea.querySelectorAll('img')) as HTMLImageElement[];
-      const token = localStorage.getItem('token');
-      const toDataUrl = (img: HTMLImageElement): Promise<void> => {
-        if (!img.src || img.src.startsWith('data:') || img.src.startsWith('blob:')) return Promise.resolve();
-        return fetch(img.src, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-          .then((r) => r.blob())
-          .then((blob) => new Promise<void>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => { img.src = reader.result as string; resolve(); };
-            reader.onerror = () => resolve();
-            reader.readAsDataURL(blob);
-          }))
-          .catch(() => Promise.resolve());
-      };
-      Promise.all([document.fonts.ready, ...imgs.map(toDataUrl)])
-        .then(() => html2canvas(printArea, { scale: 576 / printArea.offsetWidth, backgroundColor: '#ffffff', useCORS: false, logging: false, imageTimeout: 0 }))
-        .then((canvas) => { cachedBase64Ref.current = canvas.toDataURL('image/png').split(',')[1]; })
-        .catch(() => { /* pre-render failed — handlePrint will re-render */ });
+      startRender()?.catch(() => { /* pre-render failed — handlePrint will re-render */ });
     }, 300); // small delay so DOM is fully painted
     return () => clearTimeout(timer);
-  }, [open, transNo, company]);
+  }, [open, transNo, company, startRender]);
 
   const isThermal = paperSize.includes("80mm");
-  const discountTotal = Math.max(0, subtotal - total);
 
-  // MRP savings = sum of (mrp_price - unit_price) * quantity for all items that have mrp_price set
-  const mrpSavings = lines.reduce((sum, l: any) => {
-    if (l.mrp_price != null && Number(l.mrp_price) > 0) {
-      const netPrice = l.unit_price * (1 - l.discount_percent / 100);
-      return sum + Math.max(0, (Number(l.mrp_price) - netPrice) * l.quantity);
-    }
-    return sum;
+  // You Saved = full price (MRP, or selling price if higher / no MRP) minus the
+  // final total — covers MRP difference plus every discount (points, manual, coupon).
+  const fullPriceTotal = lines.reduce((sum, l: any) => {
+    const mrp = l.mrp_price != null ? Number(l.mrp_price) : 0;
+    return sum + Math.max(mrp, l.unit_price) * l.quantity;
   }, 0);
+  const youSaved = Math.max(0, fullPriceTotal - total);
   const paymentLines = payments && payments.length > 0 ? payments : [{ method: "CASH", amount: total }];
   const received = cashReceived ?? total;
   const change = Math.max(0, received - total);
@@ -475,11 +492,6 @@ export default function PosReceiptDialog({
           {renderCustomFields(rs.custom_fields, "after_items")}
 
           <Stack spacing={0.25} sx={{ my: 1 }}>
-            {discountTotal > 0.001 && (
-              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
-                <span>{rs.label_discount}</span><span>-{fmt(discountTotal)}</span>
-              </Box>
-            )}
           </Stack>
 
           <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
@@ -519,12 +531,12 @@ export default function PosReceiptDialog({
                   </Box>
                 )}
               </Stack>
-              {mrpSavings > 0.001 && (
+              {youSaved > 0.001 && (
                 <Box sx={{ my: 0.5 }}>
                   <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1, borderColor: "text.primary" }} />
                   <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
                     <span>{rs.label_you_saved ?? "You Saved"}</span>
-                    <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>{fmt(mrpSavings)}</Typography>
+                    <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>{fmt(youSaved)}</Typography>
                   </Box>
                   <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1, borderColor: "text.primary" }} />
                 </Box>

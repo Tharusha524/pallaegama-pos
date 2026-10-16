@@ -8,6 +8,7 @@ use App\Models\LoyaltyCard;
 use App\Models\DebtorsMaster;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class OfferController extends Controller
 {
@@ -31,7 +32,13 @@ class OfferController extends Controller
             'max_total_uses' => 'nullable|integer|min:1',
             'max_uses_per_customer' => 'nullable|integer|min:1',
             'status' => 'in:active,inactive',
+            'image' => 'nullable|image|max:5120',
         ]);
+
+        if ($request->hasFile('image')) {
+            $data['image_path'] = $request->file('image')->store('offer_images', 'public');
+        }
+        unset($data['image']);
 
         return response()->json(Offer::create($data), 201);
     }
@@ -62,10 +69,24 @@ class OfferController extends Controller
             'valid_to' => 'sometimes|required|date|after_or_equal:valid_from',
             'min_purchase_amount' => 'nullable|numeric|min:0',
             'status' => 'in:active,inactive',
+            'image' => 'nullable|image|max:5120',
         ]);
 
+        if ($request->hasFile('image')) {
+            if ($offer->image_path) {
+                Storage::disk('public')->delete($offer->image_path);
+            }
+            $data['image_path'] = $request->file('image')->store('offer_images', 'public');
+        } elseif ($request->boolean('remove_image')) {
+            if ($offer->image_path) {
+                Storage::disk('public')->delete($offer->image_path);
+            }
+            $data['image_path'] = null;
+        }
+        unset($data['image']);
+
         $offer->update($data);
-        return response()->json($offer);
+        return response()->json($offer->fresh());
     }
 
     public function destroy(string $id)
@@ -74,8 +95,24 @@ class OfferController extends Controller
         if (!$offer) {
             return response()->json(['message' => 'Offer not found'], 404);
         }
+        if ($offer->image_path) {
+            Storage::disk('public')->delete($offer->image_path);
+        }
         $offer->delete();
         return response()->json(['message' => 'Offer deleted']);
+    }
+
+    /** Public endpoint for the mobile app — returns only active offers with image URLs. */
+    public function mobileOffers(Request $request)
+    {
+        $today = now()->toDateString();
+        $offers = Offer::where('status', 'active')
+            ->whereDate('valid_from', '<=', $today)
+            ->whereDate('valid_to', '>=', $today)
+            ->orderByDesc('id')
+            ->get(['id', 'offer_name', 'offer_type', 'discount_type', 'discount_value', 'valid_from', 'valid_to', 'image_path']);
+
+        return response()->json(['data' => $offers]);
     }
 
     /**

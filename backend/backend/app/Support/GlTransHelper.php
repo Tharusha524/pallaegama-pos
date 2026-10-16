@@ -9,12 +9,38 @@ use Illuminate\Support\Str;
 
 class GlTransHelper
 {
+    // Schema::hasColumn() runs an information_schema query on every call; a sale
+    // posts many GL lines, so the gl_trans structure is looked up once per request.
+    private static ?bool $tableExistsCache = null;
+
+    /** @var array<string, true>|null */
+    private static ?array $columnsCache = null;
+
+    private static ?bool $numericIdCache = null;
+
+    private static function hasTable(): bool
+    {
+        return self::$tableExistsCache ??= Schema::hasTable('gl_trans');
+    }
+
+    private static function hasColumn(string $column): bool
+    {
+        if (self::$columnsCache === null) {
+            self::$columnsCache = [];
+            foreach (Schema::getColumnListing('gl_trans') as $name) {
+                self::$columnsCache[strtolower($name)] = true;
+            }
+        }
+
+        return isset(self::$columnsCache[strtolower($column)]);
+    }
+
     /**
      * @param  array<int, array<string, mixed>>  $lines
      */
     public static function insertLines(array $lines): void
     {
-        if ($lines === [] || ! Schema::hasTable('gl_trans')) {
+        if ($lines === [] || ! self::hasTable()) {
             return;
         }
 
@@ -48,13 +74,13 @@ class GlTransHelper
 
     public static function alreadyPosted(int $transType, int $typeNo, ?string $account = null): bool
     {
-        if (! Schema::hasTable('gl_trans')) {
+        if (! self::hasTable()) {
             return false;
         }
 
         $query = self::postedQuery($transType, $typeNo);
 
-        if ($account !== null && Schema::hasColumn('gl_trans', 'account')) {
+        if ($account !== null && self::hasColumn('account')) {
             $query->where('account', $account);
         }
 
@@ -63,7 +89,7 @@ class GlTransHelper
 
     public static function deletePosted(int $transType, int $typeNo): int
     {
-        if (! Schema::hasTable('gl_trans')) {
+        if (! self::hasTable()) {
             return 0;
         }
 
@@ -77,7 +103,7 @@ class GlTransHelper
      */
     public static function deletePostedExceptMemoPrefixes(int $transType, int $typeNo, array $preserveMemoPrefixes): int
     {
-        if (! Schema::hasTable('gl_trans')) {
+        if (! self::hasTable()) {
             return 0;
         }
 
@@ -99,7 +125,7 @@ class GlTransHelper
 
     public static function hasMemoPrefix(int $transType, int $typeNo, string $memoPrefix): bool
     {
-        if (! Schema::hasTable('gl_trans') || $memoPrefix === '') {
+        if (! self::hasTable() || $memoPrefix === '') {
             return false;
         }
 
@@ -115,13 +141,13 @@ class GlTransHelper
 
     private static function memoColumn(): ?string
     {
-        if (! Schema::hasTable('gl_trans')) {
+        if (! self::hasTable()) {
             return null;
         }
-        if (Schema::hasColumn('gl_trans', 'memo')) {
+        if (self::hasColumn('memo')) {
             return 'memo';
         }
-        if (Schema::hasColumn('gl_trans', 'memo_')) {
+        if (self::hasColumn('memo_')) {
             return 'memo_';
         }
 
@@ -133,7 +159,7 @@ class GlTransHelper
         $query = DB::table('gl_trans')
             ->where('type', (string) $transType);
 
-        if (Schema::hasColumn('gl_trans', 'type_no')) {
+        if (self::hasColumn('type_no')) {
             $query->where('type_no', $typeNo);
         } else {
             $query->where('reference', 'like', '%'.$typeNo.'%');
@@ -181,64 +207,64 @@ class GlTransHelper
 
         $row = [];
 
-        if (Schema::hasColumn('gl_trans', 'type')) {
+        if (self::hasColumn('type')) {
             $row['type'] = is_numeric($transType) ? (string) (int) $transType : (string) $transType;
         }
-        if (Schema::hasColumn('gl_trans', 'reference')) {
+        if (self::hasColumn('reference')) {
             $row['reference'] = $line['reference'] ?? null;
         }
-        if (Schema::hasColumn('gl_trans', 'date')) {
+        if (self::hasColumn('date')) {
             $row['date'] = $date;
         }
-        if (Schema::hasColumn('gl_trans', 'account')) {
+        if (self::hasColumn('account')) {
             $account = $line['account'] ?? null;
             $row['account'] = is_string($account) ? trim($account) : $account;
         }
-        if (Schema::hasColumn('gl_trans', 'cost_center_id')) {
+        if (self::hasColumn('cost_center_id')) {
             $row['cost_center_id'] = $costCenter;
         }
 
         $costCenter2 = $line['cost_center2_id'] ?? null;
         if ($costCenter2 !== null && $costCenter2 !== '' && (int) $costCenter2 > 0
-            && Schema::hasColumn('gl_trans', 'cost_center2_id')) {
+            && self::hasColumn('cost_center2_id')) {
             $row['cost_center2_id'] = (int) $costCenter2;
         }
-        if (Schema::hasColumn('gl_trans', 'debit')) {
+        if (self::hasColumn('debit')) {
             $row['debit'] = $debit;
         }
-        if (Schema::hasColumn('gl_trans', 'credit')) {
+        if (self::hasColumn('credit')) {
             $row['credit'] = $credit;
         }
         $memo = $line['memo'] ?? $line['memo_'] ?? null;
-        if (Schema::hasColumn('gl_trans', 'memo')) {
+        if (self::hasColumn('memo')) {
             $row['memo'] = $memo;
         }
-        if (Schema::hasColumn('gl_trans', 'memo_')) {
+        if (self::hasColumn('memo_')) {
             $row['memo_'] = $memo;
         }
-        if (Schema::hasColumn('gl_trans', 'tran_date')) {
+        if (self::hasColumn('tran_date')) {
             $row['tran_date'] = $date;
         }
-        if (Schema::hasColumn('gl_trans', 'amount')) {
+        if (self::hasColumn('amount')) {
             $row['amount'] = $debit > 0 ? $debit : -$credit;
         }
-        if (Schema::hasColumn('gl_trans', 'type_no') && isset($line['type_no'])) {
+        if (self::hasColumn('type_no') && isset($line['type_no'])) {
             $row['type_no'] = (int) $line['type_no'];
         }
-        if (Schema::hasColumn('gl_trans', 'person_type_id')) {
+        if (self::hasColumn('person_type_id')) {
             $row['person_type_id'] = $line['person_type_id'] ?? null;
         }
-        if (Schema::hasColumn('gl_trans', 'person_id')) {
+        if (self::hasColumn('person_id')) {
             $row['person_id'] = $line['person_id'] ?? null;
         }
-        if (Schema::hasColumn('gl_trans', 'created_at')) {
+        if (self::hasColumn('created_at')) {
             $row['created_at'] = now();
         }
-        if (Schema::hasColumn('gl_trans', 'updated_at')) {
+        if (self::hasColumn('updated_at')) {
             $row['updated_at'] = now();
         }
 
-        if (! self::usesNumericId() && Schema::hasColumn('gl_trans', 'id')) {
+        if (! self::usesNumericId() && self::hasColumn('id')) {
             $row['id'] = $line['id'] ?? Str::uuid()->toString();
         }
 
@@ -261,16 +287,20 @@ class GlTransHelper
 
     public static function usesNumericId(): bool
     {
-        if (! Schema::hasTable('gl_trans') || ! Schema::hasColumn('gl_trans', 'id')) {
-            return true;
+        if (self::$numericIdCache !== null) {
+            return self::$numericIdCache;
+        }
+
+        if (! self::hasTable() || ! self::hasColumn('id')) {
+            return self::$numericIdCache = true;
         }
 
         try {
             $type = Schema::getColumnType('gl_trans', 'id');
 
-            return in_array($type, ['bigint', 'integer', 'int'], true);
+            return self::$numericIdCache = in_array($type, ['bigint', 'integer', 'int'], true);
         } catch (\Throwable) {
-            return true;
+            return self::$numericIdCache = true;
         }
     }
 }

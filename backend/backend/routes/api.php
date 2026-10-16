@@ -369,6 +369,8 @@ Route::apiResource('item-types', ItemTypeController::class);
 
 Route::post('stock-masters/bulk', [StockMasterController::class, 'bulkStore']);
 Route::patch('stock-masters/bulk-units', [StockMasterController::class, 'bulkUpdateUnits']);
+Route::post('stock-masters/safe-delete', [StockMasterController::class, 'safeDelete']);
+Route::patch('stock-masters/bulk-inactive', [StockMasterController::class, 'bulkInactive']);
 Route::apiResource('stock-masters', StockMasterController::class);
 Route::patch('stock-masters/{id}/mrp-price', [StockMasterController::class, 'updateMrpPrice']);
 Route::patch('stock-masters/{id}/wholesale-pricing', [StockMasterController::class, 'updateWholesalePricing']);

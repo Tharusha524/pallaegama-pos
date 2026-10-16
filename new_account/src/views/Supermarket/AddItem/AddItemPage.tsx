@@ -72,7 +72,12 @@ export default function AddItemPage() {
       try {
         const wb = XLSX.read(ev.target?.result, { type: "binary" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const data: any[] = rawData.map((row) => {
+          const trimmed: any = {};
+          for (const key of Object.keys(row)) trimmed[key.trim()] = row[key];
+          return trimmed;
+        });
         const imported = data.map((d) => ({
           _id: Date.now() + Math.random(),
           stock_id: String(d["Item Code"] ?? d["stock_id"] ?? ""),

@@ -44,6 +44,7 @@ class StockListController extends Controller
                 'br.name as brand_name',
                 'sm.units',
                 'iu.name as unit_name',
+                'sm.mb_flag',
                 'sm.purchase_cost',
                 'sm.mrp_price',
                 'sm.wholesale_qty_threshold',

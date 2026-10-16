@@ -175,6 +175,8 @@ export default function PosCheckoutPage() {
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const lineDiscountInputRef = useRef<HTMLInputElement>(null);
   const sellingPriceInputRef = useRef<HTMLInputElement>(null);
+  const cartScrollRef1 = useRef<HTMLDivElement>(null);
+  const cartScrollRef2 = useRef<HTMLDivElement>(null);
   // Selling Price / Discount shown next to manual item search once an item
   // is picked — keyboard flow: Item -> Enter -> Discount -> Enter -> Qty ->
   // Enter -> added to cart. Discount starts blank (treated as 0 if left as is).
@@ -539,6 +541,8 @@ export default function PosCheckoutPage() {
   // so the cashier can immediately scan or type the next item.
   useEffect(() => {
     itemSearchInputRef.current?.focus();
+    cartScrollRef1.current?.scrollTo({ top: cartScrollRef1.current.scrollHeight });
+    cartScrollRef2.current?.scrollTo({ top: cartScrollRef2.current.scrollHeight });
   }, [cart.length]);
 
   // Default the first payment line to the cash account, and keep its amount
@@ -658,12 +662,12 @@ export default function PosCheckoutPage() {
     // price if a better one is found — cashier sees the correct price within
     // ~0.5 s without any visible delay on Enter.
     const focusMode = posSettings?.focus_after_item_select ?? "discount";
-    const initialUnitPrice = focusMode === "selling_price"
-      ? catalogPrice
-      : (manualSellingPriceTouched && manualSellingPrice !== "" ? Number(manualSellingPrice) || 0 : catalogPrice);
     const typedSellingPrice = manualSellingPriceTouched && manualSellingPrice !== "" ? Number(manualSellingPrice) || 0 : catalogPrice;
+    const initialUnitPrice = focusMode === "selling_price"
+      ? (typedSellingPrice < catalogPrice ? catalogPrice : typedSellingPrice)
+      : (manualSellingPriceTouched && manualSellingPrice !== "" ? Number(manualSellingPrice) || 0 : catalogPrice);
     const initialDiscountPercent = focusMode === "selling_price"
-      ? (catalogPrice > 0 ? Math.min(100, Math.max(0, (catalogPrice - typedSellingPrice) / catalogPrice * 100)) : 0)
+      ? (catalogPrice > 0 && typedSellingPrice < catalogPrice ? ((catalogPrice - typedSellingPrice) / catalogPrice) * 100 : 0)
       : manualDiscountMode2 === "percent"
         ? Math.min(100, discountRaw)
         : manualDiscountMode2 === "net"
@@ -676,18 +680,6 @@ export default function PosCheckoutPage() {
       : manualDiscountMode2 === "net" && manualDiscountInput.trim() !== ""
         ? Math.max(0, discountRaw)
         : initialUnitPrice * (1 - initialDiscountPercent / 100);
-
-    const mrp = selectedItem.mrp_price != null ? Number(selectedItem.mrp_price) : null;
-    const purchaseCost = selectedItem.purchase_cost != null ? Number(selectedItem.purchase_cost) : null;
-
-    if (mrp !== null && mrp > 0 && effectiveNetPrice > mrp) {
-      notify.error(`Selling price cannot exceed MRP (${mrp.toFixed(2)})`);
-      return;
-    }
-    if (purchaseCost !== null && purchaseCost > 0 && effectiveNetPrice < purchaseCost) {
-      notify.error(`Selling price cannot be lower than purchase cost (${purchaseCost.toFixed(2)})`);
-      return;
-    }
 
     const stockId = String(selectedItem.stock_id);
     addItemToCart(
@@ -1738,6 +1730,7 @@ export default function PosCheckoutPage() {
       {/* Cart — the main working area, gets whatever vertical space is left
           over after the search card above and checkout panel below. */}
       <TableContainer
+        ref={cartScrollRef1}
         component={Paper} elevation={0}
         sx={{
           border: "1px solid", borderColor: "divider", borderRadius: 3, overflowY: "auto",
@@ -2181,6 +2174,7 @@ export default function PosCheckoutPage() {
               Payment/Checkout box above/below it, and scrolls internally.
               Outside full-screen it just caps at a sensible height. */}
           <TableContainer
+            ref={cartScrollRef2}
             component={Paper} elevation={0}
             sx={{
               border: "1px solid", borderColor: "divider", borderRadius: 3, overflowY: "auto",
@@ -2625,12 +2619,18 @@ export default function PosCheckoutPage() {
               <Stack spacing={1}>
                 <Stack direction="row" justifyContent="space-between">
                   <Typography variant="body1" fontWeight={700} color="text.secondary">Total Items</Typography>
-                  <Typography variant="body1" fontWeight={700}>{cart.reduce((sum, l) => sum + l.quantity, 0)}</Typography>
+                  <Typography variant="body1" fontWeight={700}>{cart.length}</Typography>
                 </Stack>
                 <Stack direction="row" justifyContent="space-between">
                   <Typography variant="body1" fontWeight={700} color="text.secondary">Subtotal</Typography>
                   <Typography variant="body1" fontWeight={700}>{formatCurrency(subtotal, 2)}</Typography>
                 </Stack>
+                {(() => { const rawTotal = cart.reduce((s, l) => s + l.quantity * l.unit_price, 0); const totalDisc = Math.max(0, rawTotal - grandTotal); return totalDisc > 0.001 ? (
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="body1" fontWeight={700} color="text.secondary">Discount</Typography>
+                    <Typography variant="body1" fontWeight={700} color="error.main">{formatCurrency(totalDisc, 2)}</Typography>
+                  </Stack>
+                ) : null; })()}
                 {cartDiscountAmount > 0 && (
                   <Stack direction="row" justifyContent="space-between">
                     <Typography variant="body2" color="text.secondary">Cart Discount ({cartDiscountPercent}%)</Typography>
