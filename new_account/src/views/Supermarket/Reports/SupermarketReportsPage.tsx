@@ -21,6 +21,17 @@ import { getStockMoveHistory } from "../../../api/StockMoves/StockMovesApi";
 import { getItems, getExpiryList } from "../../../api/Item/ItemApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 
+// Full-width report tables with balanced columns: the first column (product /
+// date) takes the largest share, the rest split the remaining space evenly.
+const reportTableLayout = {
+  "& .MuiTableContainer-root": { width: "100%", overflowX: "auto" },
+  "& .MuiTable-root": { width: "100%" },
+  "& .MuiTableCell-root": { px: 3 },
+  "& .MuiTableRow-root > .MuiTableCell-root:first-of-type": { width: "40%" },
+  "& .MuiTableCell-head": { whiteSpace: "nowrap" },
+  "& .MuiTableCell-alignRight": { whiteSpace: "nowrap" },
+};
+
 export default function SupermarketReportsPage() {
   const { formatCurrency } = useHomeCurrency();
   const [tab, setTab] = useState("velocity");
@@ -98,6 +109,7 @@ export default function SupermarketReportsPage() {
 
   return (
     <FormPageLayout>
+      <Box sx={reportTableLayout}>
       <Box sx={{ p: 2, boxShadow: 2, borderRadius: 1, mb: 2 }}>
         <PageTitle title="Supermarket Reports" />
         <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Reports" }]} />
@@ -255,7 +267,7 @@ export default function SupermarketReportsPage() {
             <TableBody>
               {(lowestCost ?? []).map((r: any, i: number) => (
                 <TableRow key={i}>
-                  <TableCell>{r.stock_id}</TableCell>
+                  <TableCell>{r.description ? `${r.stock_id} — ${r.description}` : r.stock_id}</TableCell>
                   <TableCell>{r.supplier_name}</TableCell>
                   <TableCell align="right">{formatCurrency(r.lowest_price)}</TableCell>
                 </TableRow>
@@ -596,6 +608,7 @@ export default function SupermarketReportsPage() {
           </Table>
         </TableContainer>
       ))}
+      </Box>
     </FormPageLayout>
   );
 }

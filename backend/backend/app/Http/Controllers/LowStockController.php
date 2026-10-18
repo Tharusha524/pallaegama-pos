@@ -39,6 +39,8 @@ class LowStockController extends Controller
                      ->on('dt.trans_type', '=', 'dtd.debtor_trans_type');
             })
             ->where('dt.tran_date', '>=', $since)
+            // Invoices only — each sale's delivery note repeats the same lines.
+            ->where('dt.trans_type', 10)
             ->select('dtd.stock_id')
             ->selectRaw('SUM(dtd.quantity) / GREATEST(DATEDIFF(NOW(), ?), 1) as avg_daily_qty', [$since])
             ->groupBy('dtd.stock_id')

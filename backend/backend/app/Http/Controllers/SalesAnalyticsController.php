@@ -64,6 +64,8 @@ class SalesAnalyticsController extends Controller
             })
             ->join('stock_master as sm', 'sm.stock_id', '=', 'dtd.stock_id')
             ->whereBetween('dt.tran_date', [$fromDate, $toDate])
+            // Invoices only — each sale's delivery note repeats the same lines.
+            ->where('dt.trans_type', 10)
             ->select('dtd.stock_id', 'sm.description')
             ->selectRaw('SUM(dtd.quantity) as qty_sold')
             ->selectRaw('SUM(dtd.quantity * dtd.unit_price) as revenue')
@@ -211,6 +213,8 @@ class SalesAnalyticsController extends Controller
             })
             ->join('stock_master as sm', 'sm.stock_id', '=', 'dtd.stock_id')
             ->whereBetween('dt.tran_date', [$fromDate, $toDate])
+            // Invoices only — each sale's delivery note repeats the same lines.
+            ->where('dt.trans_type', 10)
             ->select('dtd.stock_id', 'sm.description')
             ->selectRaw('SUM(dtd.quantity) as units_sold')
             ->selectRaw('SUM(dtd.quantity * dtd.unit_price) as revenue')
@@ -270,6 +274,9 @@ class SalesAnalyticsController extends Controller
             })
             ->join('stock_master as sm', 'sm.stock_id', '=', 'dtd.stock_id')
             ->whereBetween('dt.tran_date', [$fromDate, $toDate])
+            // Invoices only: every sale also has a delivery note with the same
+            // lines, so counting all transaction types doubled every figure.
+            ->where('dt.trans_type', 10)
             ->select('dtd.stock_id', 'sm.description')
             ->selectRaw('SUM(dtd.quantity) as units_sold')
             ->selectRaw('SUM(dtd.quantity * dtd.unit_price) as revenue')

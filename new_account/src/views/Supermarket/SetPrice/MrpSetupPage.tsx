@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Stack, TextField, Typography, InputAdornment,
   Table, TableHead, TableRow, TableCell, TableBody, Checkbox, LinearProgress,
-  FormControl, InputLabel, Select, MenuItem,
+  FormControl, InputLabel, Select, MenuItem, Autocomplete,
 } from "@mui/material";
+import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
+import { getBrands } from "../../../api/Brands/BrandsApi";
+import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
+import { toSinhalaSearch } from "../../../utils/singlishSearch";
 import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
@@ -24,6 +28,13 @@ export default function MrpSetupPage() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [bulkSearch, setBulkSearch] = useState("");
+  const [category, setCategory] = useState<any>(null);
+  const [subcategory, setSubcategory] = useState<any>(null);
+  const [brand, setBrand] = useState<any>(null);
+
+  const { data: categories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories() });
+  const { data: subcategories } = useQuery({ queryKey: ["subcategories"], queryFn: () => getSubcategories() });
+  const { data: brands } = useQuery({ queryKey: ["brands"], queryFn: () => getBrands() });
 
   const { data: allStock, isLoading: stockLoading } = useQuery({
     queryKey: ["stock-list-all-mrp"],
@@ -55,12 +66,27 @@ export default function MrpSetupPage() {
     selling_price: sellingPriceMap.get(String(s.stock_id)) ?? 0,
   }));
 
-  const filteredStock = bulkSearch.trim()
-    ? stockList.filter((s: any) =>
-        s.description?.toLowerCase().includes(bulkSearch.toLowerCase()) ||
-        s.stock_id?.toLowerCase().includes(bulkSearch.toLowerCase())
-      )
-    : stockList;
+  // Singlish search, same as POS Checkout: "parippu" also matches "පරිප්පු".
+  const sinhalaSearch = useMemo(() => toSinhalaSearch(bulkSearch), [bulkSearch]);
+  const sameId = (a: unknown, b: unknown) => a != null && b != null && String(a) === String(b);
+
+  const filteredStock = stockList.filter((s: any) => {
+    const term = bulkSearch.trim().toLowerCase();
+    if (term) {
+      const name = String(s.description ?? "").toLowerCase();
+      const id = String(s.stock_id ?? "").toLowerCase();
+      const matches = name.includes(term) || id.includes(term) || (!!sinhalaSearch && name.includes(sinhalaSearch));
+      if (!matches) return false;
+    }
+    if (category && !sameId(s.category_id, category.category_id)) return false;
+    if (subcategory && !sameId(s.subcategory_id, subcategory.id)) return false;
+    if (brand && !sameId(s.brand_id, brand.id)) return false;
+    return true;
+  });
+
+  // Only ticked items that are currently visible get the MRP — so the button
+  // count must match what Apply will actually update.
+  const selectedVisibleCount = filteredStock.filter((s: any) => bulkSelected.has(s.stock_id)).length;
 
   const toggleSelect = (stockId: string) => {
     setBulkSelected((prev) => {
@@ -71,7 +97,7 @@ export default function MrpSetupPage() {
   };
 
   const toggleAll = () => {
-    if (bulkSelected.size === filteredStock.length) {
+    if (filteredStock.length > 0 && selectedVisibleCount === filteredStock.length) {
       setBulkSelected(new Set());
     } else {
       setBulkSelected(new Set(filteredStock.map((s: any) => s.stock_id)));
@@ -151,15 +177,42 @@ export default function MrpSetupPage() {
             />
             <Button
               variant="contained"
-              disabled={bulkSelected.size === 0 || !!bulkProgress}
+              disabled={selectedVisibleCount === 0 || !!bulkProgress}
               onClick={applyBulkMrp}
               startIcon={<PriceChangeIcon />}
               sx={{ height: 40, whiteSpace: "nowrap", flexShrink: 0 }}
             >
               {bulkProgress
                 ? `Updating ${bulkProgress.done}/${bulkProgress.total}...`
-                : `Apply to ${bulkSelected.size} item${bulkSelected.size !== 1 ? "s" : ""}`}
+                : `Apply to ${selectedVisibleCount} item${selectedVisibleCount !== 1 ? "s" : ""}`}
             </Button>
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <Autocomplete
+              sx={{ flex: 1 }}
+              options={categories ?? []}
+              getOptionLabel={(c: any) => c.description ?? ""}
+              value={category}
+              onChange={(_, v) => setCategory(v)}
+              renderInput={(p) => <TextField {...p} label="Category" size="small" />}
+            />
+            <Autocomplete
+              sx={{ flex: 1 }}
+              options={subcategories ?? []}
+              getOptionLabel={(sc: any) => sc.name ?? ""}
+              value={subcategory}
+              onChange={(_, v) => setSubcategory(v)}
+              renderInput={(p) => <TextField {...p} label="Subcategory" size="small" />}
+            />
+            <Autocomplete
+              sx={{ flex: 1 }}
+              options={brands ?? []}
+              getOptionLabel={(b: any) => b.name ?? ""}
+              value={brand}
+              onChange={(_, v) => setBrand(v)}
+              renderInput={(p) => <TextField {...p} label="Brand" size="small" />}
+            />
           </Stack>
 
           {bulkProgress && (
@@ -176,8 +229,8 @@ export default function MrpSetupPage() {
                     <TableCell padding="checkbox">
                       <Checkbox
                         size="small"
-                        checked={filteredStock.length > 0 && bulkSelected.size === filteredStock.length}
-                        indeterminate={bulkSelected.size > 0 && bulkSelected.size < filteredStock.length}
+                        checked={filteredStock.length > 0 && selectedVisibleCount === filteredStock.length}
+                        indeterminate={selectedVisibleCount > 0 && selectedVisibleCount < filteredStock.length}
                         onChange={toggleAll}
                       />
                     </TableCell>

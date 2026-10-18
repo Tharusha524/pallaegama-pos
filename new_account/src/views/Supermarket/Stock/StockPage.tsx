@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { toSinhalaSearch } from "../../../utils/singlishSearch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Stack, TextField, Autocomplete, Table, TableHead, TableRow,
@@ -103,7 +104,7 @@ function ProductsTab() {
   const { data: brands } = useQuery({ queryKey: ["brands"], queryFn: () => getBrands() });
   const { data: subcategories } = useQuery({ queryKey: ["subcategories"], queryFn: () => getSubcategories() });
   const { data: itemUnits } = useQuery({ queryKey: ["item-units"], queryFn: () => getItemUnits() });
-  const { data: stockFromApi, isLoading } = useQuery({
+  const { data: typedStockFromApi, isLoading } = useQuery({
     queryKey: ["stock-list", search, category?.category_id, brand?.id, subcategory?.id],
     queryFn: () => getStockList({
       search: search || undefined,
@@ -112,6 +113,25 @@ function ProductsTab() {
       subcategory_id: subcategory?.id,
     }),
   });
+
+  // Singlish search, same as POS Checkout: "parippu" also searches "පරිප්පු".
+  const sinhalaSearch = useMemo(() => toSinhalaSearch(search), [search]);
+  const { data: sinhalaStockFromApi } = useQuery({
+    queryKey: ["stock-list", sinhalaSearch, category?.category_id, brand?.id, subcategory?.id],
+    queryFn: () => getStockList({
+      search: sinhalaSearch,
+      category_id: category?.category_id,
+      brand_id: brand?.id,
+      subcategory_id: subcategory?.id,
+    }),
+    enabled: sinhalaSearch.length > 0,
+  });
+  const stockFromApi = useMemo(() => {
+    if (!typedStockFromApi) return undefined;
+    if (!sinhalaSearch || !sinhalaStockFromApi) return typedStockFromApi;
+    const seen = new Set(typedStockFromApi.map((s: any) => String(s.stock_id)));
+    return [...typedStockFromApi, ...sinhalaStockFromApi.filter((s: any) => !seen.has(String(s.stock_id)))];
+  }, [typedStockFromApi, sinhalaStockFromApi, sinhalaSearch]);
 
   // A separate, always-unfiltered fetch purely to keep a full offline
   // snapshot current — the filtered query above only ever holds whatever
@@ -133,9 +153,10 @@ function ProductsTab() {
   // server would, since there's nothing to send the search/category to.
   const stock = isOffline
     ? offlineStock.filter((s: any) => {
-        const matchesSearch = !search || [s.description, s.stock_id, s.barcode].some((v) =>
-          String(v ?? "").toLowerCase().includes(search.toLowerCase())
-        );
+        const matchesSearch = !search || [s.description, s.stock_id, s.barcode].some((v) => {
+          const value = String(v ?? "").toLowerCase();
+          return value.includes(search.toLowerCase()) || (!!sinhalaSearch && value.includes(sinhalaSearch));
+        });
         const matchesCategory = !category?.category_id || s.category_id === category.category_id;
         const matchesBrand = !brand?.id || s.brand_id === brand.id;
         const matchesSubcategory = !subcategory?.id || s.subcategory_id === subcategory.id;
@@ -451,8 +472,11 @@ function StockDamageTab() {
 
   const { data: damagesFromApi, isLoading } = useQuery({ queryKey: ["stock-damages"], queryFn: () => getStockDamages() });
   const { data: itemsFromApi } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
+  // Full stock list (barcode, unit, stock on hand) so the Product dropdown can show details.
+  const { data: stockDetailsFromApi } = useQuery({ queryKey: ["stock-list-all"], queryFn: () => getStockList() });
   const [offlineDamages, setOfflineDamages] = useState<any[]>([]);
   const [offlineItems, setOfflineItems] = useState<any[]>([]);
+  const [offlineStockDetails, setOfflineStockDetails] = useState<any[]>([]);
   const [pendingDamages, setPendingDamages] = useState<PendingStockDamage[]>([]);
 
   const refreshPendingDamages = () => {
@@ -463,6 +487,7 @@ function StockDamageTab() {
   useEffect(() => {
     if (!isDesktopApp()) return;
     getReferenceData<any[]>("stock_damages").then((v) => v && setOfflineDamages(v)).catch(() => {});
+    getReferenceData<any[]>("stock_list").then((v) => v && setOfflineStockDetails(v)).catch(() => {});
     listOfflineProducts().then((rows) =>
       setOfflineItems(rows.map((r) => ({ stock_id: r.stock_id, description: r.description })))
     ).catch(() => {});
@@ -474,7 +499,25 @@ function StockDamageTab() {
     saveReferenceData("stock_damages", damagesFromApi).catch(() => {});
   }, [damagesFromApi]);
 
-  const items = itemsFromApi && itemsFromApi.length > 0 ? itemsFromApi : offlineItems;
+  const items =
+    stockDetailsFromApi && stockDetailsFromApi.length > 0 ? stockDetailsFromApi
+    : itemsFromApi && itemsFromApi.length > 0 ? itemsFromApi
+    : offlineStockDetails.length > 0 ? offlineStockDetails
+    : offlineItems;
+
+  // Product search: name, stock ID, barcode — plus Singlish ("kakar" → "කැකර්").
+  const filterDamageProducts = (options: any[], { inputValue }: { inputValue: string }) => {
+    const term = inputValue.trim().toLowerCase();
+    if (!term) return options;
+    const sinhala = toSinhalaSearch(inputValue);
+    return options.filter((i: any) => {
+      const name = String(i.description ?? "").toLowerCase();
+      return name.includes(term)
+        || String(i.stock_id ?? "").toLowerCase().includes(term)
+        || String(i.barcode ?? "").includes(inputValue.trim())
+        || (!!sinhala && name.includes(sinhala));
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: recordStockDamage,
@@ -607,9 +650,28 @@ function StockDamageTab() {
             <Autocomplete
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
+              filterOptions={filterDamageProducts}
+              isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
               value={form.stock_id}
               onChange={(_, val) => setForm({ ...form, stock_id: val })}
-              renderInput={(params) => <TextField {...params} label="Product" />}
+              renderOption={(props, option: any) => (
+                <li {...props} key={option.stock_id}>
+                  <Stack>
+                    <Typography variant="body2">{option.description}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {[
+                        option.stock_id,
+                        option.barcode ? `Barcode: ${option.barcode}` : null,
+                        option.unit_name ?? null,
+                        option.quantity != null ? `Stock: ${option.quantity}` : null,
+                      ].filter(Boolean).join(" · ")}
+                    </Typography>
+                  </Stack>
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField {...params} label="Product" placeholder="Search name, stock ID or barcode" />
+              )}
             />
             <TextField label="Quantity Damaged" type="number" fullWidth value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
             <TextField label="Reason" fullWidth value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toSinhalaSearch } from "../../../utils/singlishSearch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Stack, TextField, Autocomplete, Button, Typography, Divider,
@@ -48,17 +49,39 @@ export default function SetPricePage() {
   const [eoqOrderingCost, setEoqOrderingCost] = useState("");
   const [eoqHoldingCostPercent, setEoqHoldingCostPercent] = useState("");
 
-  const { data: results } = useQuery({
+  const { data: typedResults } = useQuery({
     queryKey: ["stock-search", search],
     queryFn: () => getStockList({ search: search || undefined }),
     enabled: search.length > 0,
   });
 
-  const { data: existingPricing } = useQuery({
+  // Singlish search, same as POS Checkout: "parippu" also searches "පරිප්පු".
+  const sinhalaSearch = useMemo(() => toSinhalaSearch(search), [search]);
+
+  const { data: sinhalaResults } = useQuery({
+    queryKey: ["stock-search", sinhalaSearch],
+    queryFn: () => getStockList({ search: sinhalaSearch }),
+    enabled: sinhalaSearch.length > 0,
+  });
+
+  const results = useMemo(() => {
+    const seen = new Set<string>();
+    return [...(typedResults ?? []), ...(sinhalaSearch ? sinhalaResults ?? [] : [])].filter((p: any) => {
+      const id = String(p.stock_id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [typedResults, sinhalaResults, sinhalaSearch]);
+
+  const { data: existingPricing, isFetched: pricingFetched } = useQuery({
     queryKey: ["sales-pricing", product?.stock_id],
     queryFn: () => getSalesPricingByStockId(product.stock_id),
     enabled: !!product,
   });
+  // Product whose saved price has already been loaded into the fields — so
+  // later refetches (e.g. after Save) don't overwrite what the user is typing.
+  const pricingLoadedFor = useRef<string | null>(null);
 
   const currentPricing = (existingPricing ?? []).find(
     (p: any) => p.sales_type_id === RETAIL_SALES_TYPE_ID && p.currency_id === LKR_CURRENCY_ID
@@ -82,17 +105,39 @@ export default function SetPricePage() {
 
   useEffect(() => {
     if (!product) return;
-    if (lastEdited === "price" && cost > 0) {
+    if (lastEdited === "price" && cost > 0 && sellingPrice !== "") {
       const computedMargin = ((Number(sellingPrice) || 0) - cost) / cost * 100;
       setMargin(computedMargin.toFixed(1));
     }
   }, [sellingPrice, cost, product, lastEdited]);
 
+  // On opening a product, show its saved selling price and the real margin
+  // (saved price vs purchase cost) instead of a fixed 20% default. Margin is
+  // left blank when there's no purchase cost to calculate it from.
+  useEffect(() => {
+    if (!product || !pricingFetched) return;
+    const stockId = String(product.stock_id);
+    if (pricingLoadedFor.current === stockId) return;
+    pricingLoadedFor.current = stockId;
+    if (currentPricing) {
+      const saved = Number(currentPricing.price) || 0;
+      setLastEdited("price");
+      setSellingPrice(saved ? String(saved) : "");
+      setMargin(cost > 0 && saved ? (((saved - cost) / cost) * 100).toFixed(1) : "");
+    } else {
+      // No saved price yet: suggest one from the purchase cost, as before.
+      setLastEdited("margin");
+      setMargin("20");
+    }
+  }, [product, pricingFetched, currentPricing, cost]);
+
   const selectProduct = (p: any) => {
+    pricingLoadedFor.current = null;
     setProduct(p);
     setSearch("");
-    setMargin("20");
-    setLastEdited("margin");
+    setMargin("");
+    setSellingPrice("");
+    setLastEdited("price");
     setNewBarcode("");
     setMrpPrice(p.mrp_price != null ? String(p.mrp_price) : "");
     setExpiryDate(p.expiry_date ? String(p.expiry_date).slice(0, 10) : "");

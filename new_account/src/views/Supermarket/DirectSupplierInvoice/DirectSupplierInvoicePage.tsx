@@ -27,6 +27,14 @@ interface Line {
 let lineSeq = 1;
 const emptyLine = (): Line => ({ id: lineSeq++, item: null, description: "", quantity: "1", unit_price: "0" });
 
+/** The item's cost the system actually uses: average cost from received stock, else the entered purchase cost. */
+const currentCost = (item: any): number | null => {
+  const average = Number(item?.material_cost) || 0;
+  if (average > 0) return average;
+  const purchase = Number(item?.purchase_cost) || 0;
+  return purchase > 0 ? purchase : null;
+};
+
 export default function DirectSupplierInvoicePage() {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -135,7 +143,7 @@ export default function DirectSupplierInvoicePage() {
                 <TableCell sx={{ width: "35%" }}>Product</TableCell>
                 <TableCell sx={{ width: "25%" }}>Description</TableCell>
                 <TableCell sx={{ width: "12%" }} align="right">Qty</TableCell>
-                <TableCell sx={{ width: "15%" }} align="right">Unit Price (LKR)</TableCell>
+                <TableCell sx={{ width: "15%" }} align="right">Purchase Price (LKR)</TableCell>
                 <TableCell sx={{ width: "10%" }} align="right">Amount</TableCell>
                 <TableCell sx={{ width: "3%" }} />
               </TableRow>
@@ -178,6 +186,13 @@ export default function DirectSupplierInvoicePage() {
                       inputProps={{ min: 0, step: "any", style: { textAlign: "right" } }}
                       sx={{ width: 120 }}
                     />
+                    {line.item && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                        {currentCost(line.item) != null
+                          ? `Current cost: LKR ${currentCost(line.item)!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : "Current cost: not set"}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2">

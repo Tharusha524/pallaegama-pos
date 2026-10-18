@@ -68,8 +68,12 @@ const multipart = { headers: { "Content-Type": "multipart/form-data" } };
 export const getOffers = async () => (await api.get("/offers")).data;
 export const createOffer = async (data: OfferInput) =>
   (await api.post("/offers", toOfferFormData(data), multipart)).data;
-export const updateOffer = async (id: number | string, data: OfferInput) =>
-  (await api.put(`/offers/${id}`, toOfferFormData(data), multipart)).data;
+// PHP can't read multipart bodies on PUT, so send POST + _method=PUT (Laravel method spoofing).
+export const updateOffer = async (id: number | string, data: OfferInput) => {
+  const fd = toOfferFormData(data);
+  fd.append("_method", "PUT");
+  return (await api.post(`/offers/${id}`, fd, multipart)).data;
+};
 export const deleteOffer = async (id: number | string) => (await api.delete(`/offers/${id}`)).data;
 export const getApplicableOffers = async (params: { debtor_no?: number; stock_id?: string; category_id?: string }) =>
   (await api.get("/offers-applicable", { params })).data;

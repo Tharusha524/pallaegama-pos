@@ -21,10 +21,11 @@ class PurchaseAnalyticsController extends Controller
                      ->on('st.trans_type', '=', 'sii.supp_trans_type');
             })
             ->join('suppliers as s', 's.supplier_id', '=', 'st.supplier_id')
-            ->select('sii.stock_id')
+            ->leftJoin('stock_master as sm', 'sm.stock_id', '=', 'sii.stock_id')
+            ->select('sii.stock_id', 'sm.description')
             ->selectRaw('MIN(sii.unit_price) as lowest_price')
             ->selectRaw('s.supp_name as supplier_name')
-            ->groupBy('sii.stock_id', 's.supp_name');
+            ->groupBy('sii.stock_id', 'sm.description', 's.supp_name');
 
         if ($stockId) {
             $query->where('sii.stock_id', $stockId);

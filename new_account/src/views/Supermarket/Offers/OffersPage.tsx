@@ -1,4 +1,24 @@
 import { useEffect, useState } from "react";
+import { toSinhalaSearch } from "../../../utils/singlishSearch";
+
+/** Today's date (YYYY-MM-DD) in the PC's own time zone, not UTC. */
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+// Products search: name, stock ID — plus Singlish ("kakar" → "කැකර්").
+const filterOfferProducts = (options: any[], { inputValue }: { inputValue: string }) => {
+  const term = inputValue.trim().toLowerCase();
+  if (!term) return options;
+  const sinhala = toSinhalaSearch(inputValue);
+  return options.filter((i: any) => {
+    const name = String(i.description ?? "").toLowerCase();
+    return name.includes(term)
+      || String(i.stock_id ?? "").toLowerCase().includes(term)
+      || (!!sinhala && name.includes(sinhala));
+  });
+};
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
@@ -230,7 +250,13 @@ export default function OffersPage() {
                   <TableCell align="center">{popularityMap.get(offer.id) ?? 0}</TableCell>
                   <TableCell align="right">{formatCurrency(revenueMap.get(offer.id) ?? 0)}</TableCell>
                   <TableCell align="center">
-                    <Chip label={offer.status} size="small" color={offer.status === "active" ? "success" : "default"} />
+                    {(() => {
+                      // "active" is a manual switch; past its end date the offer no longer applies.
+                      const isExpired = offer.status === "active" && String(offer.valid_to).slice(0, 10) < localToday();
+                      return isExpired
+                        ? <Chip label="expired" size="small" color="error" variant="outlined" />
+                        : <Chip label={offer.status} size="small" color={offer.status === "active" ? "success" : "default"} />;
+                    })()}
                   </TableCell>
                   <TableCell align="center">
                     <IconButton size="small" onClick={() => openEditDialog(offer)}>
@@ -271,9 +297,19 @@ export default function OffersPage() {
                 multiple
                 options={items ?? []}
                 getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
+                filterOptions={filterOfferProducts}
+                isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
+                renderOption={(props, option: any) => (
+                  <li {...props} key={option.stock_id}>
+                    <Typography variant="body2">
+                      {option.description}{" "}
+                      <Typography component="span" variant="caption" color="text.secondary">({option.stock_id})</Typography>
+                    </Typography>
+                  </li>
+                )}
                 value={selectedProducts}
                 onChange={(_, val) => setSelectedProducts(val)}
-                renderInput={(params) => <TextField {...params} label="Products" placeholder="Search by name" />}
+                renderInput={(params) => <TextField {...params} label="Products" placeholder="Search by name or stock ID" />}
               />
             )}
             {form.offer_type === "category" && (

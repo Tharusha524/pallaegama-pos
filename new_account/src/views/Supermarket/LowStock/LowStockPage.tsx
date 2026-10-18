@@ -37,7 +37,8 @@ export default function LowStockPage() {
 
   const saveMutation = useMutation({
     mutationFn: ({ loc, stock, level }: { loc: string; stock: string; level: number }) =>
-      updateLocStock(loc, stock, { reorder_level: level }),
+      // The backend validates loc_code + stock_id in the body, not just the URL.
+      updateLocStock(loc, stock, { loc_code: loc, stock_id: stock, reorder_level: level }),
     onSuccess: () => {
       notify.success("Reorder level updated");
       setEditKey(null);
@@ -148,6 +149,15 @@ export default function LowStockPage() {
                             </IconButton>
                           </Tooltip>
                         </Box>
+                      ) : row.loc_code === "N/A" ? (
+                        // No stock record at any location yet, so there's nothing to attach a reorder level to.
+                        <Tooltip title="Receive stock first to set a reorder level">
+                          <span>
+                            <IconButton size="small" disabled>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                       ) : (
                         <Tooltip title="Edit reorder level">
                           <IconButton size="small" onClick={() => startEdit(row)}>

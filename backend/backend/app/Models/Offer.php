@@ -35,8 +35,10 @@ class Offer extends Model
     protected $casts = [
         'discount_value' => 'decimal:2',
         'min_purchase_amount' => 'decimal:2',
-        'valid_from' => 'date',
-        'valid_to' => 'date',
+        // Plain Y-m-d in JSON: a bare 'date' cast serialises as UTC midnight
+        // (e.g. 2026-09-03T18:30Z for 2026-09-04 in Colombo), shown a day early.
+        'valid_from' => 'date:Y-m-d',
+        'valid_to' => 'date:Y-m-d',
     ];
 
     public function redemptions()

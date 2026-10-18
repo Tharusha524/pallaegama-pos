@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Typography, Stack, TextField, Button, Autocomplete, IconButton,
@@ -77,7 +79,6 @@ export default function PriceLabelsPage() {
   const [template, setTemplate] = useState<TemplateKey>("standard");
   const [customW, setCustomW] = useState("180");
   const [customH, setCustomH] = useState("90");
-  const [searchFilter, setSearchFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [history, setHistory] = useState<any[]>(loadHistory);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -86,13 +87,37 @@ export default function PriceLabelsPage() {
 
   const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
 
-  const categories = Array.from(new Set((items ?? []).map((i: any) => i.category_id).filter(Boolean)));
+  const { data: itemCategories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories() });
 
-  const filteredItems = (items ?? []).filter((i: any) => {
-    const matchSearch = !searchFilter || i.description?.toLowerCase().includes(searchFilter.toLowerCase()) || i.stock_id?.toLowerCase().includes(searchFilter.toLowerCase()) || i.barcode?.includes(searchFilter);
-    const matchCat = !categoryFilter || String(i.category_id) === String(categoryFilter);
-    return matchSearch && matchCat;
-  });
+  // Only categories that actually have products, shown by name (A–Z); the
+  // value stays the category id, so filtering works exactly as before.
+  const categoryNameById = new Map<string, string>(
+    (itemCategories ?? []).map((c: any) => [String(c.category_id), String(c.description ?? c.category_id)])
+  );
+  const categories = Array.from(new Set((items ?? []).map((i: any) => i.category_id).filter(Boolean)))
+    .map((id: any) => ({ id, name: categoryNameById.get(String(id)) ?? String(id) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const filteredItems = (items ?? []).filter((i: any) =>
+    !categoryFilter || String(i.category_id) === String(categoryFilter)
+  );
+
+  // Typing in the Product box searches name, stock ID and barcode — plus
+  // Singlish, same as POS Checkout ("kakar" also matches "කැකර්").
+  const filterProductOptions = (options: any[], { inputValue }: { inputValue: string }) => {
+    const term = inputValue.trim().toLowerCase();
+    if (!term) return options;
+    const sinhala = toSinhalaSearch(inputValue);
+    return options.filter((i: any) => {
+      const name = String(i.description ?? "").toLowerCase();
+      const label = `${i.description ?? ""} ${i.stock_id ? `(${i.stock_id})` : ""}`.toLowerCase();
+      return name.includes(term)
+        || label.includes(term)
+        || String(i.stock_id ?? "").toLowerCase().includes(term)
+        || String(i.barcode ?? "").includes(inputValue.trim())
+        || (!!sinhala && name.includes(sinhala));
+    });
+  };
 
   const addLine = () => {
     if (!pendingProduct) return;
@@ -210,28 +235,27 @@ export default function PriceLabelsPage() {
               </FormControl>
             </Stack>
 
-            {/* Search + Filter */}
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
-              <TextField size="small" placeholder="Search product / barcode..." value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} sx={{ flex: 1 }} />
-              <FormControl size="small" sx={{ minWidth: 160 }}>
-                <InputLabel>Category</InputLabel>
-                <Select value={categoryFilter} label="Category" onChange={(e) => setCategoryFilter(e.target.value)}>
-                  <MenuItem value="">All</MenuItem>
-                  {categories.map((c: any) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Stack>
-
-            {/* Add product row */}
+            {/* Add product row — the Product box is also the search box */}
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
               <Autocomplete
                 sx={{ flex: 1, minWidth: 240 }}
                 options={filteredItems}
+                filterOptions={filterProductOptions}
                 getOptionLabel={(i: any) => `${i.description ?? ""} ${i.stock_id ? `(${i.stock_id})` : ""}`}
+                isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
                 value={pendingProduct}
                 onChange={(_, v) => setPendingProduct(v)}
-                renderInput={(p) => <TextField {...p} label="Product" size="small" />}
+                renderInput={(p) => (
+                  <TextField {...p} label="Product" size="small" placeholder="Search product name, stock ID or barcode" />
+                )}
               />
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>Category</InputLabel>
+                <Select value={categoryFilter} label="Category" onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <MenuItem value="">All</MenuItem>
+                  {categories.map((c) => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+                </Select>
+              </FormControl>
               {["unit_per_kg", "unit_per_100g", "unit_per_litre"].includes(pendingPriceType) && (
                 <TextField label="Weight (kg)" type="number" size="small" sx={{ width: 120 }} value={pendingWeightKg} onChange={(e) => setPendingWeightKg(e.target.value)} inputProps={{ step: 0.001 }} />
               )}

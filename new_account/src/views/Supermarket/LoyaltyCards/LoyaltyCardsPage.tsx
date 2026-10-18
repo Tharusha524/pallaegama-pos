@@ -3,45 +3,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
   TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, Chip, Typography,
-  FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip,
+  IconButton, Tooltip,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import HistoryIcon from "@mui/icons-material/History";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
 import {
-  getLoyaltyCards, updateLoyaltyCard, getLoyaltyTiers,
-  getLoyaltyPointsHistory, redeemLoyaltyPoints, registerLoyaltyByPhone,
+  getLoyaltyCards, updateLoyaltyCard,
+  getLoyaltyPointsHistory, redeemLoyaltyPoints,
 } from "../../../api/Loyalty/loyaltyApi";
 import { notify } from "../../../services/notificationService";
 
 export default function LoyaltyCardsPage() {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [tierId, setTierId] = useState<any>("");
   const [ledgerCard, setLedgerCard] = useState<any>(null);
   const [adjustPoints, setAdjustPoints] = useState("");
   const [search, setSearch] = useState("");
 
   const { data: cards, isLoading } = useQuery({ queryKey: ["loyalty-cards"], queryFn: getLoyaltyCards });
-  const { data: tiers } = useQuery({ queryKey: ["loyalty-tiers"], queryFn: getLoyaltyTiers });
-
-  const registerMutation = useMutation({
-    mutationFn: () => registerLoyaltyByPhone({ name, mobile: phone, loyalty_tier_id: tierId || null }),
-    onSuccess: () => {
-      notify.success("Loyalty customer registered");
-      queryClient.invalidateQueries({ queryKey: ["loyalty-cards"] });
-      setOpen(false);
-      setName("");
-      setPhone("");
-      setTierId("");
-    },
-    onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to register"),
-  });
 
   const toggleStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => updateLoyaltyCard(id, { status }),
@@ -81,7 +62,6 @@ export default function LoyaltyCardsPage() {
           <PageTitle title="Loyalty Customers" />
           <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Loyalty Customers" }]} />
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Register Customer</Button>
       </Box>
 
       <Box sx={{ mb: 2 }}>
@@ -140,32 +120,6 @@ export default function LoyaltyCardsPage() {
           </Table>
         </TableContainer>
       )}
-
-      {/* Register new loyalty customer */}
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Register Loyalty Customer</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Customer Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-            <TextField label="Phone Number" value={phone} onChange={(e) => setPhone(e.target.value)} fullWidth placeholder="07XXXXXXXX" />
-            <FormControl fullWidth>
-              <InputLabel>Loyalty Tier</InputLabel>
-              <Select value={tierId} label="Loyalty Tier" onChange={(e) => setTierId(e.target.value)}>
-                <MenuItem value="">No Tier</MenuItem>
-                {(tiers ?? []).map((t: any) => (
-                  <MenuItem key={t.id} value={t.id}>{t.tier_name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={!name || !phone || registerMutation.isPending} onClick={() => registerMutation.mutate()}>
-            {registerMutation.isPending ? "Registering..." : "Register"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Points ledger dialog */}
       <Dialog open={!!ledgerCard} onClose={() => setLedgerCard(null)} maxWidth="sm" fullWidth>

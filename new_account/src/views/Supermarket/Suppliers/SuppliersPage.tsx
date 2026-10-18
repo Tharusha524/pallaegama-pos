@@ -1,4 +1,12 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+
+/** "56000.5" → "56,000.5" — keeps whatever decimals the user has typed so far. */
+const addThousandSeparators = (raw: string) => {
+  if (!raw) return raw;
+  const [intPart, decimals] = raw.split(".");
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return decimals !== undefined ? `${withCommas}.${decimals}` : withCommas;
+};
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
@@ -31,6 +39,24 @@ export default function SuppliersPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [creditLimitFocused, setCreditLimitFocused] = useState(false);
+  const creditLimitInputRef = useRef<HTMLInputElement>(null);
+  const pendingCreditCaret = useRef<number | null>(null);
+
+  // Put the cursor back after the same digit once commas have been re-inserted.
+  useLayoutEffect(() => {
+    const el = creditLimitInputRef.current;
+    const target = pendingCreditCaret.current;
+    if (!el || target == null) return;
+    pendingCreditCaret.current = null;
+    let count = 0;
+    let pos = 0;
+    while (pos < el.value.length && count < target) {
+      if (el.value[pos] !== ",") count++;
+      pos++;
+    }
+    el.setSelectionRange(pos, pos);
+  }, [form.credit_limit]);
   const [editingSupplier, setEditingSupplier] = useState<any>(null);
 
   const { data: suppliers, isLoading } = useQuery({ queryKey: ["suppliers-all"], queryFn: getSuppliers });
@@ -172,13 +198,39 @@ export default function SuppliersPage() {
             <Stack direction="row" spacing={2}>
               <TextField
                 label="Credit Limit" fullWidth
+                // Commas while typing (56,000); ".00" only once the box loses focus,
+                // otherwise ".00" gets appended mid-typing and the next digit lands after it.
                 value={
-                  form.credit_limit !== "" && !isNaN(Number(form.credit_limit))
+                  !creditLimitFocused && form.credit_limit !== "" && !isNaN(Number(form.credit_limit))
                     ? Number(form.credit_limit).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : form.credit_limit
+                    : addThousandSeparators(form.credit_limit)
                 }
-                onChange={(e) => set("credit_limit", e.target.value.replace(/,/g, ""))}
-                onFocus={(e) => e.target.select()}
+                inputRef={creditLimitInputRef}
+                onChange={(e) => {
+                  const el = e.target;
+                  const caret = el.selectionStart ?? el.value.length;
+                  let raw = el.value.replace(/,/g, "");
+                  // Remember how many real characters sit before the cursor, so it can be
+                  // put back in the same place after commas are re-inserted.
+                  let caretChars = el.value.slice(0, caret).replace(/,/g, "").length;
+                  // Backspace/Delete on a comma only removed the comma (which would just
+                  // come back) — remove the digit next to it instead.
+                  if (raw === form.credit_limit && el.value.length < addThousandSeparators(raw).length) {
+                    const forward = (e.nativeEvent as InputEvent).inputType === "deleteContentForward";
+                    if (forward) {
+                      raw = raw.slice(0, caretChars) + raw.slice(caretChars + 1);
+                    } else if (caretChars > 0) {
+                      raw = raw.slice(0, caretChars - 1) + raw.slice(caretChars);
+                      caretChars -= 1;
+                    }
+                  }
+                  if (!/^\d*\.?\d{0,2}$/.test(raw)) return;
+                  pendingCreditCaret.current = caretChars;
+                  set("credit_limit", raw);
+                }}
+                onFocus={(e) => { setCreditLimitFocused(true); const input = e.target; setTimeout(() => input.select(), 0); }}
+                onBlur={() => setCreditLimitFocused(false)}
+                inputProps={{ inputMode: "decimal" }}
                 InputProps={{ startAdornment: <InputAdornment position="start">LKR</InputAdornment> }}
               />
               <FormControl fullWidth>
