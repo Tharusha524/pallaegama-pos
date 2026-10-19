@@ -68,6 +68,14 @@ export const getVoucherByCode = async (code: string) => (await api.get(`/voucher
 export const redeemVoucher = async (data: { voucher_code: string; amount: number; debtor_trans_no?: number; debtor_trans_type?: number }) =>
   (await api.post("/vouchers-redeem", data)).data;
 
+// ---- Reprint old receipts (read-only) ----
+export const getPosReceipts = async (params: { from_date?: string; to_date?: string; search?: string }) =>
+  (await api.get("/pos-receipts", { params })).data;
+export const getPosReceipt = async (transNo: number | string) =>
+  (await api.get(`/pos-receipts/${transNo}`)).data;
+export const savePosReceiptCopy = async (transNo: number | string, data: Record<string, any>) =>
+  (await api.post(`/pos-receipts/${transNo}/copy`, { data }, { skipErrorDialog: true } as any)).data;
+
 // ---- Returns / Refunds (wraps the real Sales Credit Note posting) ----
 export const lookupInvoiceForReturn = async (transNo: number | string) =>
   (await api.get(`/sales/invoice-lookup/${transNo}`)).data;

@@ -7,6 +7,7 @@ import { useHomeCurrency } from "../hooks/useHomeCurrency";
 import { getCompanies } from "../api/CompanySetup/CompanySetupApi";
 import useCurrentUser from "../hooks/useCurrentUser";
 import { resolveLogoSrc } from "../utils/logoUrl";
+import { loadReceiptBranding } from "../offline/receiptBranding";
 import html2canvas from "html2canvas";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -75,6 +76,10 @@ interface PosReceiptDialogProps {
   shiftId?: number | string;
   couponCode?: string;
   voucherCode?: string;
+  /** Reprint of an old receipt: same receipt, with its original date-time and cashier. */
+  reprint?: boolean;
+  printedAt?: string;
+  cashierName?: string;
 }
 
 /**
@@ -104,6 +109,7 @@ function renderCustomFields(fields: any[], position: string) {
 export default function PosReceiptDialog({
   open, onClose, transNo, customerName, lines, total, payments, cashReceived,
   paperSize = "80mm Thermal", isQuote = false, receiptSettings, shiftId, couponCode, voucherCode,
+  reprint = false, printedAt, cashierName,
 }: PosReceiptDialogProps) {
   const { formatCurrency } = useHomeCurrency();
   const { user } = useCurrentUser();
@@ -191,14 +197,29 @@ export default function PosReceiptDialog({
 
   const fmt = (v: number) => rs.show_currency_symbol ? formatCurrency(v, 2) : v.toFixed(2);
 
-  const { data: companies } = useQuery({
+  const { data: companies, isError: companiesFailed } = useQuery({
     queryKey: ["company-setup-list"],
     queryFn: getCompanies,
     enabled: open,
   });
-  const company = companies?.[0];
-  const logoSrc = resolveLogoSrc(company?.company_logo_url);
-  const now = new Date();
+  const liveCompany = companies?.[0];
+
+  // Offline only: use the copy the POS page saved earlier. Company details may
+  // still be in memory from before the connection dropped, but their logo is a
+  // server link that can't load offline. Online, none of this runs.
+  const needsOfflineBranding = open && (!navigator.onLine || (!liveCompany && companiesFailed));
+  const [offlineBranding, setOfflineBranding] = useState<{ company: any; logo: string | null } | null>(null);
+  useEffect(() => {
+    if (!needsOfflineBranding || offlineBranding) return;
+    loadReceiptBranding().then((b) => { if (b) setOfflineBranding(b); });
+  }, [needsOfflineBranding, offlineBranding]);
+
+  const company = liveCompany ?? (needsOfflineBranding ? offlineBranding?.company : undefined);
+  const logoSrc = needsOfflineBranding && offlineBranding?.logo
+    ? offlineBranding.logo
+    : (liveCompany ? resolveLogoSrc(liveCompany.company_logo_url) : undefined);
+  // Reprints show the original sale time ("YYYY-MM-DD HH:mm:ss" from the server).
+  const now = printedAt ? new Date(printedAt.replace(" ", "T")) : new Date();
   const subtotal = lines.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
 
   const handlePrint = useCallback(() => {
@@ -296,7 +317,9 @@ export default function PosReceiptDialog({
       startRender()?.catch(() => { /* pre-render failed — handlePrint will re-render */ });
     }, 300); // small delay so DOM is fully painted
     return () => clearTimeout(timer);
-  }, [open, transNo, company, startRender]);
+  // logoSrc: offline, the saved logo arrives after the dialog opens — redo the
+  // image once it does (online it's a fixed URL, so this never re-runs).
+  }, [open, transNo, company, startRender, logoSrc]);
 
   const isThermal = paperSize.includes("80mm");
 
@@ -313,7 +336,7 @@ export default function PosReceiptDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle className="pos-receipt-no-print">{isQuote ? `Quotation #${transNo}` : `Receipt — Invoice #${transNo}`}</DialogTitle>
+      <DialogTitle className="pos-receipt-no-print">{isQuote ? `Quotation #${transNo}` : `${reprint ? "Reprint" : "Receipt"} — Invoice #${transNo}`}</DialogTitle>
       <DialogContent ref={scrollRef}>
         <style>{`
           @media print {
@@ -427,7 +450,7 @@ export default function PosReceiptDialog({
               <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_date_time ?? "Date-Time"}\u00A0\u00A0:\u00A0\u00A0${now.toLocaleDateString("en-GB").replace(/\//g, "-")}\u00A0\u00A0${now.toLocaleTimeString()}`}</Typography>
             )}
             {rs.show_cashier && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_cashier}:\u00A0${user?.first_name || user?.email || "—"}`}</Typography>
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_cashier}:\u00A0${cashierName || user?.first_name || user?.email || "—"}`}</Typography>
             )}
             {rs.terminal_id && (
               <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Terminal:\u00A0${rs.terminal_id}`}</Typography>

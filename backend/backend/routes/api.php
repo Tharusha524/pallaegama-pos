@@ -541,6 +541,11 @@ Route::get('purchase-analytics/best-suppliers', [PurchaseAnalyticsController::cl
 
 Route::get('barcode-lookup', [BarcodeLookupController::class, 'lookup']);
 
+// ---- Reprint old POS receipts (read-only) ----
+Route::get('pos-receipts', [\App\Http\Controllers\PosReprintController::class, 'index']);
+Route::get('pos-receipts/{transNo}', [\App\Http\Controllers\PosReprintController::class, 'show'])->whereNumber('transNo');
+Route::post('pos-receipts/{transNo}/copy', [\App\Http\Controllers\PosReprintController::class, 'storeCopy'])->whereNumber('transNo');
+
 // ---- Held sales (park / recall cart) ----
 Route::apiResource('held-sales', HeldSaleController::class)->only(['index', 'store', 'show', 'destroy']);
 

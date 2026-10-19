@@ -49,14 +49,17 @@ import { getFriendlyApiErrorMessage } from "../../../utils/apiErrorMessage";
 import useCurrentUser from "../../../hooks/useCurrentUser";
 import {
   getHeldSales, holdSale, deleteHeldSale, applyCoupon, confirmCouponUsage, redeemVoucher, getVoucherByCode,
-  getFrequentlyBoughtTogether, getPosSettings,
+  getFrequentlyBoughtTogether, getPosSettings, savePosReceiptCopy,
 } from "../../../api/Pos/posOpsApi";
 import { deductVariantStock } from "../../../api/Pos/posAdvancedApi";
 import { getCardTypes, tagPaymentCardType } from "../../../api/CardType/CardTypeApi";
 import { getLoyaltyCards, redeemLoyaltyPoints, getLoyaltyByPhone, registerLoyaltyByPhone } from "../../../api/Loyalty/loyaltyApi";
 import PosReceiptDialog from "../../../components/PosReceiptDialog";
+import PosReprintDialog, { type ReprintReceipt } from "../../../components/PosReprintDialog";
+import PrintIcon from "@mui/icons-material/Print";
 import QuickAddCustomerDialog from "../../../components/QuickAddCustomerDialog";
 import { useOnlineStatus, getOrCreateTerminalId } from "../../../offline/useOnlineStatus";
+import { cacheReceiptBranding } from "../../../offline/receiptBranding";
 import {
   isDesktopApp, queuePendingSale, saveProductsSnapshot, saveCustomersSnapshot,
   listProducts as listOfflineProducts, listCustomers, findProductByBarcode,
@@ -188,6 +191,8 @@ export default function PosCheckoutPage() {
   const paymentAmountInputRef = useRef<HTMLInputElement>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [reprintOpen, setReprintOpen] = useState(false);
+  const [reprintReceipt, setReprintReceipt] = useState<ReprintReceipt | null>(null);
   const [isQuoteReceipt, setIsQuoteReceipt] = useState(false);
   // Wholesale — which cart line (if any) is currently waiting on PIN entry.
   const [wholesalePinTarget, setWholesalePinTarget] = useState<string | null>(null);
@@ -218,7 +223,24 @@ export default function PosCheckoutPage() {
     }
   }, [isOnline]);
 
+  // Keep an offline copy of the company logo/details for offline receipts.
+  // Done here at page open (delayed, once per session) — never in the receipt.
+  useEffect(() => {
+    if (!isDesktopApp() || !isOnline) return;
+    const timer = setTimeout(() => { cacheReceiptBranding(); }, 5000);
+    return () => clearTimeout(timer);
+  }, [isOnline]);
+
   const { data: posSettings } = useQuery({ queryKey: ["pos-settings"], queryFn: getPosSettings });
+  // Receipt settings as the receipt dialog gets them (used for saved copies / reprints).
+  const buildReceiptSettings = () => {
+    try {
+      const s = posSettings?.receipt_settings ? JSON.parse(posSettings.receipt_settings) : {};
+      return { ...s, thermal_printer_name: posSettings?.thermal_printer_name, terminal_id: posSettings?.terminal_id };
+    } catch {
+      return { thermal_printer_name: posSettings?.thermal_printer_name, terminal_id: posSettings?.terminal_id };
+    }
+  };
   const { data: cardTypes } = useQuery({ queryKey: ["card-types"], queryFn: () => getCardTypes() });
 
   // Quick discount / coupon / voucher
@@ -927,6 +949,29 @@ export default function PosCheckoutPage() {
           amount: Number(p.amount) || 0,
         }));
       setLastReceipt({ ...result, lines: cart, subtotal: grandTotal, customer, payments: receiptPayments, cashReceived: totalPaid, couponCode: appliedCoupon?.coupon_code, voucherCode: appliedVoucher?.code, shift_id: currentShiftId });
+
+      // Exact copy of this receipt for future reprints — sent in the background a
+      // moment later, outside the receipt/print code, failures ignored.
+      const receiptCopy = {
+        printedAt: new Date().toISOString(),
+        cashierName: user?.first_name || user?.email || null,
+        customerName: customer?.name ?? null,
+        lines: cart.map((l) => ({
+          stock_id: l.stock_id, description: l.description, quantity: l.quantity,
+          unit_price: l.unit_price, discount_percent: l.discount_percent, mrp_price: l.mrp_price ?? null,
+        })),
+        total: grandTotal,
+        payments: receiptPayments,
+        cashReceived: totalPaid,
+        couponCode: appliedCoupon?.coupon_code ?? null,
+        voucherCode: appliedVoucher?.code ?? null,
+        shiftId: currentShiftId ?? null,
+        paperSize: posSettings?.receipt_paper_size ?? null,
+        receiptSettings: buildReceiptSettings(),
+      };
+      if (result?.trans_no) {
+        setTimeout(() => { savePosReceiptCopy(result.trans_no, receiptCopy).catch(() => {}); }, 2000);
+      }
       resetSaleState();
     },
     onError: (error) => {
@@ -944,6 +989,7 @@ export default function PosCheckoutPage() {
       // (see keyboardShortcutStateRef above) instead of closing over it
       // here, since this listener is registered once on mount.
       const s = keyboardShortcutStateRef.current;
+      if (s.reprintActive) return;
 
       // F9/F12/Esc — familiar function-key shortcuts from the old till
       // software the client is used to. These work regardless of focus,
@@ -1148,7 +1194,10 @@ export default function PosCheckoutPage() {
         voucherCode: appliedVoucher?.code,
         shift_id: currentShiftId,
       });
-      setReceiptOpen(true);
+      // Offline saves instantly (no server wait like online), so the same Enter
+      // press that completed the sale would reach the receipt and print/close it.
+      // Open it a moment later so Enter → preview → Enter → print, as online.
+      setTimeout(() => setReceiptOpen(true), 150);
       resetSaleState();
       return;
     }
@@ -1411,6 +1460,7 @@ export default function PosCheckoutPage() {
     checkoutPending: checkoutMutation.isPending,
     quotePending: quoteMutation.isPending,
     handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine,
+    reprintActive: false,
   });
   useEffect(() => {
     keyboardShortcutStateRef.current = {
@@ -1418,6 +1468,8 @@ export default function PosCheckoutPage() {
       checkoutPending: checkoutMutation.isPending,
       quotePending: quoteMutation.isPending,
       handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine,
+      // While reprinting, Enter/F-keys belong to the reprint screens — never complete a sale.
+      reprintActive: reprintOpen || !!reprintReceipt,
     };
   });
 
@@ -1511,6 +1563,14 @@ export default function PosCheckoutPage() {
             sx={{ minHeight: isSquareScreen ? 34 : 44 }}
           >
             Recall Sale {heldSales && heldSales.length > 0 ? `(${heldSales.length})` : ""}
+          </Button>
+          <Button
+            variant="contained" color="secondary" size={isSquareScreen ? "small" : "medium"}
+            startIcon={<PrintIcon />} onClick={() => setReprintOpen(true)}
+            disabled={isOffline}
+            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+          >
+            Reprint
           </Button>
           <Button
             variant="contained" color="error" size={isSquareScreen ? "small" : "medium"}
@@ -2762,6 +2822,51 @@ export default function PosCheckoutPage() {
         voucherCode={lastReceipt?.voucherCode}
         shiftId={lastReceipt?.shift_id}
       />
+
+      <PosReprintDialog
+        open={reprintOpen}
+        onClose={() => { setReprintOpen(false); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
+        onSelect={(receipt) => {
+          setReprintOpen(false);
+          // Open a moment later so the Enter that picked the bill can't also print it.
+          setTimeout(() => setReprintReceipt(receipt), 150);
+        }}
+      />
+      {reprintReceipt && (() => {
+        // New bills: the exact copy saved at sale time. Older bills: rebuilt from the invoice.
+        const copy = reprintReceipt.copy;
+        const sourceLines = copy?.lines ?? reprintReceipt.lines;
+        const sourcePayments = copy?.payments ?? reprintReceipt.payments;
+        return (
+          <PosReceiptDialog
+            open
+            reprint
+            printedAt={copy?.printedAt ?? reprintReceipt.created_at}
+            cashierName={copy?.cashierName ?? undefined}
+            onClose={() => { setReprintReceipt(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
+            transNo={reprintReceipt.trans_no}
+            customerName={(copy ? copy.customerName : reprintReceipt.customer_name) ?? undefined}
+            lines={sourceLines.map((l) => ({
+              stock_id: l.stock_id,
+              description: l.description,
+              quantity: Number(l.quantity) || 0,
+              unit_price: Number(l.unit_price) || 0,
+              discount_percent: Number(l.discount_percent) || 0,
+              mrp_price: l.mrp_price != null ? Number(l.mrp_price) : null,
+            }))}
+            total={Number(copy?.total ?? reprintReceipt.total) || 0}
+            payments={sourcePayments.map((p) => ({ method: p.method, amount: Number(p.amount) || 0 }))}
+            cashReceived={copy
+              ? Number(copy.cashReceived) || 0
+              : sourcePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)}
+            paperSize={copy?.paperSize ?? posSettings?.receipt_paper_size}
+            receiptSettings={copy?.receiptSettings ?? buildReceiptSettings()}
+            couponCode={copy?.couponCode ?? undefined}
+            voucherCode={copy?.voucherCode ?? undefined}
+            shiftId={(copy ? copy.shiftId : reprintReceipt.shift_id) ?? undefined}
+          />
+        );
+      })()}
 
       <QuickAddCustomerDialog
         open={quickAddCustomerOpen}
