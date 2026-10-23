@@ -11,10 +11,11 @@ import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
 import { getStockAdjustments, createStockAdjustment } from "../../../api/Pos/posOpsApi";
+import BatchSelect from "../../../components/BatchSelect";
 import { getItems } from "../../../api/Item/ItemApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 
-const emptyForm = { stock_id: null as any, loc_code: "", movement_type: "add" as "add" | "reduce" | "override", quantity: "0", reason: "" };
+const emptyForm = { stock_id: null as any, loc_code: "", movement_type: "add" as "add" | "reduce" | "override", quantity: "0", reason: "", batch_id: "" as number | "" };
 
 export default function StockAdjustmentsPage() {
   const queryClient = useQueryClient();
@@ -42,6 +43,7 @@ export default function StockAdjustmentsPage() {
       movement_type: form.movement_type,
       quantity: Number(form.quantity) || 0,
       reason: form.reason,
+      batch_id: form.movement_type !== "override" && form.batch_id !== "" ? form.batch_id : undefined,
     });
   };
 
@@ -94,12 +96,12 @@ export default function StockAdjustmentsPage() {
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={form.stock_id}
-              onChange={(_, val) => setForm({ ...form, stock_id: val })}
+              onChange={(_, val) => setForm({ ...form, stock_id: val, batch_id: "" })}
               renderInput={(params) => <TextField {...params} label="Product" />}
             />
             <FormControl fullWidth>
               <InputLabel>Location</InputLabel>
-              <Select value={form.loc_code} label="Location" onChange={(e) => setForm({ ...form, loc_code: e.target.value })}>
+              <Select value={form.loc_code} label="Location" onChange={(e) => setForm({ ...form, loc_code: e.target.value, batch_id: "" })}>
                 {(locations ?? []).map((loc: any) => (
                   <MenuItem key={loc.loc_code} value={loc.loc_code}>{loc.location_name}</MenuItem>
                 ))}
@@ -114,6 +116,9 @@ export default function StockAdjustmentsPage() {
               </Select>
             </FormControl>
             <TextField label="Quantity" type="number" fullWidth value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+            {form.movement_type !== "override" && (
+              <BatchSelect stockId={form.stock_id?.stock_id} locCode={form.loc_code} value={form.batch_id} onChange={(v) => setForm({ ...form, batch_id: v })} />
+            )}
             <TextField label="Reason" fullWidth value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="waste / damage / general / count correction" />
           </Stack>
         </DialogContent>

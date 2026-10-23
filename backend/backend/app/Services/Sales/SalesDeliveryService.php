@@ -142,6 +142,7 @@ class SalesDeliveryService
                     'stock' => $stock,
                     'loc_code' => $locCode,
                     'calc_index' => count($calcLines) - 1,
+                    'batch_id' => isset($input['batch_id']) && (int) $input['batch_id'] > 0 ? (int) $input['batch_id'] : null,
                 ];
             }
 
@@ -263,7 +264,11 @@ class SalesDeliveryService
                             'updated_at' => now(),
                         ];
                         DB::table('stock_moves')->insert($move);
-                        $this->locStockQty->applyStockMoveRecord($move);
+                        // Picked batch applies to the sold item itself, not to kit components.
+                        $this->locStockQty->applyStockMoveRecord(
+                            $move,
+                            $stockLine['stock_id'] === (string) $detail->stk_code ? ['batch_id' => $row['batch_id'] ?? null] : []
+                        );
 
                         if ((int) ($component->mb_flag ?? 0) === FaDepreciationService::FA_MB_FLAG) {
                             DB::table('stock_master')
@@ -338,10 +343,12 @@ class SalesDeliveryService
                     ->where('trans_no', $transNo)
                     ->get();
                 foreach ($moves as $move) {
+                    // Put the stock back into the batches this delivery took it from.
                     $this->locStockQty->applyMoveDelta(
                         (string) $move->stock_id,
                         (string) $move->loc_code,
-                        -1 * (float) $move->qty
+                        -1 * (float) $move->qty,
+                        ['restore_from' => ['type' => self::TYPE_DELIVERY, 'no' => $transNo], 'trans_type' => self::TYPE_DELIVERY, 'trans_no' => $transNo, 'note' => 'Delivery void']
                     );
                 }
                 DB::table('stock_moves')

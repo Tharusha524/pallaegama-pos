@@ -284,8 +284,15 @@ class StockMasterController extends Controller
             'mrp_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
+        $oldMrp = $stockMaster->mrp_price === null ? null : (float) $stockMaster->mrp_price;
         $stockMaster->mrp_price = $validated['mrp_price'] ?? null;
         $stockMaster->save();
+        // The stock batches of those packets carry the corrected MRP too.
+        try {
+            app(\App\Services\Inventory\StockBatchService::class)->followProductPrice((string) $stockMaster->stock_id, $oldMrp);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json($stockMaster);
     }

@@ -33,7 +33,7 @@ import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/Sale
 import { createQuotation } from "../../../api/Quotations/QuotationsApi";
 import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
-import { lookupBarcode, getLowStock, getPosShifts } from "../../../api/Pos/posApi";
+import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getPendingPriceQty, type BatchPriceGroup } from "../../../api/Pos/posApi";
 import { getStockList } from "../../../api/Inventory/StockListApi";
 import { getSalesPricing, getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
 import { getPromotionalPrices } from "../../../api/PromotionalPrice/PromotionalPriceApi";
@@ -93,7 +93,15 @@ interface CartLine {
   wholesale_qty_threshold?: number;
   wholesale_price?: number;
   wholesale_applied?: boolean;
+  // Stock batch picked at the till when the same barcode has more than one
+  // price (old stock + new delivery) — each price is its own cart line.
+  batch_id?: number;
 }
+
+// Cart line identity used for edit/remove/row keys. Lines without a batch keep
+// their stock_id (exactly as before); batch lines of the same product differ.
+const lineId = (l: { stock_id: string; batch_id?: number }) =>
+  l.batch_id != null ? `${l.stock_id}#b${l.batch_id}` : l.stock_id;
 
 interface PaymentLine {
   id: string;
@@ -406,6 +414,54 @@ export default function PosCheckoutPage() {
   }, [stockListFromApi, offlineStockList]);
   const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
 
+  // Same barcode, more than one price (old stock + new delivery). Only those
+  // products are listed (usually a handful), loaded once and refreshed in the
+  // background, so scanning never waits on it and single-price items are
+  // untouched. Cached in SQLite for offline sales.
+  const { data: multiPriceFromApi } = useQuery({
+    queryKey: ["pos-multi-price", locCode],
+    queryFn: () => getMultiPriceProducts(locCode || undefined),
+    enabled: !isOffline,
+    refetchInterval: 60_000,
+    staleTime: 0,
+  });
+  const [offlineMultiPrice, setOfflineMultiPrice] = useState<Record<string, BatchPriceGroup[]>>({});
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    getReferenceData<Record<string, BatchPriceGroup[]>>("multi_price_products").then((v) => v && setOfflineMultiPrice(v)).catch(() => { });
+  }, []);
+  useEffect(() => {
+    if (!isDesktopApp() || !multiPriceFromApi) return;
+    saveReferenceData("multi_price_products", multiPriceFromApi).catch(() => { });
+  }, [multiPriceFromApi]);
+  const multiPriceMap: Record<string, BatchPriceGroup[]> = multiPriceFromApi ?? offlineMultiPrice;
+
+  // New-cost purchases wait without a price until it is set on Set Price — the
+  // till must not sell them. Only those products are listed; cached for offline.
+  const { data: pendingPriceFromApi } = useQuery({
+    queryKey: ["pos-pending-price", locCode],
+    queryFn: () => getPendingPriceQty(locCode || undefined),
+    enabled: !isOffline,
+    refetchInterval: 60_000,
+    staleTime: 0,
+  });
+  const [offlinePendingPrice, setOfflinePendingPrice] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    getReferenceData<Record<string, number>>("pending_price_qty").then((v) => v && setOfflinePendingPrice(v)).catch(() => { });
+  }, []);
+  useEffect(() => {
+    if (!isDesktopApp() || !pendingPriceFromApi) return;
+    saveReferenceData("pending_price_qty", pendingPriceFromApi).catch(() => { });
+  }, [pendingPriceFromApi]);
+  const pendingPriceMap: Record<string, number> = pendingPriceFromApi ?? offlinePendingPrice;
+  /** All the stock left has no selling price yet (set it on Set Price first). */
+  const onlyUnpricedStock = (stockId: string, totalQty: number) => {
+    const pending = Number(pendingPriceMap[stockId] ?? 0);
+    return pending > 0 && totalQty - pending <= 0;
+  };
+  const [batchPicker, setBatchPicker] = useState<{ item: any; groups: BatchPriceGroup[] } | null>(null);
+
   // Checkout can't even submit a sale without a shipping company and a bank
   // account to post the payment to — both are small, rarely-changing lists,
   // so cache them in SQLite the same way as products/customers instead of
@@ -591,16 +647,16 @@ export default function PosCheckoutPage() {
     // A specific variant (size/color/etc.) is tracked as its own cart line —
     // it must never merge into the base product's line, since it needs its
     // own variant_id for stock deduction after checkout.
-    const lineKey = variant ? `variant:${variant.id}` : item.stock_id;
+    const lineKey = variant ? `variant:${variant.id}` : lineId(item);
     const catalogPrice = Number(item.sale_price ?? item.purchase_cost) || 0;
     const unitPrice = overrides?.unitPrice ?? catalogPrice;
     const discountPercent = overrides?.discountPercent ?? 0;
 
     setCart((prev) => {
-      const existing = prev.find((l) => (l.variant_id ? `variant:${l.variant_id}` : l.stock_id) === lineKey);
+      const existing = prev.find((l) => (l.variant_id ? `variant:${l.variant_id}` : lineId(l)) === lineKey);
       if (existing) {
         return prev.map((l) =>
-          (l.variant_id ? `variant:${l.variant_id}` : l.stock_id) === lineKey
+          (l.variant_id ? `variant:${l.variant_id}` : lineId(l)) === lineKey
             ? { ...l, quantity: l.quantity + quantity }
             : l
         );
@@ -625,6 +681,7 @@ export default function PosCheckoutPage() {
           discount_mode: "net" as "percent" | "amount" | "net",
           wholesale_qty_threshold: item.wholesale_qty_threshold != null ? Number(item.wholesale_qty_threshold) : undefined,
           wholesale_price: item.wholesale_price != null ? Number(item.wholesale_price) : undefined,
+          batch_id: item.batch_id != null ? Number(item.batch_id) : undefined,
         },
       ];
     });
@@ -660,6 +717,10 @@ export default function PosCheckoutPage() {
     const stockQty = stockQtyByStockId.get(String(selectedItem.stock_id)) ?? 0;
     if (stockQty <= 0) {
       notify.error(`"${selectedItem.description}" is out of stock`);
+      return;
+    }
+    if (onlyUnpricedStock(String(selectedItem.stock_id), stockQty)) {
+      notify.error(`"${selectedItem.description}" has no selling price yet — set it on the Set Price page`);
       return;
     }
     // Manual search comes from the shared item list (no sale_price field —
@@ -710,7 +771,7 @@ export default function PosCheckoutPage() {
       { unitPrice: initialUnitPrice, discountPercent: initialDiscountPercent }
     );
 
-    if (!isOffline && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
+    if (!isOffline && selectedItem.batch_id == null && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
       resolveSellingPrice(stockId).then((resolved) => {
         if (resolved !== undefined) {
           const resolvedDiscountPercent = manualDiscountMode2 === "percent"
@@ -749,19 +810,44 @@ export default function PosCheckoutPage() {
   };
 
   const selectItemFromBarcode = (item: any) => {
+    if (openBatchPickerIfNeeded(item)) return;
     setSelectedItem(item);
     setLastViewedProduct(item);
+    const pickedBatch = item.batch_id != null;
     const preloadedSp = salesPricingMap.get(String(item.stock_id));
-    setManualSellingPrice(String(Number(preloadedSp ?? item.sale_price ?? item.purchase_cost) || 0));
+    setManualSellingPrice(String(Number(pickedBatch ? item.sale_price : (preloadedSp ?? item.sale_price ?? item.purchase_cost)) || 0));
     setManualSellingPriceTouched(false);
     setManualDiscountInput("");
     setManualDiscountMode2("net");
-    if (!isOffline) {
+    if (!isOffline && !pickedBatch) {
       resolveSellingPrice(String(item.stock_id)).then((sp) => {
         if (sp != null) { setManualSellingPrice(String(Number(sp))); setManualSellingPriceTouched(false); }
       }).catch(() => {});
     }
     focusAfterItemSelect();
+  };
+
+  // 2+ prices for this product: ask the cashier which one (by the MRP on the
+  // packet). Opened a moment later so the Enter that selected the item can't
+  // also pick a price. Returns false for every normal single-price item.
+  const openBatchPickerIfNeeded = (item: any): boolean => {
+    if (!item || item.batch_id != null || item.matched_variant || item.is_weighted) return false;
+    const groups = multiPriceMap[String(item.stock_id)];
+    if (!groups || groups.length < 2) return false;
+    setTimeout(() => setBatchPicker({ item, groups }), 150);
+    return true;
+  };
+
+  const pickBatch = (g: BatchPriceGroup) => {
+    if (!batchPicker) return;
+    const item = {
+      ...batchPicker.item,
+      batch_id: g.batch_id,
+      sale_price: g.selling_price,
+      mrp_price: g.mrp ?? batchPicker.item.mrp_price,
+    };
+    setBatchPicker(null);
+    selectItemFromBarcode(item);
   };
 
   const scanAndAddCode = async (code: string) => {
@@ -788,8 +874,13 @@ export default function PosCheckoutPage() {
         setBarcodeMatches(result.matches);
         return;
       }
-      if ((stockQtyByStockId.get(String(result.stock_id)) ?? result.quantity ?? 0) <= 0) {
+      const scannedQty = stockQtyByStockId.get(String(result.stock_id)) ?? result.quantity ?? 0;
+      if (scannedQty <= 0) {
         notify.error(`"${result.description}" is out of stock`);
+        return;
+      }
+      if (onlyUnpricedStock(String(result.stock_id), Number(scannedQty))) {
+        notify.error(`"${result.description}" has no selling price yet — set it on the Set Price page`);
         return;
       }
       selectItemFromBarcode(result);
@@ -824,12 +915,13 @@ export default function PosCheckoutPage() {
     scanAndAddCode(code);
   };
 
-  const updateLine = (stockId: string, patch: Partial<CartLine>) => {
-    setCart((prev) => prev.map((l) => (l.stock_id === stockId ? { ...l, ...patch } : l)));
+  // key = lineId(line): the stock_id for normal lines, stock_id + batch for batch lines.
+  const updateLine = (key: string, patch: Partial<CartLine>) => {
+    setCart((prev) => prev.map((l) => (lineId(l) === key ? { ...l, ...patch } : l)));
   };
 
-  const removeLine = (stockId: string) => {
-    setCart((prev) => prev.filter((l) => l.stock_id !== stockId));
+  const removeLine = (key: string) => {
+    setCart((prev) => prev.filter((l) => lineId(l) !== key));
   };
 
   const confirmWholesalePin = () => {
@@ -843,7 +935,7 @@ export default function PosCheckoutPage() {
       notify.error("Incorrect PIN");
       return;
     }
-    const line = cart.find((l) => l.stock_id === wholesalePinTarget);
+    const line = cart.find((l) => lineId(l) === wholesalePinTarget);
     if (line?.wholesale_price != null) {
       updateLine(wholesalePinTarget, { unit_price: line.wholesale_price, wholesale_applied: true });
     }
@@ -871,7 +963,7 @@ export default function PosCheckoutPage() {
         notify.error("No cart line qualifies for wholesale pricing");
         return;
       }
-      setWholesalePinTarget(eligible.stock_id);
+      setWholesalePinTarget(lineId(eligible));
       setWholesalePinInput("");
     };
     window.addEventListener("keydown", handler);
@@ -972,6 +1064,10 @@ export default function PosCheckoutPage() {
       if (result?.trans_no) {
         setTimeout(() => { savePosReceiptCopy(result.trans_no, receiptCopy).catch(() => {}); }, 2000);
       }
+      // A sale can sell out one of the prices — refresh the 2+ price list later, off the print path.
+      if (cart.some((l) => l.batch_id != null)) {
+        setTimeout(() => { queryClient.invalidateQueries({ queryKey: ["pos-multi-price"] }); }, 3000);
+      }
       resetSaleState();
     },
     onError: (error) => {
@@ -989,7 +1085,7 @@ export default function PosCheckoutPage() {
       // (see keyboardShortcutStateRef above) instead of closing over it
       // here, since this listener is registered once on mount.
       const s = keyboardShortcutStateRef.current;
-      if (s.reprintActive) return;
+      if (s.reprintActive || s.batchPickerActive) return;
 
       // F9/F12/Esc — familiar function-key shortcuts from the old till
       // software the client is used to. These work regardless of focus,
@@ -1073,7 +1169,7 @@ export default function PosCheckoutPage() {
       }
       if (e.ctrlKey && e.key === "Delete") {
         e.preventDefault();
-        if (s.cart.length > 0) s.removeLine(s.cart[s.cart.length - 1].stock_id);
+        if (s.cart.length > 0) s.removeLine(lineId(s.cart[s.cart.length - 1]));
         return;
       }
 
@@ -1128,6 +1224,7 @@ export default function PosCheckoutPage() {
         unit_price: l.unit_price,
         discount_percent: Number(effectivePercent.toFixed(2)),
         description: l.description,
+        batch_id: l.batch_id ?? undefined,
       };
     });
 
@@ -1461,6 +1558,7 @@ export default function PosCheckoutPage() {
     quotePending: quoteMutation.isPending,
     handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine,
     reprintActive: false,
+    batchPickerActive: false,
   });
   useEffect(() => {
     keyboardShortcutStateRef.current = {
@@ -1470,6 +1568,7 @@ export default function PosCheckoutPage() {
       handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine,
       // While reprinting, Enter/F-keys belong to the reprint screens — never complete a sale.
       reprintActive: reprintOpen || !!reprintReceipt,
+      batchPickerActive: !!batchPicker,
     };
   });
 
@@ -1651,6 +1750,7 @@ export default function PosCheckoutPage() {
                 autoHighlight
                 value={selectedItem}
                 onChange={(_, val) => {
+                  if (val && openBatchPickerIfNeeded(val)) return;
                   setSelectedItem(val);
                   setLastViewedProduct(val);
                   const preloadedSp = val ? salesPricingMap.get(String(val.stock_id)) : undefined;
@@ -1819,15 +1919,15 @@ export default function PosCheckoutPage() {
           </TableHead>
           <TableBody>
             {cart.map((l) => (
-              <TableRow key={l.stock_id} hover>
+              <TableRow key={lineId(l)} hover>
                 <TableCell>{l.description}</TableCell>
                 <TableCell align="center">
                   <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center">
-                    <IconButton size="small" sx={{ width: 44, height: 44 }} onClick={() => updateLine(l.stock_id, { quantity: Math.max(1, l.quantity - 1) })}>
+                    <IconButton size="small" sx={{ width: 44, height: 44 }} onClick={() => updateLine(lineId(l), { quantity: Math.max(1, l.quantity - 1) })}>
                       <RemoveIcon fontSize="small" />
                     </IconButton>
                     <Typography sx={{ minWidth: 28, textAlign: "center" }}>{l.quantity}</Typography>
-                    <IconButton size="small" sx={{ width: 44, height: 44 }} onClick={() => updateLine(l.stock_id, { quantity: l.quantity + 1 })}>
+                    <IconButton size="small" sx={{ width: 44, height: 44 }} onClick={() => updateLine(lineId(l), { quantity: l.quantity + 1 })}>
                       <AddIcon fontSize="small" />
                     </IconButton>
                   </Stack>
@@ -1839,7 +1939,7 @@ export default function PosCheckoutPage() {
                   <Typography fontWeight={700}>{formatNumber(l.quantity * l.unit_price * (1 - l.discount_percent / 100))}</Typography>
                 </TableCell>
                 <TableCell align="center">
-                  <IconButton size="small" color="error" sx={{ width: 44, height: 44 }} onClick={() => removeLine(l.stock_id)}>
+                  <IconButton size="small" color="error" sx={{ width: 44, height: 44 }} onClick={() => removeLine(lineId(l))}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
                 </TableCell>
@@ -2088,6 +2188,7 @@ export default function PosCheckoutPage() {
                     autoHighlight
                     value={selectedItem}
                     onChange={(_, val) => {
+                      if (val && openBatchPickerIfNeeded(val)) return;
                       setSelectedItem(val);
                       setLastViewedProduct(val);
                       const preloadedSp2 = val ? salesPricingMap.get(String(val.stock_id)) : undefined;
@@ -2258,24 +2359,24 @@ export default function PosCheckoutPage() {
               </TableHead>
               <TableBody>
                 {cart.map((l) => (
-                  <TableRow key={l.stock_id} hover sx={{ backgroundColor: "#e0dedeff" }}>
+                  <TableRow key={lineId(l)} hover sx={{ backgroundColor: "#e0dedeff" }}>
                     <TableCell>{l.description}</TableCell>
                     <TableCell align="center">
                       <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
                         <IconButton
                           size="small"
-                          onClick={() => updateLine(l.stock_id, { quantity: Math.max(1, l.quantity - 1) })}
+                          onClick={() => updateLine(lineId(l), { quantity: Math.max(1, l.quantity - 1) })}
                         >
                           <RemoveIcon fontSize="inherit" />
                         </IconButton>
                         <TextField
                           type="text" inputMode="numeric" size="small" value={l.quantity.toLocaleString()} sx={{ width: 90 }}
                           inputProps={{ style: { textAlign: "center" } }}
-                          onChange={(e) => updateLine(l.stock_id, { quantity: Math.max(0, parseFormattedNumber(e.target.value)) })}
+                          onChange={(e) => updateLine(lineId(l), { quantity: Math.max(0, parseFormattedNumber(e.target.value)) })}
                         />
                         <IconButton
                           size="small"
-                          onClick={() => updateLine(l.stock_id, { quantity: l.quantity + 1 })}
+                          onClick={() => updateLine(lineId(l), { quantity: l.quantity + 1 })}
                         >
                           <AddIcon fontSize="inherit" />
                         </IconButton>
@@ -2285,7 +2386,7 @@ export default function PosCheckoutPage() {
                       <TextField
                         type="text" inputMode="numeric" size="small" value={l.unit_price.toLocaleString()} sx={{ width: 140 }}
                         inputProps={{ style: { textAlign: "right" } }}
-                        onChange={(e) => updateLine(l.stock_id, { unit_price: parseFormattedNumber(e.target.value) })}
+                        onChange={(e) => updateLine(lineId(l), { unit_price: parseFormattedNumber(e.target.value) })}
                       />
                       {/* Wholesale — only offered once quantity passes this
                           product's threshold, and only ever applied after
@@ -2297,7 +2398,7 @@ export default function PosCheckoutPage() {
                             <Chip label="WHOLESALE" size="small" color="success" />
                             <Button
                               size="small" variant="text"
-                              onClick={() => updateLine(l.stock_id, { unit_price: l.original_unit_price ?? l.unit_price, wholesale_applied: false })}
+                              onClick={() => updateLine(lineId(l), { unit_price: l.original_unit_price ?? l.unit_price, wholesale_applied: false })}
                             >
                               Revert
                             </Button>
@@ -2305,7 +2406,7 @@ export default function PosCheckoutPage() {
                         ) : (
                           <Button
                             size="small" variant="outlined" sx={{ mt: 0.5 }}
-                            onClick={() => { setWholesalePinTarget(l.stock_id); setWholesalePinInput(""); }}
+                            onClick={() => { setWholesalePinTarget(lineId(l)); setWholesalePinInput(""); }}
                           >
                             Apply Wholesale
                           </Button>
@@ -2332,7 +2433,7 @@ export default function PosCheckoutPage() {
                             const pct = mode === "percent"
                               ? Math.min(100, val)
                               : (l.unit_price > 0 ? Math.min(100, (val / l.unit_price) * 100) : 0);
-                            updateLine(l.stock_id, { discount_input: raw, discount_percent: pct });
+                            updateLine(lineId(l), { discount_input: raw, discount_percent: pct });
                           }}
                         />
                         )}
@@ -2340,7 +2441,7 @@ export default function PosCheckoutPage() {
                           <Select
                             value={l.discount_mode ?? "net"}
                             onChange={(e) => {
-                              updateLine(l.stock_id, { discount_mode: e.target.value as "percent" | "amount" | "net", discount_input: "", discount_percent: 0 });
+                              updateLine(lineId(l), { discount_mode: e.target.value as "percent" | "amount" | "net", discount_input: "", discount_percent: 0 });
                             }}
                           >
                             <MenuItem value="net">Net</MenuItem>
@@ -2361,7 +2462,7 @@ export default function PosCheckoutPage() {
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
-                      <IconButton size="small" color="error" onClick={() => removeLine(l.stock_id)}>
+                      <IconButton size="small" color="error" onClick={() => removeLine(lineId(l))}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
@@ -2797,6 +2898,41 @@ export default function PosCheckoutPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setBarcodeMatches(null)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!batchPicker}
+        onClose={() => { setBatchPicker(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
+        maxWidth="xs"
+        fullWidth
+        onKeyDown={(e) => {
+          const n = Number(e.key);
+          if (batchPicker && n >= 1 && n <= batchPicker.groups.length) {
+            e.preventDefault();
+            pickBatch(batchPicker.groups[n - 1]);
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 0.5 }}>
+          Pick the price — check the MRP on the packet
+          <Typography variant="body2" color="text.secondary">{batchPicker?.item?.description}</Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <List dense>
+            {(batchPicker?.groups ?? []).map((g, i) => (
+              <ListItemButton key={g.batch_id} autoFocus={i === 0} onClick={() => pickBatch(g)} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, mb: 1 }}>
+                <ListItemText
+                  primary={`${i + 1}.  MRP ${g.mrp != null ? formatCurrency(g.mrp, 2) : "—"}`}
+                  secondary={`In stock: ${Number(g.qty)}`}
+                  primaryTypographyProps={{ fontWeight: 700 }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setBatchPicker(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}>Cancel</Button>
         </DialogActions>
       </Dialog>
 

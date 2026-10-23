@@ -37,6 +37,7 @@ import { getItemUnits } from "../../../../api/ItemUnit/ItemUnitApi";
 import { getItemCategories } from "../../../../api/ItemCategories/ItemCategoriesApi";
 import { getFiscalYears } from "../../../../api/FiscalYear/FiscalYearApi";
 import { postDirectGrn } from "../../../../api/Purchases/PurchasesApi";
+import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, useMrpMap, useRetailPriceMap } from "../../../../components/BatchPriceFields";
 import { getCompanies } from "../../../../api/CompanySetup/CompanySetupApi";
 import useCurrentUser from "../../../../hooks/useCurrentUser";
 import { runTransactionSave } from "../../../../utils/transactionSave";
@@ -226,6 +227,10 @@ export default function DirectGRN() {
       isEditing: true,
     },
   ]);
+
+  // Placeholders for the optional new Selling Price / MRP of each line.
+  const retailPrices = useRetailPriceMap();
+  const mrpMap = useMrpMap();
 
   const [validationMsg, setValidationMsg] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -419,6 +424,7 @@ export default function DirectGRN() {
           quantity: Number(r.quantity) || 0,
           unit_price: Number(r.price) || 0,
           delivery_date: r.deliveryDate || deliveryDate,
+          ...batchPricePayload((r as any).batch),
         }));
 
         const saveResult = await runTransactionSave(() =>
@@ -602,6 +608,7 @@ export default function DirectGRN() {
               <TableCell>Quantity</TableCell>
               <TableCell>Unit</TableCell>
               <TableCell>Price Before Tax</TableCell>
+              <BatchPriceHeadCells />
               <TableCell>Line Total</TableCell>
               <TableCell align="center">Action</TableCell>
             </TableRow>
@@ -666,6 +673,15 @@ export default function DirectGRN() {
                   />
                 </TableCell>
 
+                {/* New Selling Price / MRP (blank = keep current) */}
+                <BatchPriceCells
+                  value={(row as any).batch}
+                  onChange={(v) => handleChange(row.id, "batch", v)}
+                  currentPrice={retailPrices.get(String(row.itemCode || row.stockId))}
+                  currentMrp={mrpMap.get(String(row.itemCode || row.stockId))}
+                  disabled={!row.isEditing}
+                />
+
                 {/* Line Total */}
                 <TableCell>{formatMoney(row.total)}</TableCell>
 
@@ -699,7 +715,7 @@ export default function DirectGRN() {
 
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={6} sx={{ fontWeight: 600 }}>
+              <TableCell colSpan={8} sx={{ fontWeight: 600 }}>
                 Sub-total
               </TableCell>
               <TableCell sx={{ fontWeight: 600 }}>{formatMoney(subTotal)}</TableCell>
@@ -707,7 +723,7 @@ export default function DirectGRN() {
             </TableRow>
 
             <TableRow>
-              <TableCell colSpan={6} sx={{ fontWeight: 600 }}>
+              <TableCell colSpan={8} sx={{ fontWeight: 600 }}>
                 Amount Total
               </TableCell>
               <TableCell sx={{ fontWeight: 600 }}>{formatMoney(subTotal)}</TableCell>

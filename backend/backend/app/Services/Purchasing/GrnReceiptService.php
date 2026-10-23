@@ -126,7 +126,7 @@ class GrnReceiptService
                     'act_price' => $unitCost,
                 ]);
 
-                $this->postStockMove($batchId, $detail->item_code, $locCode, $deliveryDate, $reference, $qty, $unitCost);
+                $this->postStockMove($batchId, $detail->item_code, $locCode, $deliveryDate, $reference, $qty, $unitCost, $input);
                 $grnItems[] = $grnItem;
             }
 
@@ -210,6 +210,8 @@ class GrnReceiptService
             }
 
             $poLines = [];
+            // Same order as $poLines — the selling price / MRP typed for each line's new batch.
+            $batchPrices = [];
             $total = 0.0;
             foreach ($lines as $line) {
                 $qty = round((float) ($line['quantity'] ?? 0), 4);
@@ -217,6 +219,7 @@ class GrnReceiptService
                 if ($qty <= 0) {
                     continue;
                 }
+                $batchPrices[] = $line;
                 $stdCost = $this->stockMaterialCost((string) ($line['item_code'] ?? ''));
                 $poLines[] = [
                     'item_code' => (string) ($line['item_code'] ?? ''),
@@ -258,7 +261,7 @@ class GrnReceiptService
             $batchId = $this->createGrnBatch($supplierId, $orderNo, $grnRef, $deliveryDate, $locCode, (int) ($payload['cost_center_id'] ?? 0));
 
             $grnItems = [];
-            foreach ($poResult['lines'] as $detail) {
+            foreach (array_values($poResult['lines']) as $lineIndex => $detail) {
                 $qty = (float) $detail->quantity_received;
                 $grnItem = GrnItem::query()->create([
                     'grn_batch_id' => $batchId,
@@ -270,7 +273,7 @@ class GrnReceiptService
                 ]);
 
                 $unitCost = $this->resolveUnitCost($detail);
-                $this->postStockMove($batchId, $detail->item_code, $locCode, $deliveryDate, $grnRef, $qty, $unitCost);
+                $this->postStockMove($batchId, $detail->item_code, $locCode, $deliveryDate, $grnRef, $qty, $unitCost, $batchPrices[$lineIndex] ?? []);
                 $grnItems[] = $grnItem;
             }
 
@@ -321,10 +324,25 @@ class GrnReceiptService
         string $tranDate,
         string $reference,
         float $qty,
-        float $unitCost
+        float $unitCost,
+        array $line = []
     ): void {
+        // Every received line opens its own stock batch with the selling price and
+        // MRP typed for it (falls back to the product's current price / MRP).
+        $batch = [
+            'new_batch' => [
+                'purchase_cost' => $unitCost,
+                'selling_price' => $line['selling_price'] ?? null,
+                'mrp' => $line['mrp_price'] ?? $line['mrp'] ?? null,
+            ],
+            'source_type' => 'grn',
+            'source_no' => $batchId,
+            'trans_type' => self::TYPE_GRN,
+            'trans_no' => $batchId,
+        ];
+
         if (! Schema::hasTable('stock_moves')) {
-            $this->locStockQty->applyMoveDelta($stockId, $locCode, $qty);
+            $this->locStockQty->applyMoveDelta($stockId, $locCode, $qty, $batch);
 
             return;
         }
@@ -343,8 +361,45 @@ class GrnReceiptService
             'updated_at' => now(),
         ]);
 
-        $this->locStockQty->applyMoveDelta($stockId, $locCode, $qty);
+        $this->locStockQty->applyMoveDelta($stockId, $locCode, $qty, $batch);
         $this->updateMaterialCost($stockId, $qty, $unitCost);
+        $this->applyNewSellingPrice($stockId, $line);
+    }
+
+    /**
+     * A selling price / MRP typed on the GRN line becomes the product's current
+     * price (what single-price items charge and what the next batch defaults to).
+     * Older batches keep their own price until they are sold out.
+     */
+    private function applyNewSellingPrice(string $stockId, array $line): void
+    {
+        $oldMrp = DB::table('stock_master')->where('stock_id', $stockId)->value('mrp_price');
+        $oldMrp = $oldMrp === null ? null : (float) $oldMrp;
+        $selling = $line['selling_price'] ?? null;
+        if ($selling !== null && $selling !== '' && is_numeric($selling) && (float) $selling > 0 && Schema::hasTable('sales_pricing')) {
+            $existing = DB::table('sales_pricing')
+                ->where('stock_id', $stockId)->where('sales_type_id', 3)->where('currency_id', 8)
+                ->first();
+            if ($existing) {
+                DB::table('sales_pricing')->where('id', $existing->id)->update(['price' => (float) $selling, 'updated_at' => now()]);
+            } else {
+                DB::table('sales_pricing')->insert([
+                    'stock_id' => $stockId, 'sales_type_id' => 3, 'currency_id' => 8,
+                    'price' => (float) $selling, 'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+        }
+        $mrp = $line['mrp_price'] ?? $line['mrp'] ?? null;
+        $newMrp = $mrp !== null && $mrp !== '' && is_numeric($mrp) && (float) $mrp > 0 ? (float) $mrp : null;
+        if ($newMrp !== null) {
+            DB::table('stock_master')->where('stock_id', $stockId)->update(['mrp_price' => $newMrp, 'updated_at' => now()]);
+        }
+        // Same MRP as the packets already in stock = same packets: they all take the
+        // new price. A different MRP is a new packet — older packets keep their price.
+        $sameMrp = $newMrp === null || ($oldMrp !== null && abs($newMrp - $oldMrp) < 0.005);
+        if ($sameMrp && $selling !== null && $selling !== '' && is_numeric($selling) && (float) $selling > 0) {
+            app(\App\Services\Inventory\StockBatchService::class)->followProductPrice($stockId);
+        }
     }
 
     private function updateMaterialCost(string $stockId, float $qty, float $unitCost): void
@@ -452,7 +507,16 @@ class GrnReceiptService
                 $qty = (float) ($item->qty_recd ?? 0);
                 $stockId = (string) ($item->item_code ?? '');
                 if ($qty > 0 && $stockId !== '' && $locCode !== '') {
-                    $this->locStockQty->applyMoveDelta($stockId, $locCode, -$qty);
+                    // Take it back out of the batch this GRN created.
+                    $this->locStockQty->applyMoveDelta($stockId, $locCode, -$qty, [
+                        'from_source' => ['type' => 'grn', 'no' => $batchId],
+                        // also finds it when the GRN was added into an existing same-price batch
+                        'undo_of' => ['type' => self::TYPE_GRN, 'no' => $batchId],
+                        'undo_receipt' => true,
+                        'trans_type' => self::TYPE_GRN,
+                        'trans_no' => $batchId,
+                        'note' => 'GRN void',
+                    ]);
                 }
 
                 if (Schema::hasTable('stock_moves')) {

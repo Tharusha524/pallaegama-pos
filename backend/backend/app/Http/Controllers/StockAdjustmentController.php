@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\StockAdjustment;
+use App\Services\Inventory\StockBatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -29,6 +30,7 @@ class StockAdjustmentController extends Controller
             'quantity' => 'required|numeric|min:0',
             'reason' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
+            'batch_id' => 'nullable|integer',
         ]);
 
         return DB::transaction(function () use ($data, $request) {
@@ -65,6 +67,13 @@ class StockAdjustmentController extends Controller
                     'updated_at' => now(),
                 ]);
             }
+
+            // Keep the product's stock batches in step (chosen batch, else FIFO / newest).
+            app(StockBatchService::class)->applyDelta($data['stock_id'], $data['loc_code'], $moved, $before, [
+                'batch_id' => $data['batch_id'] ?? null,
+                'source_type' => 'adjustment',
+                'note' => 'Stock adjustment ('.$data['movement_type'].')',
+            ]);
 
             $adjustment = StockAdjustment::create([
                 'stock_id' => $data['stock_id'],

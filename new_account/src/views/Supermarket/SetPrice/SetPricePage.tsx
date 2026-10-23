@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { getSalesPricingByStockId, createSalesPricing, updateSalesPricing } from "../../../api/SalesPricing/SalesPricingApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
+import StockBatchesPanel from "../../../components/StockBatchesPanel";
 
 const LKR_CURRENCY_ID = 8; // only currency configured in this system
 const RETAIL_SALES_TYPE_ID = 3; // default price list for supermarket walk-in sales
@@ -43,7 +44,7 @@ export default function SetPricePage() {
   const [newBarcode, setNewBarcode] = useState("");
   const [mrpPrice, setMrpPrice] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
-  const [activeTab, setActiveTab] = useState<"retail" | "wholesale" | "eoq">("retail");
+  const [activeTab, setActiveTab] = useState<"retail" | "wholesale" | "eoq" | "batches">("retail");
   const [wholesaleQty, setWholesaleQty] = useState("");
   const [wholesalePrice, setWholesalePrice] = useState("");
   const [eoqOrderingCost, setEoqOrderingCost] = useState("");
@@ -153,6 +154,9 @@ export default function SetPricePage() {
       notify.success("MRP price saved");
       queryClient.invalidateQueries({ queryKey: ["stock-search"] });
       queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+      // the current packets' batches carry the new MRP too
+      queryClient.invalidateQueries({ queryKey: ["stock-batches"] });
+      queryClient.invalidateQueries({ queryKey: ["pos-multi-price"] });
     },
     onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to save MRP price"),
   });
@@ -211,6 +215,9 @@ export default function SetPricePage() {
     onSuccess: () => {
       notify.success("Selling price saved");
       queryClient.invalidateQueries({ queryKey: ["sales-pricing", product?.stock_id] });
+      // the current packets' batches take the new price too
+      queryClient.invalidateQueries({ queryKey: ["stock-batches"] });
+      queryClient.invalidateQueries({ queryKey: ["pos-multi-price"] });
     },
     onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to save selling price"),
   });
@@ -324,7 +331,12 @@ export default function SetPricePage() {
                   <Tab value="retail" label="Retail Pricing" />
                   <Tab value="wholesale" label="Wholesale Pricing" />
                   <Tab value="eoq" label="EOQ Setup" />
+                  <Tab value="batches" label="Batches (Prices)" />
                 </Tabs>
+
+                {activeTab === "batches" && (
+                  <StockBatchesPanel stockId={String(product.stock_id)} formatCurrency={(v) => formatCurrency(v)} />
+                )}
 
                 {activeTab === "retail" && (
                   <>
@@ -388,6 +400,11 @@ export default function SetPricePage() {
                         {saveExpiryMutation.isPending ? "Saving..." : "Save Expiry Date"}
                       </Button>
                     </Stack>
+
+                    {/* Every batch of this product (old + new deliveries), editable here too. */}
+                    <Divider />
+                    <Typography variant="subtitle2">Batches in stock</Typography>
+                    <StockBatchesPanel stockId={String(product.stock_id)} formatCurrency={(v) => formatCurrency(v)} />
                   </>
                 )}
 

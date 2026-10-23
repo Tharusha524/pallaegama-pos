@@ -545,6 +545,17 @@ Route::get('barcode-lookup', [BarcodeLookupController::class, 'lookup']);
 Route::get('pos-receipts', [\App\Http\Controllers\PosReprintController::class, 'index']);
 Route::get('pos-receipts/{transNo}', [\App\Http\Controllers\PosReprintController::class, 'show'])->whereNumber('transNo');
 Route::post('pos-receipts/{transNo}/copy', [\App\Http\Controllers\PosReprintController::class, 'storeCopy'])->whereNumber('transNo');
+Route::get('stock-batches', [\App\Http\Controllers\StockBatchController::class, 'index']);
+Route::get('stock-batches/sellable', [\App\Http\Controllers\StockBatchController::class, 'sellable']);
+Route::get('stock-batches/multi-price', [\App\Http\Controllers\StockBatchController::class, 'multiPrice']);
+Route::get('stock-batches/pending', [\App\Http\Controllers\StockBatchController::class, 'pending']);
+Route::get('stock-batches/report', [\App\Http\Controllers\StockBatchController::class, 'report']);
+Route::post('stock-batches/fix-mismatches', [\App\Http\Controllers\StockBatchController::class, 'fixMismatches']);
+
+// ---- Purchase History (read-only) ----
+Route::get('purchase-history', [\App\Http\Controllers\PurchaseHistoryController::class, 'index']);
+Route::get('purchase-history/{id}', [\App\Http\Controllers\PurchaseHistoryController::class, 'show'])->whereNumber('id');
+Route::put('stock-batches/{id}', [\App\Http\Controllers\StockBatchController::class, 'update'])->whereNumber('id');
 
 // ---- Held sales (park / recall cart) ----
 Route::apiResource('held-sales', HeldSaleController::class)->only(['index', 'store', 'show', 'destroy']);

@@ -26,6 +26,7 @@ import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi
 import { getBrands } from "../../../api/Brands/BrandsApi";
 import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
 import { createStockAdjustment, getStockAdjustments } from "../../../api/Pos/posOpsApi";
+import BatchSelect from "../../../components/BatchSelect";
 import { postInventoryAdjustment } from "../../../api/Inventory/InventoryTransactionApi";
 import { getStockDamages, recordStockDamage, deleteStockDamage } from "../../../api/Pos/posApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
@@ -461,7 +462,7 @@ function ProductsTab() {
 // "Stock Damage" tab — moved as-is from the old standalone StockDamagePage,
 // same genuine recordStockDamage/deleteStockDamage backend calls.
 // ---------------------------------------------------------------------------
-const emptyDamageForm = { stock_id: null as any, quantity: "1", reason: "", damage_date: new Date().toISOString().slice(0, 10) };
+const emptyDamageForm = { stock_id: null as any, loc_code: "", batch_id: "" as number | "", quantity: "1", reason: "", damage_date: new Date().toISOString().slice(0, 10) };
 
 function StockDamageTab() {
   const queryClient = useQueryClient();
@@ -474,6 +475,7 @@ function StockDamageTab() {
   const { data: itemsFromApi } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
   // Full stock list (barcode, unit, stock on hand) so the Product dropdown can show details.
   const { data: stockDetailsFromApi } = useQuery({ queryKey: ["stock-list-all"], queryFn: () => getStockList() });
+  const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations, enabled: !isOffline });
   const [offlineDamages, setOfflineDamages] = useState<any[]>([]);
   const [offlineItems, setOfflineItems] = useState<any[]>([]);
   const [offlineStockDetails, setOfflineStockDetails] = useState<any[]>([]);
@@ -524,9 +526,12 @@ function StockDamageTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-damages"] });
       queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+      queryClient.invalidateQueries({ queryKey: ["stock-batches"] });
+      notify.success("Damage recorded — stock reduced and loss posted to accounts");
       setOpen(false);
       setForm(emptyDamageForm);
     },
+    onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to record damage"),
   });
 
   const deleteMutation = useMutation({
@@ -560,6 +565,8 @@ function StockDamageTab() {
 
     createMutation.mutate({
       stock_id: form.stock_id.stock_id,
+      loc_code: form.loc_code || undefined,
+      batch_id: form.batch_id !== "" ? form.batch_id : undefined,
       quantity: Number(form.quantity) || 0,
       reason: form.reason,
       damage_date: form.damage_date,
@@ -653,7 +660,7 @@ function StockDamageTab() {
               filterOptions={filterDamageProducts}
               isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
               value={form.stock_id}
-              onChange={(_, val) => setForm({ ...form, stock_id: val })}
+              onChange={(_, val) => setForm({ ...form, stock_id: val, batch_id: "" })}
               renderOption={(props, option: any) => (
                 <li {...props} key={option.stock_id}>
                   <Stack>
@@ -673,6 +680,20 @@ function StockDamageTab() {
                 <TextField {...params} label="Product" placeholder="Search name, stock ID or barcode" />
               )}
             />
+            {!isOffline && (
+              <>
+              <FormControl fullWidth>
+                <InputLabel>Location</InputLabel>
+                <Select value={form.loc_code} label="Location" onChange={(e) => setForm({ ...form, loc_code: String(e.target.value), batch_id: "" })}>
+                  <MenuItem value="">Automatic (where most of this item is)</MenuItem>
+                  {(locations ?? []).map((loc: any) => (
+                    <MenuItem key={loc.loc_code} value={loc.loc_code}>{loc.location_name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <BatchSelect stockId={form.stock_id?.stock_id} locCode={form.loc_code} value={form.batch_id} onChange={(v) => setForm({ ...form, batch_id: v })} />
+              </>
+            )}
             <TextField label="Quantity Damaged" type="number" fullWidth value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
             <TextField label="Reason" fullWidth value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
             <TextField label="Damage Date" type="date" fullWidth value={form.damage_date} onChange={(e) => setForm({ ...form, damage_date: e.target.value })} InputLabelProps={{ shrink: true }} />
@@ -702,6 +723,7 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
   const [movementType, setMovementType] = useState<"add" | "reduce" | "override">("add");
   const [quantity, setQuantity] = useState("0");
   const [reason, setReason] = useState("");
+  const [batchId, setBatchId] = useState<number | "">("");
 
   const emptyEditForm = () => ({
     description: product.description ?? "",
@@ -764,9 +786,11 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
       movement_type: movementType,
       quantity: Number(quantity) || 0,
       reason,
+      batch_id: movementType !== "override" && batchId !== "" ? batchId : undefined,
     }),
     onSuccess: () => {
       notify.success("Stock adjusted");
+      setBatchId("");
       queryClient.invalidateQueries({ queryKey: ["stock-list"] });
       setAdjustOpen(false);
       setLocCode("");
@@ -967,6 +991,9 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
               </Select>
             </FormControl>
             <TextField label="Quantity" type="number" fullWidth value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+            {movementType !== "override" && (
+              <BatchSelect stockId={product.stock_id} locCode={locCode} value={batchId} onChange={setBatchId} />
+            )}
             <TextField label="Reason" fullWidth value={reason} onChange={(e) => setReason(e.target.value)} placeholder="waste / damage / general / count correction" />
           </Stack>
         </DialogContent>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InventoryAudit;
 use App\Models\InventoryAuditItem;
+use App\Services\Inventory\StockBatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -81,11 +82,11 @@ class InventoryAuditController extends Controller
         }
 
         DB::transaction(function () use ($audit) {
+            $batches = app(StockBatchService::class);
             foreach ($audit->items as $item) {
-                $exists = DB::table('loc_stock')
-                    ->where('stock_id', $item->stock_id)
-                    ->where('loc_code', $audit->loc_code)
-                    ->exists();
+                $before = DB::table('loc_stock')->where('stock_id', $item->stock_id)
+                    ->where('loc_code', $audit->loc_code)->lockForUpdate()->value('quantity');
+                $exists = $before !== null;
 
                 if ($exists) {
                     DB::table('loc_stock')
@@ -102,6 +103,12 @@ class InventoryAuditController extends Controller
                         'updated_at' => now(),
                     ]);
                 }
+                // Count difference: shortage comes out FIFO, surplus goes into the newest batch.
+                $batches->applyDelta($item->stock_id, $audit->loc_code, (float) $item->counted_quantity - (float) ($before ?? 0), (float) ($before ?? 0), [
+                    'source_type' => 'audit',
+                    'source_no' => $audit->id,
+                    'note' => 'Audit #'.$audit->id,
+                ]);
             }
 
             $audit->update(['status' => 'completed', 'completed_at' => now()]);

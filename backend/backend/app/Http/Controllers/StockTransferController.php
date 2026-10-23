@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
+use App\Services\Inventory\StockBatchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -62,11 +63,21 @@ class StockTransferController extends Controller
         }
 
         DB::transaction(function () use ($transfer) {
+            $batches = app(StockBatchService::class);
             foreach ($transfer->items as $item) {
+                $before = DB::table('loc_stock')->where('stock_id', $item->stock_id)
+                    ->where('loc_code', $transfer->from_loc_code)->lockForUpdate()->value('quantity');
                 DB::table('loc_stock')
                     ->where('stock_id', $item->stock_id)
                     ->where('loc_code', $transfer->from_loc_code)
                     ->decrement('quantity', $item->quantity);
+                if ($before !== null) {
+                    $batches->applyDelta($item->stock_id, $transfer->from_loc_code, -(float) $item->quantity, (float) $before, [
+                        'trans_type' => StockBatchService::TRANS_TRANSFER,
+                        'trans_no' => $transfer->id,
+                        'note' => 'Transfer out '.$transfer->transfer_ref,
+                    ]);
+                }
             }
             $transfer->update(['status' => 'dispatched', 'dispatched_at' => now()]);
         });
@@ -88,11 +99,11 @@ class StockTransferController extends Controller
         }
 
         DB::transaction(function () use ($transfer) {
+            $batches = app(StockBatchService::class);
             foreach ($transfer->items as $item) {
-                $exists = DB::table('loc_stock')
-                    ->where('stock_id', $item->stock_id)
-                    ->where('loc_code', $transfer->to_loc_code)
-                    ->exists();
+                $before = DB::table('loc_stock')->where('stock_id', $item->stock_id)
+                    ->where('loc_code', $transfer->to_loc_code)->lockForUpdate()->value('quantity');
+                $exists = $before !== null;
 
                 if ($exists) {
                     DB::table('loc_stock')
@@ -109,6 +120,15 @@ class StockTransferController extends Controller
                         'updated_at' => now(),
                     ]);
                 }
+                // Arrives as batches with the same prices / MRP it left with.
+                $batches->applyDelta($item->stock_id, $transfer->to_loc_code, (float) $item->quantity, (float) ($before ?? 0), [
+                    'clone_from' => ['type' => StockBatchService::TRANS_TRANSFER, 'no' => $transfer->id, 'loc_code' => $transfer->from_loc_code],
+                    'source_type' => 'transfer',
+                    'source_no' => $transfer->id,
+                    'trans_type' => StockBatchService::TRANS_TRANSFER,
+                    'trans_no' => $transfer->id,
+                    'note' => 'Transfer in '.$transfer->transfer_ref,
+                ]);
             }
             $transfer->update(['status' => 'received', 'received_at' => now()]);
         });

@@ -5,6 +5,9 @@ const BASE = "/purchases";
 export interface GrnReceiveLine {
   po_detail_item: number;
   quantity: number;
+  // Optional new selling price / MRP — the delivery becomes its own stock batch.
+  selling_price?: number;
+  mrp_price?: number;
 }
 
 export const postGrnReceive = async (payload: {
@@ -35,6 +38,8 @@ export const postDirectGrn = async (payload: {
     quantity: number;
     unit_price: number;
     delivery_date?: string;
+    selling_price?: number;
+    mrp_price?: number;
   }>;
 }) => {
   const response = await api.post(`${BASE}/grn/direct`, payload);
@@ -74,6 +79,8 @@ export const postDirectSupplierInvoice = async (payload: {
     description?: string;
     quantity: number;
     unit_price: number;
+    selling_price?: number;
+    mrp_price?: number;
   }>;
 }) => {
   const response = await api.post(`${BASE}/invoice/direct`, payload);

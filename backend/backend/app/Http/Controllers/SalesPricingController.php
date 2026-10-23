@@ -52,6 +52,7 @@ class SalesPricingController extends Controller
         }
 
         $salesPricing = $this->salesPricingRepo->create($validated);
+        $this->batchesFollow($validated);
         return response()->json($salesPricing, 201);
     }
 
@@ -87,6 +88,7 @@ class SalesPricingController extends Controller
         if (!$updated) {
             return response()->json(['message' => 'Record not found'], 404);
         }
+        $this->batchesFollow($validated);
 
         return response()->json(['message' => 'Updated successfully'], 200);
     }
@@ -136,7 +138,9 @@ class SalesPricingController extends Controller
                 $created++;
             }
 
+            $oldMrp = DB::table('stock_master')->where('stock_id', $validated['stock_id'])->value('mrp_price');
             $this->applyOptionalProductFields($row, $validated['stock_id']);
+            $this->batchesFollow($validated, $oldMrp === null ? null : (float) $oldMrp);
         }
 
         return response()->json([
@@ -144,6 +148,21 @@ class SalesPricingController extends Controller
             'created' => $created,
             'errors' => $errors,
         ]);
+    }
+
+    /**
+     * A new retail (LKR) price: the stock batches of the current packets follow it
+     * (see StockBatchService::followProductPrice). Best-effort — never blocks the save.
+     */
+    private function batchesFollow(array $validated, mixed $oldMrp = false): void
+    {
+        try {
+            if ((int) ($validated['sales_type_id'] ?? 0) === 3 && (int) ($validated['currency_id'] ?? 0) === 8 && ! empty($validated['stock_id'])) {
+                app(\App\Services\Inventory\StockBatchService::class)->followProductPrice((string) $validated['stock_id'], $oldMrp);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /**

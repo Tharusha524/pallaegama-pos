@@ -7,7 +7,14 @@ use Illuminate\Support\Facades\Schema;
 
 class LocStockQuantityService
 {
-    public function applyMoveDelta(string $stockId, string $locCode, float $qtyDelta): void
+    public function __construct(private StockBatchService $batches)
+    {
+    }
+
+    /**
+     * @param  array<string, mixed>  $batch  optional batch context — see StockBatchService::applyDelta()
+     */
+    public function applyMoveDelta(string $stockId, string $locCode, float $qtyDelta, array $batch = []): void
     {
         if (! Schema::hasTable('loc_stock') || ! Schema::hasColumn('loc_stock', 'quantity')) {
             return;
@@ -33,23 +40,27 @@ class LocStockQuantityService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+            $this->batches->applyDelta($stockId, $locCode, $qtyDelta, 0, $batch);
 
             return;
         }
 
+        $prevQty = (float) ($row->quantity ?? 0);
         DB::table('loc_stock')
             ->where('loc_code', $locCode)
             ->where('stock_id', $stockId)
             ->update([
-                'quantity' => round((float) ($row->quantity ?? 0) + $qtyDelta, 4),
+                'quantity' => round($prevQty + $qtyDelta, 4),
                 'updated_at' => now(),
             ]);
+        $this->batches->applyDelta($stockId, $locCode, $qtyDelta, $prevQty, $batch);
     }
 
     /**
      * @param  object|array<string, mixed>|null  $move
+     * @param  array<string, mixed>  $batch  optional batch context — see StockBatchService::applyDelta()
      */
-    public function applyStockMoveRecord(object|array|null $move): void
+    public function applyStockMoveRecord(object|array|null $move, array $batch = []): void
     {
         if ($move === null) {
             return;
@@ -60,7 +71,12 @@ class LocStockQuantityService
         $locCode = (string) ($data['loc_code'] ?? $data['location'] ?? '');
         $qty = (float) ($data['qty'] ?? $data['quantity'] ?? 0);
 
-        $this->applyMoveDelta($stockId, $locCode, $qty);
+        $batch += [
+            'trans_type' => isset($data['type']) ? (int) $data['type'] : null,
+            'trans_no' => isset($data['trans_no']) ? (int) $data['trans_no'] : null,
+        ];
+
+        $this->applyMoveDelta($stockId, $locCode, $qty, $batch);
     }
 
     /**
@@ -74,7 +90,11 @@ class LocStockQuantityService
             $this->applyMoveDelta(
                 (string) ($b['stock_id'] ?? $b['item_code'] ?? ''),
                 (string) ($b['loc_code'] ?? $b['location'] ?? ''),
-                -1 * (float) ($b['qty'] ?? $b['quantity'] ?? 0)
+                -1 * (float) ($b['qty'] ?? $b['quantity'] ?? 0),
+                [
+                    'trans_type' => isset($b['type']) ? (int) $b['type'] : null,
+                    'trans_no' => isset($b['trans_no']) ? (int) $b['trans_no'] : null,
+                ]
             );
         }
 

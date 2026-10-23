@@ -13,6 +13,8 @@ export const getStockAdjustments = async (stockId?: string) =>
 export const createStockAdjustment = async (data: {
   stock_id: string; loc_code: string; movement_type: "add" | "reduce" | "override";
   quantity: number; reason?: string; notes?: string;
+  // Optional: which packets (stock batch) to add to / take from — default oldest first.
+  batch_id?: number;
 }) => (await api.post("/stock-adjustments", data)).data;
 
 // ---- Stock Transfers ----
@@ -88,6 +90,8 @@ export const createSalesReturn = async (data: {
   from_stk_loc?: string;
   write_off_account?: string | null;
   source_invoice_trans_no?: number;
+  // stock batches only — returned packets go back to the batch they were sold from
+  return_of_invoice?: number;
   comments?: string;
   lines: Array<{ stock_id: string; quantity: number; unit_price: number; discount_percent?: number; description?: string }>;
 }) => (await api.post("/sales/credit-notes", data)).data;

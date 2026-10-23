@@ -34,6 +34,7 @@ import {
 } from "../../../api/Purchases/PurchasesApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
+import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, useMrpMap, useRetailPriceMap, type BatchPriceInput } from "../../../components/BatchPriceFields";
 
 /**
  * The proper 3-step supermarket purchasing flow — kept as three short tabs
@@ -355,6 +356,10 @@ function GoodsReceiptTab() {
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
   const [reference, setReference] = useState("");
   const [receivedQty, setReceivedQty] = useState<Record<number, string>>({});
+  // New selling price / MRP per line (blank = keep the current price).
+  const [batchPrices, setBatchPrices] = useState<Record<number, BatchPriceInput>>({});
+  const retailPrices = useRetailPriceMap();
+  const mrpMap = useMrpMap();
 
   const { data: orders } = useQuery({ queryKey: ["purch-orders-all"], queryFn: getPurchOrders });
   const { data: poLines, isFetching: loadingLines } = useQuery({
@@ -383,13 +388,14 @@ function GoodsReceiptTab() {
       reference: reference || undefined,
       delivery_date: deliveryDate,
       lines: outstandingLines
-        .map((l: any) => ({ po_detail_item: l.po_detail_item, quantity: effectiveQty(l) }))
+        .map((l: any) => ({ po_detail_item: l.po_detail_item, quantity: effectiveQty(l), ...batchPricePayload(batchPrices[l.po_detail_item]) }))
         .filter((l) => l.quantity > 0),
     }),
     onSuccess: (result) => {
       notify.success(`Goods received — GRN ${result?.reference ?? ""} posted, stock updated`);
       queryClient.invalidateQueries({ queryKey: ["purch-order-details", order?.order_no] });
       setReceivedQty({});
+      setBatchPrices({});
       setReference("");
     },
     onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to record goods receipt"),
@@ -407,7 +413,7 @@ function GoodsReceiptTab() {
               options={orders ?? []}
               getOptionLabel={(o: any) => `PO #${o.order_no} — ${o.reference ?? ""}`}
               value={order}
-              onChange={(_, v) => { setOrder(v); setReceivedQty({}); }}
+              onChange={(_, v) => { setOrder(v); setReceivedQty({}); setBatchPrices({}); }}
               renderInput={(p) => <TextField {...p} label="Purchase Order" size="small" />}
             />
             <TextField
@@ -435,6 +441,7 @@ function GoodsReceiptTab() {
                   <TableCell align="right">Ordered</TableCell>
                   <TableCell align="right">Already Received</TableCell>
                   <TableCell align="right">Receiving Now</TableCell>
+                  <BatchPriceHeadCells />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -452,6 +459,12 @@ function GoodsReceiptTab() {
                           onChange={(e) => setReceivedQty((prev) => ({ ...prev, [l.po_detail_item]: e.target.value }))}
                         />
                       </TableCell>
+                      <BatchPriceCells
+                        value={batchPrices[l.po_detail_item]}
+                        onChange={(v) => setBatchPrices((prev) => ({ ...prev, [l.po_detail_item]: v }))}
+                        currentPrice={retailPrices.get(String(l.item_code))}
+                        currentMrp={mrpMap.get(String(l.item_code))}
+                      />
                     </TableRow>
                   );
                 })}

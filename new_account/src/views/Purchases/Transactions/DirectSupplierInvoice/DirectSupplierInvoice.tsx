@@ -47,6 +47,7 @@ import { getBankAccounts } from "../../../../api/BankAccount/BankAccountApi";
 import { getItemCategories } from "../../../../api/ItemCategories/ItemCategoriesApi";
 import { getFiscalYears } from "../../../../api/FiscalYear/FiscalYearApi";
 import { postDirectSupplierInvoice } from "../../../../api/Purchases/PurchasesApi";
+import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, useMrpMap, useRetailPriceMap } from "../../../../components/BatchPriceFields";
 import { getCompanies } from "../../../../api/CompanySetup/CompanySetupApi";
 import { useNextFiscalYearReference } from "../../../../hooks/useNextFiscalYearReference";
 import useCurrentUser from "../../../../hooks/useCurrentUser";
@@ -263,6 +264,10 @@ export default function DirectSupplierInvoice() {
   }, [receiveInto, locations]);
 
   // ========= Table Rows =========
+  // Placeholders for the optional new Selling Price / MRP of each line.
+  const retailPrices = useRetailPriceMap();
+  const mrpMap = useMrpMap();
+
   const [rows, setRows] = useState([
     {
       id: 1,
@@ -422,6 +427,7 @@ export default function DirectSupplierInvoice() {
           quantity: Number(r.quantity) || 0,
           unit_price: Number(r.price) || 0,
           discount_percent: Number(r.discount) || 0,
+          ...batchPricePayload((r as any).batch),
         }));
 
         const saveResult = await runTransactionSave(() =>
@@ -593,6 +599,7 @@ export default function DirectSupplierInvoice() {
               <TableCell>Unit</TableCell>
               <TableCell>Price Before Tax</TableCell>
               <TableCell>Discount (%)</TableCell>
+              <BatchPriceHeadCells />
               <TableCell>Line Total</TableCell>
               <TableCell align="center">Action</TableCell>
             </TableRow>
@@ -705,6 +712,15 @@ export default function DirectSupplierInvoice() {
                   />
                 </TableCell>
 
+                {/* New Selling Price / MRP (blank = keep current) */}
+                <BatchPriceCells
+                  value={(row as any).batch}
+                  onChange={(v) => handleChange(row.id, "batch", v)}
+                  currentPrice={retailPrices.get(String(row.itemCode || row.stockId))}
+                  currentMrp={mrpMap.get(String(row.itemCode || row.stockId))}
+                  disabled={!row.isEditing}
+                />
+
                 {/* Line Total */}
                 <TableCell>{formatMoney(row.total)}</TableCell>
 
@@ -737,7 +753,7 @@ export default function DirectSupplierInvoice() {
 
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={6} sx={{ fontWeight: 600 }}>
+              <TableCell colSpan={8} sx={{ fontWeight: 600 }}>
                 Sub-total
               </TableCell>
               <TableCell sx={{ fontWeight: 600 }}>{formatMoney(subTotal)}</TableCell>
@@ -745,7 +761,7 @@ export default function DirectSupplierInvoice() {
             </TableRow>
 
             <TableRow>
-              <TableCell colSpan={6} sx={{ fontWeight: 600 }}>
+              <TableCell colSpan={8} sx={{ fontWeight: 600 }}>
                 Amount Total
               </TableCell>
               <TableCell sx={{ fontWeight: 600 }}>{formatMoney(subTotal)}</TableCell>

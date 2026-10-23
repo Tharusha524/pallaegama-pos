@@ -15,6 +15,7 @@ class StockDamage extends Model
         'reason',
         'damage_date',
         'recorded_by',
+        'adjustment_trans_no',
     ];
 
     protected $casts = [

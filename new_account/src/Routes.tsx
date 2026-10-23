@@ -58,6 +58,7 @@ import SuppliersPage from "./views/Supermarket/Suppliers/SuppliersPage";
 import SupermarketCategoriesPage from "./views/Supermarket/ItemCategories/SupermarketCategoriesPage";
 import PurchasePage from "./views/Supermarket/Purchase/PurchasePage";
 import DirectSupplierInvoicePage from "./views/Supermarket/DirectSupplierInvoice/DirectSupplierInvoicePage";
+import PurchaseHistoryPage from "./views/Supermarket/PurchaseHistory/PurchaseHistoryPage";
 import StockPage from "./views/Supermarket/Stock/StockPage";
 import ServiceTicketsPage from "./views/Supermarket/ServiceTickets/ServiceTicketsPage";
 import PosSettingsPage from "./views/Supermarket/PosSettings/PosSettingsPage";
@@ -583,6 +584,7 @@ const AppRoutes = () => {
         <Route path="/supermarket/category" element={withLayout(MainLayout, SupermarketCategoriesPage)} />
         <Route path="/supermarket/purchase" element={withLayout(MainLayout, PurchasePage)} />
         <Route path="/supermarket/direct-supplier-invoice" element={withLayout(MainLayout, DirectSupplierInvoicePage)} />
+        <Route path="/supermarket/purchase-history" element={withLayout(MainLayout, PurchaseHistoryPage)} />
         <Route path="/supermarket/stock" element={withLayout(MainLayout, StockPage)} />
         <Route path="/supermarket/sales-analytics" element={withLayout(MainLayout, SalesAnalyticsPage)} />
         {/* Same page, reused as the blueprint's "Dashboard" entry — it

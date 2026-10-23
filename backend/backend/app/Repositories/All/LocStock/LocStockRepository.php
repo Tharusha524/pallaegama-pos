@@ -33,12 +33,12 @@ class LocStockRepository extends BaseRepository implements LocStockInterface
 
     public function updateByCompositeKey(string $locCode, string $stockId, array $data): bool
     {
-        $exists = DB::table('loc_stock')
+        $before = DB::table('loc_stock')
             ->where('loc_code', $locCode)
             ->where('stock_id', $stockId)
-            ->exists();
+            ->value('quantity');
 
-        if (!$exists) {
+        if ($before === null) {
             return false;
         }
 
@@ -46,6 +46,11 @@ class LocStockRepository extends BaseRepository implements LocStockInterface
             ->where('loc_code', $locCode)
             ->where('stock_id', $stockId)
             ->update($data);
+
+        // A direct quantity edit: keep the stock batches equal to the new total.
+        if (array_key_exists('quantity', $data)) {
+            app(\App\Services\Inventory\StockBatchService::class)->syncToLocStock($stockId, $locCode);
+        }
 
         return true;
     }

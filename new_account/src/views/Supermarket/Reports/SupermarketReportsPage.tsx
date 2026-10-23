@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Tabs, Tab, Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Paper,
   Typography, Card, CardContent, Stack, TextField, FormControl, InputLabel, Select, MenuItem,
-  Autocomplete, Chip,
+  Autocomplete, Chip, Alert, Button, FormControlLabel, Switch,
 } from "@mui/material";
+import { getStockBatchReport, fixStockBatchMismatches } from "../../../api/Inventory/StockBatchesApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
@@ -99,6 +100,20 @@ export default function SupermarketReportsPage() {
     enabled: tab === "supplier-item-list",
   });
 
+  // Stock by Batch: each delivery's price / MRP / qty left, and the batch check.
+  const queryClient = useQueryClient();
+  const [batchSearch, setBatchSearch] = useState("");
+  const [batchOnlyMulti, setBatchOnlyMulti] = useState(false);
+  const { data: batchReport, isLoading: l17 } = useQuery({
+    queryKey: ["stock-batch-report", locCode, batchSearch, batchOnlyMulti],
+    queryFn: () => getStockBatchReport({ loc_code: locCode, search: batchSearch, only_multi: batchOnlyMulti }),
+    enabled: tab === "stock-batches",
+  });
+  const fixBatchesMutation = useMutation({
+    mutationFn: () => fixStockBatchMismatches(locCode || undefined),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stock-batch-report"] }),
+  });
+
   const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems, enabled: tab === "stock-history" });
   const [historyProduct, setHistoryProduct] = useState<any>(null);
   const { data: stockHistory, isLoading: l7 } = useQuery({
@@ -118,7 +133,7 @@ export default function SupermarketReportsPage() {
       <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <TextField label="From" type="date" size="small" value={fromDate} onChange={(e) => setFromDate(e.target.value)} InputLabelProps={{ shrink: true }} />
         <TextField label="To" type="date" size="small" value={toDate} onChange={(e) => setToDate(e.target.value)} InputLabelProps={{ shrink: true }} />
-        {(tab === "dead-stock" || tab === "valuation") && locations && locations.length > 1 && (
+        {(tab === "dead-stock" || tab === "valuation" || tab === "stock-batches") && locations && locations.length > 1 && (
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel>Branch / Location</InputLabel>
             <Select value={locCode} label="Branch / Location" onChange={(e) => setLocCode(e.target.value)}>
@@ -128,6 +143,15 @@ export default function SupermarketReportsPage() {
               ))}
             </Select>
           </FormControl>
+        )}
+        {tab === "stock-batches" && (
+          <>
+            <TextField label="Search product" size="small" value={batchSearch} onChange={(e) => setBatchSearch(e.target.value)} />
+            <FormControlLabel
+              control={<Switch size="small" checked={batchOnlyMulti} onChange={(e) => setBatchOnlyMulti(e.target.checked)} />}
+              label="Only items with 2+ MRPs"
+            />
+          </>
         )}
         {tab === "supplier-item-list" && (
           <FormControl size="small" sx={{ minWidth: 220 }}>
@@ -159,6 +183,7 @@ export default function SupermarketReportsPage() {
         <Tab label="Void Report" value="void-report" />
         <Tab label="Price Override Audit" value="price-override-audit" />
         <Tab label="Supplier Item List" value="supplier-item-list" />
+        <Tab label="Stock by Batch" value="stock-batches" />
       </Tabs>
 
       {tab === "velocity" && (l1 ? <PageLoader /> : (
@@ -317,6 +342,57 @@ export default function SupermarketReportsPage() {
           )}
         </Stack>
       )}
+
+      {tab === "stock-batches" && (l17 ? <PageLoader /> : (
+        <Stack spacing={2}>
+          {(batchReport?.mismatches ?? []).length > 0 ? (
+            <Alert
+              severity="warning"
+              action={
+                <Button color="inherit" size="small" disabled={fixBatchesMutation.isPending} onClick={() => fixBatchesMutation.mutate()}>
+                  {fixBatchesMutation.isPending ? "Fixing..." : "Fix now"}
+                </Button>
+              }
+            >
+              Batch check: {batchReport!.mismatches.length} product(s) whose batches don't add up to their stock quantity
+              ({batchReport!.mismatches.slice(0, 5).map((m) => `${m.description ?? m.stock_id} @ ${m.loc_code}: stock ${Number(m.quantity)} / batches ${Number(m.batch_qty)}`).join("; ")}).
+              Fix now brings the batches back to the stock quantity — it doesn't change stock or accounts.
+            </Alert>
+          ) : (
+            <Alert severity="success">Batch check: every product's batches add up to its stock quantity.</Alert>
+          )}
+          <TableContainer component={Paper} elevation={2}>
+            <Table size="small">
+              <TableHead sx={{ backgroundColor: "var(--pallet-lighter-blue)" }}>
+                <TableRow>
+                  <TableCell>Product</TableCell><TableCell>Location</TableCell><TableCell>Received</TableCell><TableCell>From</TableCell>
+                  <TableCell align="right">Cost</TableCell><TableCell align="right">Selling Price</TableCell><TableCell align="right">MRP</TableCell>
+                  <TableCell align="right">Received Qty</TableCell><TableCell align="right">In Stock</TableCell><TableCell>Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(batchReport?.rows ?? []).map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.description}<Typography variant="caption" color="text.secondary" display="block">{r.stock_id}</Typography></TableCell>
+                    <TableCell>{r.loc_code}</TableCell>
+                    <TableCell>{r.received_date ?? "—"}</TableCell>
+                    <TableCell>{r.source_type === "opening" ? "Opening stock" : r.source_type.toUpperCase()}{r.source_no ? ` #${r.source_no}` : ""}</TableCell>
+                    <TableCell align="right">{formatCurrency(Number(r.purchase_cost) || 0, 2)}</TableCell>
+                    <TableCell align="right">{formatCurrency(Number(r.selling_price) || 0, 2)}</TableCell>
+                    <TableCell align="right">{r.mrp != null ? formatCurrency(Number(r.mrp), 2) : "—"}</TableCell>
+                    <TableCell align="right">{Number(r.qty_received)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: Number(r.qty_remaining) < 0 ? "error.main" : undefined }}>{Number(r.qty_remaining)}</TableCell>
+                    <TableCell><Chip size="small" label={r.status === "active" ? "Selling" : r.status === "pending" ? "Needs price" : r.status === "inactive" ? "Hidden" : "Sold out"} color={r.status === "active" ? "success" : r.status === "pending" ? "warning" : "default"} /></TableCell>
+                  </TableRow>
+                ))}
+                {(batchReport?.rows ?? []).length === 0 && (
+                  <TableRow><TableCell colSpan={10} align="center"><Typography variant="body2">No batches with stock yet.</Typography></TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      ))}
 
       {tab === "negative-stock" && (l8 ? <PageLoader /> : (
         <TableContainer component={Paper} elevation={2}>

@@ -23,6 +23,9 @@ class PostSalesCreditNoteRequest extends FormRequest
             'from_stk_loc' => 'nullable|string|max:5',
             'write_off_account' => 'nullable|string|max:20',
             'source_invoice_trans_no' => 'nullable|integer|min:1',
+            // Stock batches only: the invoice the goods were sold on, so returned
+            // packets go back into the batch they came from (no allocation, no GL).
+            'return_of_invoice' => 'nullable|integer|min:1',
             'comments' => 'nullable|string',
             'reference' => 'nullable|string|max:60',
             'cost_center_id' => 'nullable|integer',

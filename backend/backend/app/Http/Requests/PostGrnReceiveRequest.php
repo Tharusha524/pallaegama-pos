@@ -22,6 +22,8 @@ class PostGrnReceiveRequest extends FormRequest
             'lines' => 'required|array|min:1',
             'lines.*.po_detail_item' => 'required|integer',
             'lines.*.quantity' => 'required|numeric|min:0.0001',
+            'lines.*.selling_price' => 'nullable|numeric|min:0',
+            'lines.*.mrp_price' => 'nullable|numeric|min:0',
         ];
     }
 }

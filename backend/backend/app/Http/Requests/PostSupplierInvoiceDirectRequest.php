@@ -29,6 +29,8 @@ class PostSupplierInvoiceDirectRequest extends FormRequest
             'lines.*.item_code' => 'required|string|exists:stock_master,stock_id',
             'lines.*.description' => 'nullable|string',
             'lines.*.quantity' => 'required|numeric|min:0.0001',
+            'lines.*.selling_price' => 'nullable|numeric|min:0',
+            'lines.*.mrp_price' => 'nullable|numeric|min:0',
             'lines.*.unit_price' => 'required|numeric|min:0',
             'lines.*.discount_percent' => 'nullable|numeric|min:0|max:100',
         ];

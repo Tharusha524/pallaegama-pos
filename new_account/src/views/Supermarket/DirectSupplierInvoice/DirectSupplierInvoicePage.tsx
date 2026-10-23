@@ -15,6 +15,7 @@ import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryL
 import { getItems } from "../../../api/Item/ItemApi";
 import { postDirectSupplierInvoice } from "../../../api/Purchases/PurchasesApi";
 import { notify } from "../../../services/notificationService";
+import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, emptyBatchPrice, useRetailPriceMap, type BatchPriceInput } from "../../../components/BatchPriceFields";
 
 interface Line {
   id: number;
@@ -22,10 +23,12 @@ interface Line {
   description: string;
   quantity: string;
   unit_price: string;
+  // New selling price / MRP for this delivery (blank = keep the current price).
+  batch: BatchPriceInput;
 }
 
 let lineSeq = 1;
-const emptyLine = (): Line => ({ id: lineSeq++, item: null, description: "", quantity: "1", unit_price: "0" });
+const emptyLine = (): Line => ({ id: lineSeq++, item: null, description: "", quantity: "1", unit_price: "0", batch: emptyBatchPrice });
 
 /** The item's cost the system actually uses: average cost from received stock, else the entered purchase cost. */
 const currentCost = (item: any): number | null => {
@@ -47,6 +50,8 @@ export default function DirectSupplierInvoicePage() {
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers-all"], queryFn: getSuppliers });
   const { data: locations = [] } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
   const { data: items = [] } = useQuery({ queryKey: ["items-all"], queryFn: () => getItems() });
+
+  const retailPrices = useRetailPriceMap();
 
   const total = lines.reduce((sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0);
 
@@ -81,6 +86,7 @@ export default function DirectSupplierInvoicePage() {
           description: l.description || l.item.description,
           quantity: Number(l.quantity),
           unit_price: Number(l.unit_price),
+          ...batchPricePayload(l.batch),
         })),
       });
     },
@@ -140,10 +146,11 @@ export default function DirectSupplierInvoicePage() {
           <Table size="small">
             <TableHead sx={{ backgroundColor: "var(--pallet-lighter-blue)" }}>
               <TableRow>
-                <TableCell sx={{ width: "35%" }}>Product</TableCell>
-                <TableCell sx={{ width: "25%" }}>Description</TableCell>
+                <TableCell sx={{ width: "28%" }}>Product</TableCell>
+                <TableCell sx={{ width: "17%" }}>Description</TableCell>
                 <TableCell sx={{ width: "12%" }} align="right">Qty</TableCell>
                 <TableCell sx={{ width: "15%" }} align="right">Purchase Price (LKR)</TableCell>
+                <BatchPriceHeadCells />
                 <TableCell sx={{ width: "10%" }} align="right">Amount</TableCell>
                 <TableCell sx={{ width: "3%" }} />
               </TableRow>
@@ -194,6 +201,12 @@ export default function DirectSupplierInvoicePage() {
                       </Typography>
                     )}
                   </TableCell>
+                  <BatchPriceCells
+                    value={line.batch}
+                    onChange={(v) => setLine(line.id, { batch: v })}
+                    currentPrice={line.item ? retailPrices.get(String(line.item.stock_id)) : undefined}
+                    currentMrp={line.item?.mrp_price != null ? Number(line.item.mrp_price) : undefined}
+                  />
                   <TableCell align="right">
                     <Typography variant="body2">
                       {((Number(line.quantity) || 0) * (Number(line.unit_price) || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 })}

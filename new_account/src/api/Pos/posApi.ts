@@ -9,6 +9,33 @@ export const lookupBarcode = async (code: string, salesTypeId?: number) => {
   return response.data;
 };
 
+// ---- Stock batches (same barcode, more than one price) ----
+export interface BatchPriceGroup {
+  batch_id: number;
+  selling_price: number;
+  mrp: number | null;
+  qty: number;
+  received_date: string | null;
+}
+
+/** Only the products that currently have 2+ prices at this location. */
+export const getMultiPriceProducts = async (locCode?: string): Promise<Record<string, BatchPriceGroup[]>> => {
+  const response = await api.get("/stock-batches/multi-price", {
+    params: { loc_code: locCode || undefined },
+    skipErrorDialog: true,
+  } as any);
+  return response.data ?? {};
+};
+
+/** Stock waiting for a price (new-cost purchases not priced on Set Price yet) — not sellable. */
+export const getPendingPriceQty = async (locCode?: string): Promise<Record<string, number>> => {
+  const response = await api.get("/stock-batches/pending", {
+    params: { loc_code: locCode || undefined },
+    skipErrorDialog: true,
+  } as any);
+  return response.data ?? {};
+};
+
 // ---- POS Shifts ----
 export const getPosShifts = async (params?: { status?: string; user_id?: number }) =>
   (await api.get("/pos-shifts", { params })).data;
@@ -31,7 +58,7 @@ export const getFloatMovements = async (shiftId: number | string) =>
 // ---- Stock Damages ----
 export const getStockDamages = async (params?: { stock_id?: string; from_date?: string; to_date?: string }) =>
   (await api.get("/stock-damages", { params })).data;
-export const recordStockDamage = async (data: { stock_id: string; loc_code?: string; quantity: number; reason?: string; damage_date?: string }) =>
+export const recordStockDamage = async (data: { stock_id: string; loc_code?: string; quantity: number; reason?: string; damage_date?: string; batch_id?: number; return_trans_no?: number }) =>
   (await api.post("/stock-damages", data)).data;
 export const deleteStockDamage = async (id: number | string) => (await api.delete(`/stock-damages/${id}`)).data;
 export const getStockDamageSummary = async (params?: { from_date?: string; to_date?: string }) =>

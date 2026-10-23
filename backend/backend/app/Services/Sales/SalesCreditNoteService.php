@@ -130,6 +130,9 @@ class SalesCreditNoteService
                 'write_off_account' => $writeOffAccount !== '' ? $writeOffAccount : null,
             ]);
 
+            // Returned stock goes back into the batches the original sale took it from.
+            $sourceDeliveryNo = $this->sourceDeliveryNo((int) ($payload['source_invoice_trans_no'] ?? $payload['return_of_invoice'] ?? 0));
+
             foreach ($calcLines as $idx => $line) {
                 $stock = DB::table('stock_master')->where('stock_id', $line['stock_id'])->first();
                 $standardCost = (float) ($stock->material_cost ?? $stock->purchase_cost ?? 0);
@@ -173,7 +176,10 @@ class SalesCreditNoteService
                             'updated_at' => now(),
                         ];
                         DB::table('stock_moves')->insert($move);
-                        $this->locStockQty->applyStockMoveRecord($move);
+                        $this->locStockQty->applyStockMoveRecord($move, [
+                            'restore_from' => $sourceDeliveryNo > 0 ? ['type' => 13, 'no' => $sourceDeliveryNo] : null,
+                            'note' => 'Customer return',
+                        ]);
                     }
                 }
             }
@@ -214,6 +220,21 @@ class SalesCreditNoteService
         });
     }
 
+    /** Delivery note behind an invoice (POS sale / direct invoice), 0 if unknown. */
+    private function sourceDeliveryNo(int $invoiceNo): int
+    {
+        if ($invoiceNo <= 0) {
+            return 0;
+        }
+
+        return (int) DB::table('debtor_trans_details as inv')
+            ->join('debtor_trans_details as dl', 'dl.id', '=', 'inv.src_id')
+            ->where('inv.debtor_trans_type', 10)
+            ->where('inv.debtor_trans_no', $invoiceNo)
+            ->where('dl.debtor_trans_type', 13)
+            ->value('dl.debtor_trans_no');
+    }
+
     public function void(int $transNo, ?string $memo = null): array
     {
         return DB::transaction(function () use ($transNo, $memo) {
@@ -225,7 +246,12 @@ class SalesCreditNoteService
             if (Schema::hasTable('stock_moves')) {
                 $moves = DB::table('stock_moves')->where('type', self::TYPE_CREDIT)->where('trans_no', $transNo)->get();
                 foreach ($moves as $move) {
-                    $this->locStockQty->applyMoveDelta((string) $move->stock_id, (string) $move->loc_code, -1 * (float) $move->qty);
+                    $this->locStockQty->applyMoveDelta((string) $move->stock_id, (string) $move->loc_code, -1 * (float) $move->qty, [
+                        'undo_of' => ['type' => self::TYPE_CREDIT, 'no' => $transNo],
+                        'trans_type' => self::TYPE_CREDIT,
+                        'trans_no' => $transNo,
+                        'note' => 'Credit note void',
+                    ]);
                 }
                 DB::table('stock_moves')->where('type', self::TYPE_CREDIT)->where('trans_no', $transNo)->delete();
             }

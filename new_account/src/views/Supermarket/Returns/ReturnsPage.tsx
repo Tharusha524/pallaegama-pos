@@ -85,7 +85,7 @@ export default function ReturnsPage() {
       // Every returned line is posted as a real Return (stock+) credit note —
       // the customer is refunded and the quantity goes back into loc_stock,
       // exactly like the core ERP's own Credit Note screen would do.
-      await createSalesReturn({
+      const credit = await createSalesReturn({
         debtor_no: invoice.debtor_no,
         branch_code: invoice.branch_code,
         tran_date: new Date().toISOString().slice(0, 10),
@@ -99,6 +99,7 @@ export default function ReturnsPage() {
         // customer refund/credit instead — the original invoice number
         // is kept in the reference/comment for a clear paper trail.
         comments: `${reason || "POS return"} (against invoice #${invoice.trans_no}, ref ${invoice.reference})`,
+        return_of_invoice: Number(invoice.trans_no) || undefined,
         lines: returnLines.map((l) => ({
           stock_id: l.stock_id,
           quantity: Number(l.returnQty),
@@ -118,6 +119,7 @@ export default function ReturnsPage() {
           quantity: Number(l.returnQty),
           reason: reason || "Customer return — damaged",
           damage_date: new Date().toISOString().slice(0, 10),
+          return_trans_no: Number(credit?.trans_no) || undefined,
         });
       }
     },

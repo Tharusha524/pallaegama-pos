@@ -132,6 +132,7 @@ const baseSidebarItems: Array<SidebarItem> = [
       { title: "Suppliers", href: "/supermarket/suppliers", icon: <GroupsIcon fontSize="small" /> },
       { title: "Purchase", href: "/supermarket/purchase", icon: <ReceiptIcon fontSize="small" /> },
       { title: "Direct Supplier Invoice", href: "/supermarket/direct-supplier-invoice", icon: <ReceiptIcon fontSize="small" /> },
+      { title: "Purchase History", href: "/supermarket/purchase-history", icon: <ReceiptIcon fontSize="small" /> },
     ],
   },
   {

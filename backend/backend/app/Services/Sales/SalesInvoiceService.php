@@ -288,11 +288,14 @@ class SalesInvoiceService
             $taxGroupId = (int) ($branch->tax_group ?? 0);
 
             $calcLines = [];
+            // Same order as $calcLines — the stock batch the cashier picked for each line (POS multi-price items).
+            $lineBatchIds = [];
             foreach ($lines as $line) {
                 $qty = round((float) ($line['quantity'] ?? 0), 4);
                 if ($qty <= 0) {
                     continue;
                 }
+                $lineBatchIds[] = isset($line['batch_id']) && (int) $line['batch_id'] > 0 ? (int) $line['batch_id'] : null;
                 $calcLines[] = [
                     'stock_id' => (string) ($line['stock_id'] ?? ''),
                     'quantity' => $qty,
@@ -334,10 +337,11 @@ class SalesInvoiceService
 
             $orderNo = $this->createAutoSalesOrder($payload, $calcLines, $amounts, $documentTotal);
 
-            $soDetails = DB::table('sales_order_details')->where('order_no', $orderNo)->get();
-            $deliveryLines = $soDetails->map(fn($detail) => [
+            $soDetails = DB::table('sales_order_details')->where('order_no', $orderNo)->orderBy('id')->get()->values();
+            $deliveryLines = $soDetails->map(fn($detail, $i) => [
                 'sales_order_detail_id' => (int) $detail->id,
                 'quantity' => (float) $detail->quantity,
+                'batch_id' => $lineBatchIds[$i] ?? null,
             ])->all();
 
             $deliveryResult = $this->deliveryService->dispatch([

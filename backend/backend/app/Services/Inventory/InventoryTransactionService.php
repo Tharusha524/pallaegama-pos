@@ -151,7 +151,7 @@ class InventoryTransactionService
                     $transNo,
                     $unitCost
                 );
-                $this->locStock->applyStockMoveRecord($move);
+                $this->locStock->applyStockMoveRecord($move, $line['batch'] ?? []);
                 $moves[] = $move;
             }
 
@@ -248,6 +248,10 @@ class InventoryTransactionService
             $entry = ['stock_id' => $stockId, 'quantity' => $qty];
             if ($type === self::TYPE_ADJUSTMENT && array_key_exists('standard_cost', $line)) {
                 $entry['standard_cost'] = (float) $line['standard_cost'];
+            }
+            // Optional stock-batch context (which packets) — never affects accounting.
+            if ($type === self::TYPE_ADJUSTMENT && ! empty($line['batch']) && is_array($line['batch'])) {
+                $entry['batch'] = $line['batch'];
             }
             $valid[] = $entry;
         }

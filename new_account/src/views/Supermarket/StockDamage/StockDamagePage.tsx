@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
   TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, IconButton, Typography,
-  Autocomplete,
+  Autocomplete, FormControl, InputLabel, Select, MenuItem,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -13,8 +13,11 @@ import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
 import { getStockDamages, recordStockDamage, deleteStockDamage } from "../../../api/Pos/posApi";
 import { getItems } from "../../../api/Item/ItemApi";
+import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
+import BatchSelect from "../../../components/BatchSelect";
+import { notify } from "../../../services/notificationService";
 
-const emptyForm = { stock_id: null as any, quantity: "1", reason: "", damage_date: new Date().toISOString().slice(0, 10) };
+const emptyForm = { stock_id: null as any, loc_code: "", batch_id: "" as number | "", quantity: "1", reason: "", damage_date: new Date().toISOString().slice(0, 10) };
 
 export default function StockDamagePage() {
   const queryClient = useQueryClient();
@@ -23,14 +26,18 @@ export default function StockDamagePage() {
 
   const { data: damages, isLoading } = useQuery({ queryKey: ["stock-damages"], queryFn: () => getStockDamages() });
   const { data: items } = useQuery({ queryKey: ["items-all"], queryFn: getItems });
+  const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
 
   const createMutation = useMutation({
     mutationFn: recordStockDamage,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-damages"] });
+      queryClient.invalidateQueries({ queryKey: ["stock-batches"] });
+      notify.success("Damage recorded — stock reduced and loss posted to accounts");
       setOpen(false);
       setForm(emptyForm);
     },
+    onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to record damage"),
   });
 
   const deleteMutation = useMutation({
@@ -42,6 +49,8 @@ export default function StockDamagePage() {
     if (!form.stock_id) return;
     createMutation.mutate({
       stock_id: form.stock_id.stock_id,
+      loc_code: form.loc_code || undefined,
+      batch_id: form.batch_id !== "" ? form.batch_id : undefined,
       quantity: Number(form.quantity) || 0,
       reason: form.reason,
       damage_date: form.damage_date,
@@ -100,9 +109,19 @@ export default function StockDamagePage() {
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={form.stock_id}
-              onChange={(_, val) => setForm({ ...form, stock_id: val })}
+              onChange={(_, val) => setForm({ ...form, stock_id: val, batch_id: "" })}
               renderInput={(params) => <TextField {...params} label="Product" />}
             />
+            <FormControl fullWidth>
+              <InputLabel>Location</InputLabel>
+              <Select value={form.loc_code} label="Location" onChange={(e) => setForm({ ...form, loc_code: String(e.target.value), batch_id: "" })}>
+                <MenuItem value="">Automatic (where most of this item is)</MenuItem>
+                {(locations ?? []).map((loc: any) => (
+                  <MenuItem key={loc.loc_code} value={loc.loc_code}>{loc.location_name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <BatchSelect stockId={form.stock_id?.stock_id} locCode={form.loc_code} value={form.batch_id} onChange={(v) => setForm({ ...form, batch_id: v })} />
             <TextField label="Quantity Damaged" type="number" fullWidth value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
             <TextField label="Reason" fullWidth value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
             <TextField label="Damage Date" type="date" fullWidth value={form.damage_date} onChange={(e) => setForm({ ...form, damage_date: e.target.value })} InputLabelProps={{ shrink: true }} />

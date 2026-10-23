@@ -32,7 +32,8 @@ import { getSuppliers } from "../../../../api/Supplier/SupplierApi";
 import { getInventoryLocations } from "../../../../api/InventoryLocation/InventoryLocationApi";
 import { getItems } from "../../../../api/Item/ItemApi";
 import { getItemUnits } from "../../../../api/ItemUnit/ItemUnitApi";
-import { postGrnReceive, getPurchaseOrdersInquiry } from "../../../../api/Purchases/PurchasesApi";
+import { postGrnReceive, getPurchaseOrdersInquiry, type GrnReceiveLine } from "../../../../api/Purchases/PurchasesApi";
+import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, useMrpMap, useRetailPriceMap } from "../../../../components/BatchPriceFields";
 import useCurrentUser from "../../../../hooks/useCurrentUser";
 import { useNextFiscalYearReference } from "../../../../hooks/useNextFiscalYearReference";
 import { getFriendlyApiErrorMessage } from "../../../../utils/apiErrorMessage";
@@ -252,6 +253,9 @@ export default function ReceivePurchaseOrderItems() {
 
   // === Table Data ===
   const [rows, setRows] = useState<any[]>([]);
+  // Placeholders for the optional new Selling Price / MRP of each line.
+  const retailPrices = useRetailPriceMap();
+  const mrpMap = useMrpMap();
   const [rowsInitialized, setRowsInitialized] = useState(false);
 
   useEffect(() => {
@@ -340,7 +344,7 @@ export default function ReceivePurchaseOrderItems() {
       }
 
       const details = await getPurchOrderDetailsByOrderNo(purchaseOrder);
-      const receiveLines: Array<{ po_detail_item: number; quantity: number }> = [];
+      const receiveLines: GrnReceiveLine[] = [];
 
       for (const row of rowsToReceive) {
         const match =
@@ -373,6 +377,7 @@ export default function ReceivePurchaseOrderItems() {
         receiveLines.push({
           po_detail_item: poItem,
           quantity: requested,
+          ...batchPricePayload(row.batch),
         });
       }
 
@@ -643,6 +648,7 @@ export default function ReceivePurchaseOrderItems() {
               <TableCell>Outstanding</TableCell>
               <TableCell>This Delivery</TableCell>
               <TableCell>Price</TableCell>
+              <BatchPriceHeadCells />
               <TableCell>Total</TableCell>
             </TableRow>
           </TableHead>
@@ -650,20 +656,20 @@ export default function ReceivePurchaseOrderItems() {
           <TableBody>
             {isLoadingOrder ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
                   <CircularProgress size={28} sx={{ mr: 1, verticalAlign: "middle" }} />
                   Loading purchase order lines...
                 </TableCell>
               </TableRow>
             ) : showPickOrderMessage ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
                   Select an outstanding purchase order above to load items to receive.
                 </TableCell>
               </TableRow>
             ) : showNoLinesMessage ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
                   No outstanding items to receive for this purchase order (fully received).
                 </TableCell>
               </TableRow>
@@ -697,6 +703,13 @@ export default function ReceivePurchaseOrderItems() {
                 </TableCell>
 
                 <TableCell>{row.price}</TableCell>
+                {/* New Selling Price / MRP (blank = keep current) */}
+                <BatchPriceCells
+                  value={row.batch}
+                  onChange={(v) => setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, batch: v } : r)))}
+                  currentPrice={retailPrices.get(String(row.itemCode))}
+                  currentMrp={mrpMap.get(String(row.itemCode))}
+                />
                 <TableCell>{row.total.toFixed(2)}</TableCell>
               </TableRow>
               ))
@@ -705,7 +718,7 @@ export default function ReceivePurchaseOrderItems() {
 
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={9} sx={{ fontWeight: 600 }}>
+              <TableCell colSpan={11} sx={{ fontWeight: 600 }}>
                 Sub Total
               </TableCell>
               <TableCell sx={{ fontWeight: 600 }}>
@@ -714,7 +727,7 @@ export default function ReceivePurchaseOrderItems() {
             </TableRow>
 
             <TableRow>
-              <TableCell colSpan={9} sx={{ fontWeight: 600 }}>
+              <TableCell colSpan={11} sx={{ fontWeight: 600 }}>
                 Amount Total
               </TableCell>
               <TableCell sx={{ fontWeight: 600 }}>
