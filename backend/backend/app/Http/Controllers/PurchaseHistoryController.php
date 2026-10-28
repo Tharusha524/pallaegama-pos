@@ -55,6 +55,34 @@ class PurchaseHistoryController extends Controller
         return response()->json($rows);
     }
 
+    /**
+     * The last price each product was bought at (newest GRN line), for the
+     * purchase screens: { stock_id: {unit_price, discount_percent, date, supplier} }.
+     */
+    public function lastCosts()
+    {
+        $latest = DB::table('grn_items')->selectRaw('item_code, MAX(id) as id')->groupBy('item_code');
+
+        $rows = DB::table('grn_items as gi')
+            ->joinSub($latest, 'l', 'l.id', '=', 'gi.id')
+            ->join('grn_batch as g', 'g.id', '=', 'gi.grn_batch_id')
+            ->leftJoin('purch_order_details as pod', 'pod.po_detail_item', '=', 'gi.po_detail_item')
+            ->leftJoin('suppliers as s', 's.supplier_id', '=', 'g.supplier_id')
+            ->get(['gi.item_code', 'pod.unit_price', 'pod.discount_percent', 'g.delivery_date', 's.supp_name']);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(string) $r->item_code] = [
+                'unit_price' => (float) $r->unit_price,
+                'discount_percent' => (float) $r->discount_percent,
+                'date' => $r->delivery_date,
+                'supplier' => $r->supp_name,
+            ];
+        }
+
+        return response()->json((object) $out);
+    }
+
     public function show(int $id)
     {
         $grn = DB::table('grn_batch as g')

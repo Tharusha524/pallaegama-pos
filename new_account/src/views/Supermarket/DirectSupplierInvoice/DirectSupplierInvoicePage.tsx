@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Stack, TextField, Autocomplete, Table, TableHead, TableRow,
   TableCell, TableBody, IconButton, Typography, Paper,
@@ -14,6 +14,7 @@ import { getSuppliers } from "../../../api/Supplier/SupplierApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import { getItems } from "../../../api/Item/ItemApi";
 import { postDirectSupplierInvoice } from "../../../api/Purchases/PurchasesApi";
+import { getLastPurchaseCosts } from "../../../api/Purchases/PurchaseHistoryApi";
 import { notify } from "../../../services/notificationService";
 import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, emptyBatchPrice, useRetailPriceMap, type BatchPriceInput } from "../../../components/BatchPriceFields";
 
@@ -30,16 +31,10 @@ interface Line {
 let lineSeq = 1;
 const emptyLine = (): Line => ({ id: lineSeq++, item: null, description: "", quantity: "1", unit_price: "0", batch: emptyBatchPrice });
 
-/** The item's cost the system actually uses: average cost from received stock, else the entered purchase cost. */
-const currentCost = (item: any): number | null => {
-  const average = Number(item?.material_cost) || 0;
-  if (average > 0) return average;
-  const purchase = Number(item?.purchase_cost) || 0;
-  return purchase > 0 ? purchase : null;
-};
 
 export default function DirectSupplierInvoicePage() {
   const today = new Date().toISOString().slice(0, 10);
+  const queryClient = useQueryClient();
 
   const [supplier, setSupplier] = useState<any>(null);
   const [location, setLocation] = useState<any>(null);
@@ -50,6 +45,8 @@ export default function DirectSupplierInvoicePage() {
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers-all"], queryFn: getSuppliers });
   const { data: locations = [] } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
   const { data: items = [] } = useQuery({ queryKey: ["items-all"], queryFn: () => getItems() });
+  // What each item was last bought at — shown under the Purchase Price box.
+  const { data: lastCosts = {} } = useQuery({ queryKey: ["last-purchase-costs"], queryFn: getLastPurchaseCosts });
 
   const retailPrices = useRetailPriceMap();
 
@@ -92,6 +89,7 @@ export default function DirectSupplierInvoicePage() {
     },
     onSuccess: () => {
       notify.success("Supplier invoice posted successfully");
+      queryClient.invalidateQueries({ queryKey: ["last-purchase-costs"] });
       reset();
     },
     onError: (err: any) => {
@@ -157,7 +155,11 @@ export default function DirectSupplierInvoicePage() {
             </TableHead>
             <TableBody>
               {lines.map((line) => (
-                <TableRow key={line.id}>
+                <TableRow
+                  key={line.id}
+                  // Keep every box on one line; the "Last purchase" note sits under its box.
+                  sx={{ "& > td": { verticalAlign: "top" } }}
+                >
                   <TableCell>
                     <Autocomplete
                       options={Array.isArray(items) ? items : (items as any)?.data ?? []}
@@ -195,9 +197,13 @@ export default function DirectSupplierInvoicePage() {
                     />
                     {line.item && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-                        {currentCost(line.item) != null
-                          ? `Current cost: LKR ${currentCost(line.item)!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : "Current cost: not set"}
+                        {(() => {
+                          const last = lastCosts[String(line.item.stock_id)];
+                          if (!last) return "Last purchase: none yet";
+                          const price = Number(last.unit_price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                          const disc = Number(last.discount_percent) > 0 ? ` −${Number(last.discount_percent)}%` : "";
+                          return `Last purchase: LKR ${price}${disc} (${last.date}${last.supplier ? `, ${last.supplier}` : ""})`;
+                        })()}
                       </Typography>
                     )}
                   </TableCell>
@@ -208,12 +214,12 @@ export default function DirectSupplierInvoicePage() {
                     currentMrp={line.item?.mrp_price != null ? Number(line.item.mrp_price) : undefined}
                   />
                   <TableCell align="right">
-                    <Typography variant="body2">
+                    <Typography variant="body2" sx={{ pt: 1 }}>
                       {((Number(line.quantity) || 0) * (Number(line.unit_price) || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <IconButton size="small" color="error" onClick={() => removeLine(line.id)} disabled={lines.length === 1}>
+                    <IconButton size="small" color="error" sx={{ mt: 0.5 }} onClick={() => removeLine(line.id)} disabled={lines.length === 1}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

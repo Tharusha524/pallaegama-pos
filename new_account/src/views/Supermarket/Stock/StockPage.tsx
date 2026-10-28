@@ -27,6 +27,7 @@ import { getBrands } from "../../../api/Brands/BrandsApi";
 import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
 import { createStockAdjustment, getStockAdjustments } from "../../../api/Pos/posOpsApi";
 import BatchSelect from "../../../components/BatchSelect";
+import StockBatchQtyTable from "../../../components/StockBatchQtyTable";
 import { postInventoryAdjustment } from "../../../api/Inventory/InventoryTransactionApi";
 import { getStockDamages, recordStockDamage, deleteStockDamage } from "../../../api/Pos/posApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
@@ -791,6 +792,7 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
     onSuccess: () => {
       notify.success("Stock adjusted");
       setBatchId("");
+      queryClient.invalidateQueries({ queryKey: ["stock-batches"] });
       queryClient.invalidateQueries({ queryKey: ["stock-list"] });
       setAdjustOpen(false);
       setLocCode("");
@@ -802,39 +804,37 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
   });
 
   return (
-    <Box sx={{ py: 2, px: 1 }}>
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Category</Typography>
-          <Typography variant="body2">{product.category_name ?? "—"}</Typography>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Subcategory</Typography>
-          <Typography variant="body2">{product.subcategory_name ?? "—"}</Typography>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Brand</Typography>
-          <Typography variant="body2">{product.brand_name ?? "—"}</Typography>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Barcode</Typography>
-          <Typography variant="body2">{product.barcode ?? "No barcode linked"}</Typography>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Unit</Typography>
-          <Typography variant="body2">{product.unit_name ?? "—"}</Typography>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Purchase Cost</Typography>
-          <Typography variant="body2">{formatCurrency(product.purchase_cost)}</Typography>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Typography variant="caption" color="text.secondary">Quantity on Hand</Typography>
-          <Typography variant="body2">{product.quantity}</Typography>
+    <Box sx={{ my: 1.5, mx: 1, p: 2, bgcolor: "action.hover", border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+      {/* 1. Item details */}
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>Item details</Typography>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {[
+          ["Category", product.category_name ?? "—"],
+          ["Subcategory", product.subcategory_name ?? "—"],
+          ["Brand", product.brand_name ?? "—"],
+          ["Barcode", product.barcode ?? "No barcode linked"],
+          ["Unit", product.unit_name ?? "—"],
+        ].map(([label, value]) => (
+          <Grid item xs={6} sm={4} md={2} key={label}>
+            <Paper variant="outlined" sx={{ p: 1.25, height: "100%", borderRadius: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: "break-word" }}>{value}</Typography>
+            </Paper>
+          </Grid>
+        ))}
+        <Grid item xs={12} sm={4} md={2}>
+          <Paper variant="outlined" sx={{ p: 1.25, height: "100%", borderRadius: 1.5, borderColor: "primary.main" }}>
+            <Typography variant="caption" color="text.secondary" display="block">Quantity on Hand</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }} color="primary">{product.quantity}</Typography>
+          </Paper>
         </Grid>
       </Grid>
 
-      <Stack direction="row" spacing={1} alignItems="center">
+      {/* 2. How the quantity on hand splits into batches (MRP / price) */}
+      <StockBatchQtyTable stockId={String(product.stock_id)} formatCurrency={(v) => formatCurrency(v)} />
+
+      {/* 3. Actions */}
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
         <Button size="small" variant="outlined" startIcon={<EditIcon />} onClick={() => { setEditForm(emptyEditForm()); setEditOpen(true); }}>
           Edit Item
         </Button>

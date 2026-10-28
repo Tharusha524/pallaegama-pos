@@ -30,5 +30,9 @@ export interface PurchaseHistoryItem {
 export const getPurchaseHistory = async (params: { from_date?: string; to_date?: string; supplier_id?: number; search?: string }) =>
   (await api.get("/purchase-history", { params })).data as PurchaseHistoryRow[];
 
+/** Last price each product was bought at: { stock_id: { unit_price, discount_percent, date, supplier } }. */
+export const getLastPurchaseCosts = async () =>
+  (await api.get("/purchase-history/last-costs")).data as Record<string, { unit_price: number; discount_percent: number; date: string; supplier: string | null }>;
+
 export const getPurchaseHistoryDetail = async (id: number) =>
   (await api.get(`/purchase-history/${id}`)).data as { grn: any; items: PurchaseHistoryItem[] };

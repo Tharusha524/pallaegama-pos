@@ -461,6 +461,16 @@ export default function PosCheckoutPage() {
     return pending > 0 && totalQty - pending <= 0;
   };
   const [batchPicker, setBatchPicker] = useState<{ item: any; groups: BatchPriceGroup[] } | null>(null);
+  // True while the price popup is open and for a moment after it closes, read directly by
+  // the global keyboard shortcuts — so the Enter that picks a price can never also
+  // complete the sale (a state-based flag updates too late for that same key press).
+  const batchPickerGuardRef = useRef(false);
+  // ↑ / ↓ in the price popup move between the options (Enter picks the highlighted one).
+  const batchOptionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const closeBatchPicker = () => {
+    setBatchPicker(null);
+    setTimeout(() => { batchPickerGuardRef.current = false; }, 400);
+  };
 
   // Checkout can't even submit a sale without a shipping company and a bank
   // account to post the payment to — both are small, rarely-changing lists,
@@ -655,11 +665,16 @@ export default function PosCheckoutPage() {
     setCart((prev) => {
       const existing = prev.find((l) => (l.variant_id ? `variant:${l.variant_id}` : lineId(l)) === lineKey);
       if (existing) {
-        return prev.map((l) =>
-          (l.variant_id ? `variant:${l.variant_id}` : lineId(l)) === lineKey
-            ? { ...l, quantity: l.quantity + quantity }
-            : l
-        );
+        // Added again: its line moves to the bottom (the latest row) with the new qty,
+        // so the cashier always sees the last item added. Other prices of the same
+        // product are other lines and stay where they are.
+        const rest = prev.filter((l) => (l.variant_id ? `variant:${l.variant_id}` : lineId(l)) !== lineKey);
+        // The cart length doesn't change, so scroll to the moved line here.
+        setTimeout(() => {
+          cartScrollRef1.current?.scrollTo({ top: cartScrollRef1.current.scrollHeight });
+          cartScrollRef2.current?.scrollTo({ top: cartScrollRef2.current.scrollHeight });
+        }, 0);
+        return [...rest, { ...existing, quantity: existing.quantity + quantity }];
       }
       return [
         ...prev,
@@ -687,7 +702,8 @@ export default function PosCheckoutPage() {
     });
   };
 
-  const resolveSellingPrice = async (stockId: string): Promise<number | undefined> => {
+  // Today's active promotional price for a product, if any.
+  const resolvePromoPrice = async (stockId: string): Promise<number | undefined> => {
     try {
       const promos = await getPromotionalPrices({ stock_id: stockId, active_only: true });
       const today = new Date().toISOString().slice(0, 10);
@@ -696,6 +712,12 @@ export default function PosCheckoutPage() {
       );
       if (activePromo) return Number(activePromo.promo_price);
     } catch { /* fall through */ }
+    return undefined;
+  };
+
+  const resolveSellingPrice = async (stockId: string): Promise<number | undefined> => {
+    const promo = await resolvePromoPrice(stockId);
+    if (promo !== undefined) return promo;
     // Use pre-loaded pricing map first — avoids a per-item API call and
     // prevents the purchase_cost flash on the cart row.
     const preloaded = salesPricingMap.get(stockId);
@@ -783,6 +805,20 @@ export default function PosCheckoutPage() {
         }
       }).catch(() => { /* keep catalog price on error */ });
     }
+    // Picked packet (MRP popup): an active promotion still applies — but only when it
+    // is lower than that packet's own price, so a packet is never charged more.
+    if (!isOffline && selectedItem.batch_id != null && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
+      const batchLineId = lineId({ stock_id: stockId, batch_id: Number(selectedItem.batch_id) });
+      resolvePromoPrice(stockId).then((promo) => {
+        if (promo === undefined || !(promo > 0) || promo >= catalogPrice) return;
+        const promoDiscountPercent = manualDiscountMode2 === "percent"
+          ? Math.min(100, discountRaw)
+          : manualDiscountMode2 === "net"
+            ? (manualDiscountInput.trim() === "" ? 0 : Math.min(100, ((promo - discountRaw) / promo) * 100))
+            : Math.min(100, (discountRaw / promo) * 100);
+        updateLine(batchLineId, { unit_price: promo, original_unit_price: promo, discount_percent: promoDiscountPercent });
+      }).catch(() => { /* keep the packet's price on error */ });
+    }
     setSelectedItem(null);
     setQty("1");
     setManualSellingPrice("");
@@ -824,6 +860,14 @@ export default function PosCheckoutPage() {
         if (sp != null) { setManualSellingPrice(String(Number(sp))); setManualSellingPriceTouched(false); }
       }).catch(() => {});
     }
+    if (!isOffline && pickedBatch) {
+      // Show the promotion price for the picked packet when it is lower than its own price.
+      resolvePromoPrice(String(item.stock_id)).then((promo) => {
+        if (promo !== undefined && promo > 0 && promo < Number(item.sale_price)) {
+          setManualSellingPrice(String(promo)); setManualSellingPriceTouched(false);
+        }
+      }).catch(() => {});
+    }
     focusAfterItemSelect();
   };
 
@@ -834,6 +878,7 @@ export default function PosCheckoutPage() {
     if (!item || item.batch_id != null || item.matched_variant || item.is_weighted) return false;
     const groups = multiPriceMap[String(item.stock_id)];
     if (!groups || groups.length < 2) return false;
+    batchPickerGuardRef.current = true;
     setTimeout(() => setBatchPicker({ item, groups }), 150);
     return true;
   };
@@ -846,7 +891,7 @@ export default function PosCheckoutPage() {
       sale_price: g.selling_price,
       mrp_price: g.mrp ?? batchPicker.item.mrp_price,
     };
-    setBatchPicker(null);
+    closeBatchPicker();
     selectItemFromBarcode(item);
   };
 
@@ -1085,7 +1130,7 @@ export default function PosCheckoutPage() {
       // (see keyboardShortcutStateRef above) instead of closing over it
       // here, since this listener is registered once on mount.
       const s = keyboardShortcutStateRef.current;
-      if (s.reprintActive || s.batchPickerActive) return;
+      if (s.reprintActive || s.batchPickerActive || batchPickerGuardRef.current) return;
 
       // F9/F12/Esc — familiar function-key shortcuts from the old till
       // software the client is used to. These work regardless of focus,
@@ -2903,10 +2948,22 @@ export default function PosCheckoutPage() {
 
       <Dialog
         open={!!batchPicker}
-        onClose={() => { setBatchPicker(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
+        onClose={() => { closeBatchPicker(); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
         maxWidth="xs"
         fullWidth
         onKeyDown={(e) => {
+          // Keys pressed in the price popup belong to it only (never the sale shortcuts).
+          e.stopPropagation();
+          if (batchPicker && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            e.preventDefault();
+            const count = batchPicker.groups.length;
+            const current = batchOptionRefs.current.findIndex((el) => el === document.activeElement);
+            const next = e.key === "ArrowDown"
+              ? (current < 0 ? 0 : Math.min(count - 1, current + 1))
+              : (current < 0 ? 0 : Math.max(0, current - 1));
+            batchOptionRefs.current[next]?.focus();
+            return;
+          }
           const n = Number(e.key);
           if (batchPicker && n >= 1 && n <= batchPicker.groups.length) {
             e.preventDefault();
@@ -2921,7 +2978,17 @@ export default function PosCheckoutPage() {
         <DialogContent sx={{ pt: 1 }}>
           <List dense>
             {(batchPicker?.groups ?? []).map((g, i) => (
-              <ListItemButton key={g.batch_id} autoFocus={i === 0} onClick={() => pickBatch(g)} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, mb: 1 }}>
+              <ListItemButton
+                key={g.batch_id}
+                autoFocus={i === 0}
+                ref={(el) => { batchOptionRefs.current[i] = el; }}
+                onClick={() => pickBatch(g)}
+                sx={{
+                  border: "1px solid", borderColor: "divider", borderRadius: 2, mb: 1,
+                  // the highlighted option (moved with ↑ / ↓)
+                  "&.Mui-focusVisible, &:focus": { backgroundColor: "action.selected", borderColor: "primary.main" },
+                }}
+              >
                 <ListItemText
                   primary={`${i + 1}.  MRP ${g.mrp != null ? formatCurrency(g.mrp, 2) : "—"}`}
                   secondary={`In stock: ${Number(g.qty)}`}
@@ -2932,7 +2999,7 @@ export default function PosCheckoutPage() {
           </List>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setBatchPicker(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}>Cancel</Button>
+          <Button onClick={() => { closeBatchPicker(); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}>Cancel</Button>
         </DialogActions>
       </Dialog>
 

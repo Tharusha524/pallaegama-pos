@@ -554,6 +554,7 @@ Route::post('stock-batches/fix-mismatches', [\App\Http\Controllers\StockBatchCon
 
 // ---- Purchase History (read-only) ----
 Route::get('purchase-history', [\App\Http\Controllers\PurchaseHistoryController::class, 'index']);
+Route::get('purchase-history/last-costs', [\App\Http\Controllers\PurchaseHistoryController::class, 'lastCosts']);
 Route::get('purchase-history/{id}', [\App\Http\Controllers\PurchaseHistoryController::class, 'show'])->whereNumber('id');
 Route::put('stock-batches/{id}', [\App\Http\Controllers\StockBatchController::class, 'update'])->whereNumber('id');
 

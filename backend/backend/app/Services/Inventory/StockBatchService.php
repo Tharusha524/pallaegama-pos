@@ -371,14 +371,22 @@ class StockBatchService
 
                     return;
                 }
+                // First purchase of a product (no batch at this location yet): it sells at
+                // the price / MRP already set for it (Add Item / Set Price), if there is one.
+                $firstPriced = $batches->isEmpty() && (float) $defaults['selling_price'] > 0;
                 $id = $this->createBatch($stockId, $locCode, $qty, [
                     'source_type' => $ctx['source_type'] ?? 'grn',
                     'source_no' => $ctx['source_no'] ?? null,
                     'purchase_cost' => $cost,
-                    'selling_price' => 0,
-                    'mrp' => null,
-                    'status' => 'pending',
+                    'selling_price' => $firstPriced ? $defaults['selling_price'] : 0,
+                    'mrp' => $firstPriced ? $defaults['mrp'] : null,
+                    'status' => $firstPriced ? 'active' : 'pending',
                 ]);
+                if ($firstPriced) {
+                    $this->log($id, $stockId, $locCode, $qty, $ctx['trans_type'] ?? null, $ctx['trans_no'] ?? null, $ctx['note'] ?? 'First purchase — product price');
+
+                    return;
+                }
                 $this->log($id, $stockId, $locCode, $qty, $ctx['trans_type'] ?? null, $ctx['trans_no'] ?? null, $ctx['note'] ?? 'New cost — price not set yet');
 
                 return;
