@@ -373,6 +373,7 @@ Route::post('stock-masters/safe-delete', [StockMasterController::class, 'safeDel
 Route::patch('stock-masters/bulk-inactive', [StockMasterController::class, 'bulkInactive']);
 Route::apiResource('stock-masters', StockMasterController::class);
 Route::patch('stock-masters/{id}/mrp-price', [StockMasterController::class, 'updateMrpPrice']);
+Route::patch('stock-masters/{id}/stock-id', [StockMasterController::class, 'changeStockId']);
 Route::patch('stock-masters/{id}/wholesale-pricing', [StockMasterController::class, 'updateWholesalePricing']);
 Route::patch('stock-masters/{id}/eoq-settings', [StockMasterController::class, 'updateEoqSettings']);
 Route::patch('stock-masters/{id}/expiry-date', [StockMasterController::class, 'updateExpiryDate']);

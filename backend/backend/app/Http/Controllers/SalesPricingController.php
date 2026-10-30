@@ -216,7 +216,9 @@ class SalesPricingController extends Controller
             }
 
             $barcode = trim((string) ($row['barcode'] ?? ''));
-            if ($barcode !== '' && !ItemCode::where('item_code', $barcode)->exists()) {
+            // One barcode may belong to several products (the till lets the cashier
+            // pick); only skip it when THIS product already has it.
+            if ($barcode !== '' && !ItemCode::where('item_code', $barcode)->where('stock_id', $stockId)->exists()) {
                 $stock = StockMaster::find($stockId);
                 if ($stock) {
                     ItemCode::create([

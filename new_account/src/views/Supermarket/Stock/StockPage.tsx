@@ -32,7 +32,7 @@ import { postInventoryAdjustment } from "../../../api/Inventory/InventoryTransac
 import { getStockDamages, recordStockDamage, deleteStockDamage } from "../../../api/Pos/posApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import {
-  getItems, bulkCreateStockMasters, bulkUpdateUnits, safeDeleteStockMasters, bulkInactivateStockMasters,
+  getItems, bulkCreateStockMasters, bulkUpdateUnits, safeDeleteStockMasters, bulkInactivateStockMasters, changeStockId,
   type SafeDeleteResult,
 } from "../../../api/Item/ItemApi";
 import { getItemUnits } from "../../../api/ItemUnit/ItemUnitApi";
@@ -727,6 +727,7 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
   const [batchId, setBatchId] = useState<number | "">("");
 
   const emptyEditForm = () => ({
+    stock_id: String(product.stock_id ?? ""),
     description: product.description ?? "",
     category_name: product.category_name ?? "",
     subcategory_name: product.subcategory_name ?? "",
@@ -754,9 +755,16 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
 
   const editMutation = useMutation({
     mutationFn: async () => {
+      // New item code first: the server refuses it for a used item, and then nothing else is saved.
+      let stockId = String(product.stock_id);
+      const newStockId = editForm.stock_id.trim();
+      if (newStockId && newStockId !== stockId) {
+        await changeStockId(stockId, newStockId);
+        stockId = newStockId;
+      }
       const price = Number(editForm.selling_price) || 0;
       await bulkUpsertSalesPricing([{
-        stock_id: product.stock_id,
+        stock_id: stockId,
         currency_id: 8,
         sales_type_id: 3,
         price,
@@ -769,12 +777,13 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
         barcode: editForm.barcode || undefined,
       }]);
       if (editForm.unit_id && String(editForm.unit_id) !== String(product.units)) {
-        await bulkUpdateUnits([product.stock_id], Number(editForm.unit_id));
+        await bulkUpdateUnits([stockId], Number(editForm.unit_id));
       }
     },
     onSuccess: () => {
       notify.success("Item updated");
       queryClient.invalidateQueries({ queryKey: ["stock-list"] });
+      queryClient.invalidateQueries({ queryKey: ["items-all"] });
       setEditOpen(false);
     },
     onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to update item"),
@@ -857,6 +866,11 @@ function ProductDetailPanel({ product, onDelete }: { product: any; onDelete?: ()
         <DialogTitle>Edit Item — {product.stock_id}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Item Code" fullWidth value={editForm.stock_id}
+              helperText="Can only be changed if the item has no sales or purchases yet."
+              onChange={(e) => setEditForm({ ...editForm, stock_id: e.target.value })}
+            />
             <TextField
               label="Description" fullWidth value={editForm.description}
               onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}

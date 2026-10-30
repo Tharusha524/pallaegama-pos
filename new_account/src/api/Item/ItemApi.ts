@@ -77,6 +77,12 @@ export const updateExpiryDate = async (stockId: string, expiryDate: string | nul
   return response.data;
 };
 
+/** Change an item code — the server refuses it once the item has been used. */
+export const changeStockId = async (stockId: string, newStockId: string) => {
+  const response = await api.patch(`${API_URL}/${stockId}/stock-id`, { new_stock_id: newStockId });
+  return response.data;
+};
+
 export const bulkUpdateUnits = async (stockIds: string[], unitId: number) => {
   const response = await api.patch(`${API_URL}/bulk-units`, { stock_ids: stockIds, units: unitId });
   return response.data;

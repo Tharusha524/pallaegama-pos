@@ -66,14 +66,10 @@ class StockMasterController extends Controller
             return response()->json(['message' => 'No rows provided.'], 422);
         }
 
+        // Accounts are copied from an existing product; on an empty system (no
+        // product yet) each row takes them from its category's defaults instead.
         $template = StockMaster::where('inactive', false)->orderBy('stock_id')->first();
-        if (!$template) {
-            return response()->json([
-                'message' => 'No existing product to copy accounting setup from yet — add one product manually first.',
-            ], 422);
-        }
-
-        $accountingDefaults = [
+        $templateAccounts = $template ? [
             'tax_type_id' => $template->tax_type_id,
             'mb_flag' => $template->mb_flag,
             'sales_account' => $template->sales_account,
@@ -81,6 +77,16 @@ class StockMasterController extends Controller
             'inventory_account' => $template->inventory_account,
             'adjustment_account' => $template->adjustment_account,
             'wip_account' => $template->wip_account,
+        ] : null;
+
+        $accountingDefaults = [
+            'tax_type_id' => null,
+            'mb_flag' => null,
+            'sales_account' => null,
+            'cogs_account' => null,
+            'inventory_account' => null,
+            'adjustment_account' => null,
+            'wip_account' => null,
             'material_cost' => 0,
             'labour_cost' => 0,
             'overhead_cost' => 0,
@@ -143,16 +149,24 @@ class StockMasterController extends Controller
 
             $unitsId = $this->resolveByName('item_units', 'name', 'id', $row['units'] ?? null)
                 ?? $this->resolveByName('item_units', 'abbr', 'id', $row['units'] ?? null);
-            if (($row['units'] ?? '') !== '' && $unitsId === null) {
-                $errors[] = ['row' => $rowNo, 'stock_id' => $stockId, 'message' => "Unit \"{$row['units']}\" not found."];
-                continue;
+            // Missing unit → create it, the same way categories and brands are.
+            if (trim($row['units'] ?? '') !== '' && $unitsId === null) {
+                $unitName = trim($row['units']);
+                $unitsId = DB::table('item_units')->insertGetId([
+                    'abbr' => $unitName,
+                    'name' => $unitName,
+                    'decimals' => in_array(mb_strtolower($unitName), ['kg', 'l'], true) ? 3 : 0,
+                    'inactive' => 0,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
             // Fall back to the first available unit if none provided
             if ($unitsId === null) {
                 $unitsId = DB::table('item_units')->value('id');
             }
 
-            $data = array_merge($accountingDefaults, [
+            $data = array_merge($accountingDefaults, $templateAccounts ?? $this->categoryAccounts($categoryId), [
                 'stock_id' => $row['stock_id'] ?? null,
                 'description' => $row['description'] ?? null,
                 'long_description' => $row['description'] ?? null,
@@ -179,6 +193,25 @@ class StockMasterController extends Controller
             'created' => $created,
             'errors' => $errors,
         ]);
+    }
+
+    /**
+     * A category's default accounts, in stock_master's field names. Falls back
+     * to the same defaults bulkStore gives a category it creates.
+     */
+    private function categoryAccounts($categoryId): array
+    {
+        $cat = $categoryId ? DB::table('item_category')->where('category_id', $categoryId)->first() : null;
+
+        return [
+            'tax_type_id' => $cat->dflt_tax_type ?? 1,
+            'mb_flag' => $cat->dflt_mb_flag ?? 2,
+            'sales_account' => $cat->dflt_sales_act ?? '2000',
+            'cogs_account' => $cat->dflt_cogs_act ?? '3010',
+            'inventory_account' => $cat->dflt_inventory_act ?? '1100',
+            'adjustment_account' => $cat->dflt_adjustment_act ?? '3020',
+            'wip_account' => $cat->dflt_wip_act ?? '2200',
+        ];
     }
 
     /**
@@ -216,7 +249,9 @@ class StockMasterController extends Controller
             }
 
             $barcode = trim((string) ($row['barcode'] ?? ''));
-            if ($barcode !== '' && !ItemCode::where('item_code', $barcode)->exists()) {
+            // One barcode may belong to several products (the till lets the cashier
+            // pick); only skip it when THIS product already has it.
+            if ($barcode !== '' && !ItemCode::where('item_code', $barcode)->where('stock_id', $stockId)->exists()) {
                 $stock = StockMaster::find($stockId);
                 if ($stock) {
                     ItemCode::create([
@@ -332,16 +367,6 @@ class StockMasterController extends Controller
             'stock_ids.*' => ['string'],
         ]);
 
-        // table => column holding the stock id
-        $historyTables = [
-            'stock_moves' => 'stock_id',
-            'debtor_trans_details' => 'stock_id',
-            'sales_order_details' => 'stk_code',
-            'purch_order_details' => 'item_code',
-            'grn_items' => 'item_code',
-            'supp_invoice_items' => 'stock_id',
-            'wo_requirements' => 'stock_id',
-        ];
         // Setup-only rows that belong to the product and go with it.
         $setupTables = ['item_codes', 'sales_pricing', 'purch_data', 'promotional_prices', 'item_variants', 'loc_stock'];
 
@@ -355,21 +380,7 @@ class StockMasterController extends Controller
                 continue;
             }
 
-            $reason = null;
-            foreach ($historyTables as $table => $column) {
-                if (Schema::hasTable($table) && DB::table($table)->where($column, $stockId)->exists()) {
-                    $reason = 'Has sales, purchase or stock history.';
-                    break;
-                }
-            }
-            if (! $reason && Schema::hasTable('loc_stock')
-                && DB::table('loc_stock')->where('stock_id', $stockId)->where('quantity', '!=', 0)->exists()) {
-                $reason = 'Has stock on hand.';
-            }
-            if (! $reason && Schema::hasTable('bom')
-                && DB::table('bom')->where('parent', $stockId)->orWhere('component', $stockId)->exists()) {
-                $reason = 'Used in a bill of materials.';
-            }
+            $reason = $this->usedReason($stockId);
             if ($reason) {
                 $blocked[] = ['stock_id' => $stockId, 'description' => $stock->description, 'reason' => $reason];
                 continue;
@@ -395,6 +406,116 @@ class StockMasterController extends Controller
         }
 
         return response()->json(['deleted' => $deleted, 'blocked' => $blocked]);
+    }
+
+    /**
+     * Why a product can't be deleted — it has
+     * sales, purchase or stock history, stock on hand, or a BOM link.
+     * Null when it was never used.
+     */
+    private function usedReason(string $stockId): ?string
+    {
+        // table => column holding the stock id
+        $historyTables = [
+            'stock_moves' => 'stock_id',
+            'debtor_trans_details' => 'stock_id',
+            'sales_order_details' => 'stk_code',
+            'purch_order_details' => 'item_code',
+            'grn_items' => 'item_code',
+            'supp_invoice_items' => 'stock_id',
+            'wo_requirements' => 'stock_id',
+        ];
+        foreach ($historyTables as $table => $column) {
+            if (Schema::hasTable($table) && DB::table($table)->where($column, $stockId)->exists()) {
+                return 'Has sales, purchase or stock history.';
+            }
+        }
+        if (Schema::hasTable('loc_stock')
+            && DB::table('loc_stock')->where('stock_id', $stockId)->where('quantity', '!=', 0)->exists()) {
+            return 'Has stock on hand.';
+        }
+        if (Schema::hasTable('bom')
+            && DB::table('bom')->where('parent', $stockId)->orWhere('component', $stockId)->exists()) {
+            return 'Used in a bill of materials.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Change a product's item code — only while it has no sales or purchases,
+     * so no sale/purchase document ever points at the old code. Its setup rows
+     * (barcodes, prices, offers) and stock-only records (adjustments, batches,
+     * stock on hand) move to the new code in one transaction.
+     */
+    public function changeStockId(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'new_stock_id' => ['required', 'string', 'max:255'],
+        ]);
+        $newId = trim($validated['new_stock_id']);
+
+        $stock = StockMaster::find($id);
+        if (! $stock) {
+            return response()->json(['message' => 'Product not found.'], 404);
+        }
+        if ($newId === '' || $newId === (string) $stock->stock_id) {
+            return response()->json(['message' => 'Enter a new item code.'], 422);
+        }
+        if (StockMaster::where('stock_id', $newId)->exists()) {
+            return response()->json(['message' => "Item code {$newId} is already used by another product."], 422);
+        }
+        // Blocked once the item was sold, bought, quoted or manufactured —
+        // those documents keep the code they were made with.
+        $blockingTables = [
+            'debtor_trans_details' => 'stock_id',
+            'sales_order_details' => 'stk_code',
+            'quotation_details' => 'stk_code',
+            'price_override_log' => 'stock_id',
+            'warranties' => 'stock_id',
+            'purch_order_details' => 'item_code',
+            'grn_items' => 'item_code',
+            'supp_invoice_items' => 'stock_id',
+            'wo_requirements' => 'stock_id',
+            'workorders' => 'stock_id',
+            'wo_issue_items' => 'stock_id',
+            'fa_depreciation_lines' => 'stock_id',
+        ];
+        foreach ($blockingTables as $table => $column) {
+            if (Schema::hasTable($table) && DB::table($table)->where($column, $id)->exists()) {
+                return response()->json(['message' => "Can't change the item code: Has sales or purchase history."], 422);
+            }
+        }
+        if (Schema::hasTable('bom') && DB::table('bom')->where('parent', $id)->orWhere('component', $id)->exists()) {
+            return response()->json(['message' => "Can't change the item code: Used in a bill of materials."], 422);
+        }
+
+        // Setup rows, plus stock-only records (adjustments, batches, transfers,
+        // damages, counts) — these just move to the new code, quantities unchanged.
+        $setupTables = [
+            'sales_pricing', 'purch_data', 'purchasing_pricing', 'promotional_prices', 'item_variants', 'loc_stock',
+            'stock_moves', 'stock_batches', 'stock_batch_movements', 'stock_adjustments', 'stock_damages',
+            'stock_transfer_items', 'inventory_audit_items',
+        ];
+
+        DB::transaction(function () use ($id, $newId, $setupTables) {
+            // The product's own code linked as a barcode follows the new code.
+            if (Schema::hasTable('item_codes')) {
+                DB::table('item_codes')->where('stock_id', $id)->where('item_code', $id)->update(['item_code' => $newId]);
+                DB::table('item_codes')->where('stock_id', $id)->update(['stock_id' => $newId]);
+            }
+            foreach ($setupTables as $table) {
+                if (Schema::hasTable($table)) {
+                    DB::table($table)->where('stock_id', $id)->update(['stock_id' => $newId]);
+                }
+            }
+            if (Schema::hasTable('offers')) {
+                DB::table('offers')->where('offer_type', 'product')->where('target_id', $id)->update(['target_id' => $newId]);
+            }
+            DB::table('stock_master')->where('stock_id', $id)->update(['stock_id' => $newId]);
+        });
+
+        return response()->json(StockMaster::find($newId));
     }
 
     /** Mark many products Inactive at once — the safe alternative to deleting a used item. */

@@ -23,7 +23,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
-import { getItems } from "../../../api/Item/ItemApi";
+import api from "../../../api/apiClient";
 import { getCustomers } from "../../../api/Customer/AddCustomerApi";
 import { getBranches } from "../../../api/CustomerBranch/CustomerBranchApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
@@ -181,6 +181,10 @@ export default function PosCheckoutPage() {
   // every match instead of guessing — this holds that list so the cashier
   // can pick the right one.
   const [barcodeMatches, setBarcodeMatches] = useState<any[] | null>(null);
+  // A scanned barcode shared by several products: they are listed in the search
+  // dropdown (like a normal search) for the cashier to pick from.
+  const [barcodeDropdown, setBarcodeDropdown] = useState<any[] | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const itemSearchInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
@@ -285,8 +289,12 @@ export default function PosCheckoutPage() {
   const { data: customersFromApi } = useQuery({
     queryKey: ["customers-all"], queryFn: getCustomers, refetchInterval: 5 * 60 * 1000,
   });
+  // Throws on a network error (unlike getItems, which returns []) so an empty
+  // list here always means the server really has no items.
   const { data: itemsFromApi } = useQuery({
-    queryKey: ["items-all"], queryFn: getItems, refetchInterval: 5 * 60 * 1000,
+    queryKey: ["items-all", "pos"], // still refreshed by invalidate(["items-all"])
+    queryFn: async () => (await api.get("/stock-masters")).data ?? [],
+    refetchInterval: 5 * 60 * 1000,
   });
 
   // Offline fallback (desktop app only): products/customers synced down to
@@ -320,7 +328,7 @@ export default function PosCheckoutPage() {
   // Refresh the local offline snapshot every time a fresh copy arrives from
   // the server — this is what makes offline lookups possible after a restart.
   useEffect(() => {
-    if (!isDesktopApp() || !itemsFromApi || itemsFromApi.length === 0) return;
+    if (!isDesktopApp() || !Array.isArray(itemsFromApi)) return;
     saveProductsSnapshot(
       itemsFromApi.map((i: any) => ({
         stock_id: i.stock_id,
@@ -348,7 +356,8 @@ export default function PosCheckoutPage() {
   }, [customersFromApi]);
 
   const customers = customersFromApi && customersFromApi.length > 0 ? customersFromApi : offlineCustomers;
-  const items = itemsFromApi && itemsFromApi.length > 0 ? itemsFromApi : offlineItems;
+  // Server answered → its list wins (even empty). No answer yet / offline → saved copy.
+  const items = Array.isArray(itemsFromApi) ? itemsFromApi : offlineItems;
 
   // Filter items by original typed text OR Singlish→Sinhala transliteration
   const singlishFilterOptions = (options: any[], { inputValue }: { inputValue: string }) => {
@@ -916,7 +925,9 @@ export default function PosCheckoutPage() {
     try {
       const result = await lookupBarcode(trimmed, customerSalesTypeId);
       if (result?.matches) {
-        setBarcodeMatches(result.matches);
+        setBarcodeDropdown(result.matches);
+        setSearchOpen(true);
+        setTimeout(() => itemSearchInputRef.current?.focus(), 0);
         return;
       }
       const scannedQty = stockQtyByStockId.get(String(result.stock_id)) ?? result.quantity ?? 0;
@@ -964,6 +975,19 @@ export default function PosCheckoutPage() {
   const updateLine = (key: string, patch: Partial<CartLine>) => {
     setCart((prev) => prev.map((l) => (lineId(l) === key ? { ...l, ...patch } : l)));
   };
+
+  // Cart Qty box text while the cashier types, so "1." / "0.25" aren't
+  // reformatted mid-typing. Up to 3 decimals (e.g. 0.250 kg).
+  const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
+  const onQtyType = (key: string, raw: string) => {
+    const m = raw.replace(/[^0-9.]/g, "").match(/^\d*(\.\d{0,3})?/);
+    const text = m ? m[0] : "";
+    setQtyDraft((d) => ({ ...d, [key]: text }));
+    updateLine(key, { quantity: Number(text) || 0 });
+  };
+  const endQtyTyping = (key: string) =>
+    setQtyDraft((d) => { const { [key]: _, ...rest } = d; return rest; });
+  useEffect(() => { if (cart.length === 0) setQtyDraft({}); }, [cart.length]);
 
   const removeLine = (key: string) => {
     setCart((prev) => prev.filter((l) => lineId(l) !== key));
@@ -1311,12 +1335,36 @@ export default function PosCheckoutPage() {
         method: (bankAccounts ?? []).find((a: any) => a.id === p.bank_account_id)?.bank_account_name ?? "Cash",
         amount: Number(p.amount) || 0,
       }));
+      // Offline receipt number, tagged with the till so several tills never mix up:
+      // e.g. "T1-A1B2C3D4". It is also the invoice reference after sync, so Reprint
+      // can find the sale by the number printed on the customer's receipt.
+      const tillCode = String(posSettings?.terminal_id || getOrCreateTerminalId().slice(-4)).trim();
+      const offlineNo = `${tillCode}-${uuid.slice(0, 8).toUpperCase()}`;
+      // Exact copy of this receipt — saved to the server for reprints once the sale syncs.
+      const offlineReceiptCopy = {
+        printedAt: new Date().toISOString(),
+        cashierName: user?.first_name || user?.email || null,
+        customerName: customer?.name ?? null,
+        lines: cart.map((l) => ({
+          stock_id: l.stock_id, description: l.description, quantity: l.quantity,
+          unit_price: l.unit_price, discount_percent: l.discount_percent, mrp_price: l.mrp_price ?? null,
+        })),
+        total: grandTotal,
+        payments: receiptPayments,
+        cashReceived: totalPaid,
+        couponCode: appliedCoupon?.coupon_code ?? null,
+        voucherCode: appliedVoucher?.code ?? null,
+        shiftId: currentShiftId ?? null,
+        paperSize: posSettings?.receipt_paper_size ?? null,
+        receiptSettings: buildReceiptSettings(),
+        offlineNo,
+      };
       queuePendingSale({
         uuid,
         terminal_id: getOrCreateTerminalId(),
         cashier_id: String(user?.id ?? user?.email ?? "unknown"),
         customer_id: customer?.debtor_no ?? null,
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify({ ...payload, reference: `OFF-${offlineNo}`, _receipt_copy: offlineReceiptCopy }),
         total: grandTotal,
         created_at: new Date().toISOString(),
       }).catch(() => {
@@ -1326,7 +1374,7 @@ export default function PosCheckoutPage() {
       notify.success("Sale saved offline — it will sync automatically once the connection is back");
       setIsQuoteReceipt(false);
       setLastReceipt({
-        trans_no: uuid.slice(0, 8).toUpperCase(),
+        trans_no: offlineNo,
         lines: cart,
         subtotal: grandTotal,
         customer,
@@ -1789,12 +1837,20 @@ export default function PosCheckoutPage() {
               <Autocomplete
                 size="small"
                 sx={{ flex: "1 1 220px" }}
-                options={items ?? []}
+                options={barcodeDropdown ?? items ?? []}
                 getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
-                filterOptions={singlishFilterOptions}
+                filterOptions={barcodeDropdown ? (o: any[]) => o : singlishFilterOptions}
+                open={searchOpen}
+                onOpen={() => setSearchOpen(true)}
+                onClose={() => { setSearchOpen(false); setBarcodeDropdown(null); }}
+                onInputChange={(_, _v, reason) => { if (reason === "input" && barcodeDropdown) setBarcodeDropdown(null); }}
                 autoHighlight
                 value={selectedItem}
                 onChange={(_, val) => {
+                  if (val && barcodeDropdown && (stockQtyByStockId.get(String(val.stock_id)) ?? val.quantity ?? 0) <= 0) {
+                    notify.error(`"${val.description}" is out of stock`);
+                    return;
+                  }
                   if (val && openBatchPickerIfNeeded(val)) return;
                   setSelectedItem(val);
                   setLastViewedProduct(val);
@@ -1832,7 +1888,7 @@ export default function PosCheckoutPage() {
                       }
                       if (e.key === "Enter") {
                         const val = itemSearchInputRef.current?.value ?? "";
-                        if (/^\d{4,}$/.test(val.trim())) {
+                        if (!barcodeDropdown && /^\d{4,}$/.test(val.trim())) {
                           e.preventDefault();
                           e.stopPropagation();
                           scanAndAddCode(val.trim());
@@ -2227,12 +2283,20 @@ export default function PosCheckoutPage() {
                 <Stack direction="row" spacing={2} alignItems="flex-start">
                   <Autocomplete
                     sx={{ flex: 2 }}
-                    options={items ?? []}
+                    options={barcodeDropdown ?? items ?? []}
                     getOptionLabel={(i: any) => `${i.stock_id} — ${i.description}`}
-                    filterOptions={singlishFilterOptions}
+                    filterOptions={barcodeDropdown ? (o: any[]) => o : singlishFilterOptions}
+                    open={searchOpen}
+                    onOpen={() => setSearchOpen(true)}
+                    onClose={() => { setSearchOpen(false); setBarcodeDropdown(null); }}
+                    onInputChange={(_, _v, reason) => { if (reason === "input" && barcodeDropdown) setBarcodeDropdown(null); }}
                     autoHighlight
                     value={selectedItem}
                     onChange={(_, val) => {
+                      if (val && barcodeDropdown && (stockQtyByStockId.get(String(val.stock_id)) ?? val.quantity ?? 0) <= 0) {
+                        notify.error(`"${val.description}" is out of stock`);
+                        return;
+                      }
                       if (val && openBatchPickerIfNeeded(val)) return;
                       setSelectedItem(val);
                       setLastViewedProduct(val);
@@ -2279,7 +2343,7 @@ export default function PosCheckoutPage() {
                           }
                           if (e.key === "Enter") {
                             const val = itemSearchInputRef.current?.value ?? "";
-                            if (/^\d{4,}$/.test(val.trim())) {
+                            if (!barcodeDropdown && /^\d{4,}$/.test(val.trim())) {
                               e.preventDefault();
                               e.stopPropagation();
                               scanAndAddCode(val.trim());
@@ -2415,9 +2479,10 @@ export default function PosCheckoutPage() {
                           <RemoveIcon fontSize="inherit" />
                         </IconButton>
                         <TextField
-                          type="text" inputMode="numeric" size="small" value={l.quantity.toLocaleString()} sx={{ width: 90 }}
+                          type="text" inputMode="decimal" size="small" value={qtyDraft[lineId(l)] ?? l.quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} sx={{ width: 90 }}
                           inputProps={{ style: { textAlign: "center" } }}
-                          onChange={(e) => updateLine(lineId(l), { quantity: Math.max(0, parseFormattedNumber(e.target.value)) })}
+                          onChange={(e) => onQtyType(lineId(l), e.target.value)}
+                          onBlur={() => endQtyTyping(lineId(l))}
                         />
                         <IconButton
                           size="small"
@@ -3048,6 +3113,7 @@ export default function PosCheckoutPage() {
             cashierName={copy?.cashierName ?? undefined}
             onClose={() => { setReprintReceipt(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
             transNo={reprintReceipt.trans_no}
+            offlineNo={copy?.offlineNo ?? undefined}
             customerName={(copy ? copy.customerName : reprintReceipt.customer_name) ?? undefined}
             lines={sourceLines.map((l) => ({
               stock_id: l.stock_id,

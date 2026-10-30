@@ -5,6 +5,7 @@
  */
 import { directSalesInvoice, type DirectSalesInvoicePayload } from "../api/SalesInvoice/SalesInvoiceApi";
 import { recordStockDamage } from "../api/Pos/posApi";
+import { savePosReceiptCopy } from "../api/Pos/posOpsApi";
 import { getStockList } from "../api/Inventory/StockListApi";
 import { notify } from "../services/notificationService";
 import queryClient from "../state/queryClient";
@@ -48,9 +49,18 @@ export async function syncPendingSales(): Promise<void> {
     let failed = 0;
     for (const sale of pending) {
       try {
-        const payload: DirectSalesInvoicePayload = JSON.parse(sale.payload);
-        await directSalesInvoice(payload);
+        const parsed = JSON.parse(sale.payload);
+        // The receipt copy travels with the queued sale but is not part of the invoice.
+        const receiptCopy = parsed._receipt_copy;
+        delete parsed._receipt_copy;
+        const payload: DirectSalesInvoicePayload = parsed;
+        const result: any = await directSalesInvoice(payload);
         await markSaleSynced(sale.uuid);
+        // Exact copy of the receipt for reprints, now under its real invoice number.
+        // Best-effort: a failure here never un-syncs the sale.
+        if (receiptCopy && result?.trans_no) {
+          await savePosReceiptCopy(result.trans_no, receiptCopy).catch(() => {});
+        }
         succeeded += 1;
       } catch (err: any) {
         // Leave it queued — it'll retry on the next sync pass rather than being lost.

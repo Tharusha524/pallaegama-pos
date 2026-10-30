@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Stack, TextField, Typography, Table, TableHead, TableRow,
   TableCell, TableBody, TableContainer, Paper, IconButton, LinearProgress,
@@ -15,6 +15,10 @@ import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import { bulkCreateItems, AddItemRow } from "../../../api/StockMaster/StockMasterApi";
 import { notify } from "../../../services/notificationService";
+import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
+import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
+import { getBrands } from "../../../api/Brands/BrandsApi";
+import { getItemUnits } from "../../../api/ItemUnit/ItemUnitApi";
 import * as XLSX from "xlsx";
 
 const emptyRow = (): AddItemRow & { _id: number } => ({
@@ -33,6 +37,37 @@ const emptyRow = (): AddItemRow & { _id: number } => ({
 
 export default function AddItemPage() {
   const [rows, setRows] = useState<Array<AddItemRow & { _id: number }>>([emptyRow()]);
+  const queryClient = useQueryClient();
+
+  // Existing names offered as a dropdown (native <datalist>, light enough for
+  // thousands of imported rows) so the same category/brand isn't retyped with
+  // a different spelling. A new name can still be typed.
+  const { data: categories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories() });
+  const { data: subcategories } = useQuery({ queryKey: ["subcategories"], queryFn: () => getSubcategories() });
+  const { data: brands } = useQuery({ queryKey: ["brands"], queryFn: () => getBrands() });
+  const { data: units } = useQuery({ queryKey: ["item-units"], queryFn: () => getItemUnits() });
+
+  const categoryIdByName = useMemo(() => {
+    const m = new Map<string, number>();
+    (categories ?? []).forEach((c: any) => m.set(String(c.description ?? "").trim().toLowerCase(), c.category_id));
+    return m;
+  }, [categories]);
+  // Subcategory names per category id, for the row's chosen category.
+  const subNamesByCategory = useMemo(() => {
+    const m = new Map<number, Set<string>>();
+    (subcategories ?? []).forEach((s: any) => {
+      if (s.category_id == null || !s.name) return;
+      if (!m.has(s.category_id)) m.set(s.category_id, new Set());
+      m.get(s.category_id)!.add(s.name);
+    });
+    return m;
+  }, [subcategories]);
+  const uniqueNames = (list: any[] | undefined, key: string) =>
+    Array.from(new Set((list ?? []).map((x: any) => String(x?.[key] ?? "").trim()).filter(Boolean)));
+  const subListId = (category?: string) => {
+    const catId = categoryIdByName.get(String(category ?? "").trim().toLowerCase());
+    return catId != null && subNamesByCategory.has(catId) ? `add-item-sub-${catId}` : "add-item-sub-all";
+  };
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -46,6 +81,9 @@ export default function AddItemPage() {
         data.errors.forEach((e: any) => notify.error(`Row ${e.row} (${e.stock_id}): ${e.message}`));
       }
       setRows([emptyRow()]);
+      // The save may have created new categories/brands/units — show them in the dropdowns.
+      ["item-categories", "subcategories", "brands", "item-units"].forEach((k) =>
+        queryClient.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e: any) => notify.error(e.message ?? "Failed to create items."),
   });
@@ -175,22 +213,22 @@ export default function AddItemPage() {
                 </TableCell>
                 <TableCell>
                   <TextField size="small" value={r.category ?? ""}
-                    inputProps={{ style: { width: 110 } }}
+                    inputProps={{ style: { width: 110 }, list: "add-item-categories" }}
                     onChange={(e) => updateRow(r._id, "category", e.target.value)} />
                 </TableCell>
                 <TableCell>
                   <TextField size="small" value={r.subcategory ?? ""}
-                    inputProps={{ style: { width: 110 } }}
+                    inputProps={{ style: { width: 110 }, list: subListId(r.category) }}
                     onChange={(e) => updateRow(r._id, "subcategory", e.target.value)} />
                 </TableCell>
                 <TableCell>
                   <TextField size="small" value={r.brand ?? ""}
-                    inputProps={{ style: { width: 90 } }}
+                    inputProps={{ style: { width: 90 }, list: "add-item-brands" }}
                     onChange={(e) => updateRow(r._id, "brand", e.target.value)} />
                 </TableCell>
                 <TableCell>
                   <TextField size="small" value={r.units ?? ""}
-                    inputProps={{ style: { width: 70 } }}
+                    inputProps={{ style: { width: 70 }, list: "add-item-units" }}
                     onChange={(e) => updateRow(r._id, "units", e.target.value)} />
                 </TableCell>
                 <TableCell>{numField(r._id, "purchase_cost", r.purchase_cost)}</TableCell>
@@ -213,6 +251,24 @@ export default function AddItemPage() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <datalist id="add-item-categories">
+        {uniqueNames(categories, "description").map((n) => <option key={n} value={n} />)}
+      </datalist>
+      <datalist id="add-item-sub-all">
+        {uniqueNames(subcategories, "name").map((n) => <option key={n} value={n} />)}
+      </datalist>
+      {Array.from(subNamesByCategory.entries()).map(([catId, names]) => (
+        <datalist key={catId} id={`add-item-sub-${catId}`}>
+          {Array.from(names).map((n) => <option key={n} value={n} />)}
+        </datalist>
+      ))}
+      <datalist id="add-item-brands">
+        {uniqueNames(brands, "name").map((n) => <option key={n} value={n} />)}
+      </datalist>
+      <datalist id="add-item-units">
+        {uniqueNames(units, "name").map((n) => <option key={n} value={n} />)}
+      </datalist>
     </FormPageLayout>
   );
 }

@@ -80,6 +80,8 @@ interface PosReceiptDialogProps {
   reprint?: boolean;
   printedAt?: string;
   cashierName?: string;
+  // Sale made offline: the number printed on its first receipt (shown on reprints).
+  offlineNo?: string;
 }
 
 /**
@@ -109,7 +111,7 @@ function renderCustomFields(fields: any[], position: string) {
 export default function PosReceiptDialog({
   open, onClose, transNo, customerName, lines, total, payments, cashReceived,
   paperSize = "80mm Thermal", isQuote = false, receiptSettings, shiftId, couponCode, voucherCode,
-  reprint = false, printedAt, cashierName,
+  reprint = false, printedAt, cashierName, offlineNo,
 }: PosReceiptDialogProps) {
   const { formatCurrency } = useHomeCurrency();
   const { user } = useCurrentUser();
@@ -266,7 +268,7 @@ export default function PosReceiptDialog({
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); win.close(); }, 500);
-  }, [company, now, transNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml, startRender]);
+  }, [company, now, transNo, offlineNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml, startRender]);
 
   // Reset printed state when dialog opens
   useEffect(() => { if (open) setPrinted(false); }, [open]);
@@ -445,6 +447,9 @@ export default function PosReceiptDialog({
           <Stack spacing={0.25} sx={{ my: 1 }}>
             {rs.show_invoice_id && (
               <Typography fontSize={FONT_SIZE[rs.font_header]}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
+            )}
+            {offlineNo && (
+              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Offline No:\u00A0${offlineNo}`}</Typography>
             )}
             {rs.show_date_time && (
               <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_date_time ?? "Date-Time"}\u00A0\u00A0:\u00A0\u00A0${now.toLocaleDateString("en-GB").replace(/\//g, "-")}\u00A0\u00A0${now.toLocaleTimeString()}`}</Typography>

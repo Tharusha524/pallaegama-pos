@@ -32,6 +32,7 @@ export interface ReprintReceipt {
     shiftId: number | null;
     paperSize: string | null;
     receiptSettings: Record<string, any>;
+    offlineNo?: string | null;
   } | null;
 }
 

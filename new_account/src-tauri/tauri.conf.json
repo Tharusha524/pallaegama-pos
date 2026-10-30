@@ -10,15 +10,7 @@
     "beforeBuildCommand": "npm run build:desktop"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Pallegama POS",
-        "width": 1280,
-        "height": 800,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
@@ -46,7 +38,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://pos.dio.lk/pallegama_supermarket/updates/latest.json"
+        "https://anjalee.edusl.net/pallegama_stores/updates/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ5ODYzN0YyMTQ2RjUxQkYKUldTL1VXOFU4amVHU2NtNHFoczVSNHZhRjhlN254UkxQZXZmK2lOdXpLOG5uYVFkVkJqOHNycloK"
     }

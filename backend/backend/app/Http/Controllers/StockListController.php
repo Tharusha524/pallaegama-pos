@@ -81,6 +81,14 @@ class StockListController extends Controller
                           ->where('item_codes.item_code', 'like', $like);
                   });
             });
+            // Best match first: exact item code, item code starting with the
+            // search, exact barcode — then everything else by name.
+            $query->orderByRaw(
+                'CASE WHEN sm.stock_id = ? THEN 0 WHEN sm.stock_id LIKE ? THEN 1
+                      WHEN EXISTS (SELECT 1 FROM item_codes ic2 WHERE ic2.stock_id = sm.stock_id AND ic2.item_code = ?) THEN 2
+                      ELSE 3 END',
+                [$search, "{$search}%", $search]
+            );
         }
 
         return response()->json($query->orderBy('sm.description')->limit(5000)->get());

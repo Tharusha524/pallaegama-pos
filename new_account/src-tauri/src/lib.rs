@@ -271,6 +271,16 @@ pub fn run() {
     kind: MigrationKind::Up,
   }];
 
+  #[cfg(windows)]
+  fn show_in_explorer(path: &std::path::Path) {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("explorer")
+      .raw_arg(format!("/select,\"{}\"", path.display()))
+      .spawn();
+  }
+  #[cfg(not(windows))]
+  fn show_in_explorer(_path: &std::path::Path) {}
+
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![print_receipt_escpos])
     .plugin(
@@ -285,6 +295,21 @@ pub fn run() {
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
     .setup(|app| {
+      // Main window is built here (not in tauri.conf.json) so report/Excel
+      // downloads can be handled: saved to the Downloads folder, then shown
+      // selected in File Explorer so the user can see where the file went.
+      tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+        .title("Pallegama POS")
+        .inner_size(1280.0, 800.0)
+        .resizable(true)
+        .on_download(|_webview, event| {
+          if let tauri::webview::DownloadEvent::Finished { path: Some(path), success: true, .. } = event {
+            show_in_explorer(&path);
+          }
+          true
+        })
+        .build()?;
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
