@@ -9,6 +9,7 @@ export interface StockBatch {
   source_no: number | null;
   purchase_cost: string | number;
   selling_price: string | number;
+  wholesale_price?: string | number | null;
   mrp: string | number | null;
   qty_received: string | number;
   qty_remaining: string | number;
@@ -24,7 +25,7 @@ export const getStockBatches = async (stockId: string, opts?: { loc_code?: strin
   return response.data ?? [];
 };
 
-export const updateStockBatch = async (id: number, payload: { selling_price?: number; mrp?: number | null; status?: "active" | "inactive" }) => {
+export const updateStockBatch = async (id: number, payload: { selling_price?: number; wholesale_price?: number | null; mrp?: number | null; status?: "active" | "inactive" }) => {
   const response = await api.put(`/stock-batches/${id}`, payload);
   return response.data;
 };

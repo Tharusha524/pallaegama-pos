@@ -17,12 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         $middleware->prependToGroup('api', \App\Http\Middleware\EnsureAllowedLoginIp::class);
+        $middleware->appendToGroup('api', \App\Http\Middleware\EnsureStaffApi::class);
         $middleware->appendToGroup('api', \App\Http\Middleware\LogUserActivity::class);
 
         $middleware->alias([
             'company.module' => \App\Http\Middleware\EnsureCompanyModuleEnabled::class,
             'log.activity' => \App\Http\Middleware\LogUserActivity::class,
             'customer.auth' => \App\Http\Middleware\EnsureCustomerToken::class,
+            'staff.auth' => \App\Http\Middleware\EnsureStaffToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

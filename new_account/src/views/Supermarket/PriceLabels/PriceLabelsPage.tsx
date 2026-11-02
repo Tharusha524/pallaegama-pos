@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -108,7 +108,7 @@ export default function PriceLabelsPage() {
     const term = inputValue.trim().toLowerCase();
     if (!term) return options;
     const sinhala = toSinhalaSearch(inputValue);
-    return options.filter((i: any) => {
+    const exact = options.filter((i: any) => {
       const name = String(i.description ?? "").toLowerCase();
       const label = `${i.description ?? ""} ${i.stock_id ? `(${i.stock_id})` : ""}`.toLowerCase();
       return name.includes(term)
@@ -117,6 +117,7 @@ export default function PriceLabelsPage() {
         || String(i.barcode ?? "").includes(inputValue.trim())
         || (!!sinhala && name.includes(sinhala));
     });
+    return appendCloseMatches(options, exact, inputValue);
   };
 
   const addLine = () => {

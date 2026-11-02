@@ -13,6 +13,7 @@ export const lookupBarcode = async (code: string, salesTypeId?: number) => {
 export interface BatchPriceGroup {
   batch_id: number;
   selling_price: number;
+  wholesale_price?: number | null;
   mrp: number | null;
   qty: number;
   received_date: string | null;
@@ -21,6 +22,15 @@ export interface BatchPriceGroup {
 /** Only the products that currently have 2+ prices at this location. */
 export const getMultiPriceProducts = async (locCode?: string): Promise<Record<string, BatchPriceGroup[]>> => {
   const response = await api.get("/stock-batches/multi-price", {
+    params: { loc_code: locCode || undefined },
+    skipErrorDialog: true,
+  } as any);
+  return response.data ?? {};
+};
+
+/** Products with a batch wholesale price at this location. */
+export const getWholesaleBatchProducts = async (locCode?: string): Promise<Record<string, BatchPriceGroup[]>> => {
+  const response = await api.get("/stock-batches/wholesale", {
     params: { loc_code: locCode || undefined },
     skipErrorDialog: true,
   } as any);

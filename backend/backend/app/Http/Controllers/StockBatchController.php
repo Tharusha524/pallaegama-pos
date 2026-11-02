@@ -73,6 +73,14 @@ class StockBatchController extends Controller
         return response()->json((object) $this->batches->multiPriceProducts($data['loc_code'] ?? null));
     }
 
+    /** POS preload: { stock_id: [price groups] } for products with a batch wholesale price. */
+    public function wholesale(Request $request)
+    {
+        $data = $request->validate(['loc_code' => 'nullable|string|max:20']);
+
+        return response()->json((object) $this->batches->wholesaleProducts($data['loc_code'] ?? null));
+    }
+
     /**
      * Report: batches with stock (one row each), plus a check that every
      * product's batches add up to its stock quantity (should always be empty).
@@ -133,6 +141,7 @@ class StockBatchController extends Controller
     {
         $data = $request->validate([
             'selling_price' => 'nullable|numeric|min:0',
+            'wholesale_price' => 'nullable|numeric|min:0',
             'mrp' => 'nullable|numeric|min:0',
             'status' => 'nullable|in:active,inactive',
         ]);
@@ -147,6 +156,9 @@ class StockBatchController extends Controller
         }
         if (array_key_exists('mrp', $data)) {
             $update['mrp'] = $data['mrp'] === null ? null : round((float) $data['mrp'], 4);
+        }
+        if (array_key_exists('wholesale_price', $data)) {
+            $update['wholesale_price'] = $data['wholesale_price'] === null ? null : round((float) $data['wholesale_price'], 4);
         }
         $price = (float) ($update['selling_price'] ?? $batch->selling_price);
         $hasStock = (float) $batch->qty_remaining > 0;

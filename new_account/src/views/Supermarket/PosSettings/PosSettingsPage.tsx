@@ -195,6 +195,22 @@ export default function PosSettingsPage() {
                 "Selling Price" mode hides the Discount field — cashier types the final price directly
               </Typography>
             </Box>
+            <Box sx={{ pt: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 280 }}>
+                <InputLabel>Default bill price</InputLabel>
+                <Select
+                  label="Default bill price"
+                  value={values["default_bill_price_mode"] ?? "retail"}
+                  onChange={(e) => setValues({ ...values, default_bill_price_mode: e.target.value })}
+                >
+                  <MenuItem value="retail">Retail</MenuItem>
+                  <MenuItem value="wholesale">Wholesale</MenuItem>
+                </Select>
+              </FormControl>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                The POS toggle starts on this, and goes back to it after every bill
+              </Typography>
+            </Box>
           </Stack>
         </CardContent>
       </Card>

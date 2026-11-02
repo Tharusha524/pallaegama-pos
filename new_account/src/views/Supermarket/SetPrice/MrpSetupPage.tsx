@@ -8,7 +8,7 @@ import {
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { getBrands } from "../../../api/Brands/BrandsApi";
 import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
-import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
@@ -70,19 +70,20 @@ export default function MrpSetupPage() {
   const sinhalaSearch = useMemo(() => toSinhalaSearch(bulkSearch), [bulkSearch]);
   const sameId = (a: unknown, b: unknown) => a != null && b != null && String(a) === String(b);
 
-  const filteredStock = stockList.filter((s: any) => {
-    const term = bulkSearch.trim().toLowerCase();
-    if (term) {
-      const name = String(s.description ?? "").toLowerCase();
-      const id = String(s.stock_id ?? "").toLowerCase();
-      const matches = name.includes(term) || id.includes(term) || (!!sinhalaSearch && name.includes(sinhalaSearch));
-      if (!matches) return false;
-    }
+  const stockInFilters = stockList.filter((s: any) => {
     if (category && !sameId(s.category_id, category.category_id)) return false;
     if (subcategory && !sameId(s.subcategory_id, subcategory.id)) return false;
     if (brand && !sameId(s.brand_id, brand.id)) return false;
     return true;
   });
+  const exactStock = stockInFilters.filter((s: any) => {
+    const term = bulkSearch.trim().toLowerCase();
+    if (!term) return true;
+    const name = String(s.description ?? "").toLowerCase();
+    const id = String(s.stock_id ?? "").toLowerCase();
+    return name.includes(term) || id.includes(term) || (!!sinhalaSearch && name.includes(sinhalaSearch));
+  });
+  const filteredStock = appendCloseMatches(stockInFilters, exactStock, bulkSearch);
 
   // Only ticked items that are currently visible get the MRP — so the button
   // count must match what Apply will actually update.

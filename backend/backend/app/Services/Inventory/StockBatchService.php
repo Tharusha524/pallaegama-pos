@@ -136,7 +136,7 @@ class StockBatchService
             ->where('status', 'active')
             ->where('qty_remaining', '>', 0)
             ->orderBy('id')
-            ->get(['id', 'selling_price', 'mrp', 'qty_remaining', 'received_date']);
+            ->get(['id', 'selling_price', 'wholesale_price', 'mrp', 'qty_remaining', 'received_date']);
 
         $groups = [];
         foreach ($rows as $r) {
@@ -146,11 +146,16 @@ class StockBatchService
                     'batch_id' => (int) $r->id,
                     'selling_price' => (float) $r->selling_price,
                     'mrp' => $r->mrp === null ? null : (float) $r->mrp,
+                    'wholesale_price' => null,
                     'qty' => 0.0,
                     'received_date' => $r->received_date,
                 ];
             }
             $groups[$key]['selling_price'] = (float) $r->selling_price;
+            // Newest batch in the group that has a wholesale price set.
+            if ($r->wholesale_price !== null && (float) $r->wholesale_price > 0) {
+                $groups[$key]['wholesale_price'] = (float) $r->wholesale_price;
+            }
             $groups[$key]['qty'] = round($groups[$key]['qty'] + (float) $r->qty_remaining, 4);
         }
 
@@ -180,6 +185,33 @@ class StockBatchService
 
         $out = [];
         foreach ($multi as $stockId) {
+            $out[(string) $stockId] = $this->sellableGroups((string) $stockId, $loc);
+        }
+
+        return $out;
+    }
+
+    /**
+     * POS preload: every product with a wholesale price on an in-stock batch at a
+     * location, with all its MRP groups (a group without one has wholesale_price null).
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public function wholesaleProducts(?string $locCode = null): array
+    {
+        if (! $this->enabled()) {
+            return [];
+        }
+        $loc = $locCode !== null && trim($locCode) !== '' ? strtoupper(trim($locCode)) : null;
+
+        $ids = DB::table('stock_batches')
+            ->where('status', 'active')->where('qty_remaining', '>', 0)
+            ->where('wholesale_price', '>', 0)
+            ->when($loc !== null, fn ($q) => $q->where('loc_code', $loc))
+            ->distinct()->pluck('stock_id');
+
+        $out = [];
+        foreach ($ids as $stockId) {
             $out[(string) $stockId] = $this->sellableGroups((string) $stockId, $loc);
         }
 

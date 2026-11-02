@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { transliterate as singlishToSinhala } from "singlish-pro";
+import { foldSinhala, foldedWordsMatch, plainSinglish } from "../../../utils/sinhalaFold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Grid, Card, CardContent, Typography, Table, TableHead, TableRow, TableCell, TableBody,
   TableContainer, Paper, TextField, Button, Stack, IconButton, Autocomplete, Chip, Divider,
   FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
   List, ListItemButton, ListItemText, Tooltip,
+  ToggleButton, ToggleButtonGroup, useMediaQuery,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
@@ -33,7 +35,7 @@ import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/Sale
 import { createQuotation } from "../../../api/Quotations/QuotationsApi";
 import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
-import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getPendingPriceQty, type BatchPriceGroup } from "../../../api/Pos/posApi";
+import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getWholesaleBatchProducts, getPendingPriceQty, type BatchPriceGroup } from "../../../api/Pos/posApi";
 import { getStockList } from "../../../api/Inventory/StockListApi";
 import { getSalesPricing, getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
 import { getPromotionalPrices } from "../../../api/PromotionalPrice/PromotionalPriceApi";
@@ -93,6 +95,10 @@ interface CartLine {
   wholesale_qty_threshold?: number;
   wholesale_price?: number;
   wholesale_applied?: boolean;
+  // Bill toggle on Wholesale: this line's price is a wholesale price, and
+  // retail_snapshot is what it goes back to when the toggle returns to Retail.
+  bill_wholesale?: boolean;
+  retail_snapshot?: { unit_price: number; original_unit_price?: number; discount_percent: number };
   // Stock batch picked at the till when the same barcode has more than one
   // price (old stock + new delivery) — each price is its own cart line.
   batch_id?: number;
@@ -121,6 +127,8 @@ export default function PosCheckoutPage() {
   // compact layout further down — everything else keeps the existing
   // wide-screen layout untouched.
   const isSquareScreen = useIsSquareScreen();
+  // Top buttons drop their shortcut text so they stay on one row on narrower screens.
+  const compactTopRow = useMediaQuery("(max-width:1500px)") || isSquareScreen;
   const { formatCurrency, symbol: currencySymbol } = useHomeCurrency();
   // Cart table cells show the currency once in the column header instead of
   // repeating "LKR" on every row — plain number formatting for those cells.
@@ -365,10 +373,20 @@ export default function PosCheckoutPage() {
     const raw = inputValue.toLowerCase();
     let sinhala = "";
     try { sinhala = singlishToSinhala(inputValue, { finalize: true }); } catch { /* ignore */ }
-    return options.filter((o: any) => {
+    const exact = options.filter((o: any) => {
       const label = `${o.stock_id} ${o.description}`.toLowerCase();
       return label.includes(raw) || (sinhala && label.includes(sinhala));
     });
+    // Close spellings ("renuka" -> රේණුකා) come after the exact matches.
+    let plain = sinhala;
+    try { plain = singlishToSinhala(plainSinglish(inputValue), { finalize: true }); } catch { /* ignore */ }
+    const foldedSearch = foldSinhala(plain);
+    if (inputValue.trim().length < 3 || !foldedSearch) return exact;
+    const exactSet = new Set(exact);
+    const close = options.filter((o: any) =>
+      !exactSet.has(o) && foldedWordsMatch(foldedSearch, foldSinhala(String(o.description ?? "")))
+    );
+    return [...exact, ...close];
   };
 
   // Default every sale to "Walk-in Customer" — a cashier should never be
@@ -444,6 +462,44 @@ export default function PosCheckoutPage() {
     saveReferenceData("multi_price_products", multiPriceFromApi).catch(() => { });
   }, [multiPriceFromApi]);
   const multiPriceMap: Record<string, BatchPriceGroup[]> = multiPriceFromApi ?? offlineMultiPrice;
+
+  // Bill-level Retail/Wholesale toggle. Batch wholesale prices are preloaded the
+  // same way as the 2+ price list, and cached for offline sales.
+  const [billPriceMode, setBillPriceMode] = useState<"retail" | "wholesale">("retail");
+  const isWholesaleBill = billPriceMode === "wholesale";
+  const defaultBillPriceMode = posSettings?.default_bill_price_mode === "wholesale" ? "wholesale" : "retail";
+  useEffect(() => {
+    if (cart.length === 0) setBillPriceMode(defaultBillPriceMode);
+  }, [defaultBillPriceMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { data: wholesaleBatchesFromApi } = useQuery({
+    queryKey: ["pos-wholesale-batches", locCode],
+    queryFn: () => getWholesaleBatchProducts(locCode || undefined),
+    enabled: !isOffline,
+    refetchInterval: 60_000,
+    staleTime: 0,
+  });
+  const [offlineWholesaleBatches, setOfflineWholesaleBatches] = useState<Record<string, BatchPriceGroup[]>>({});
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    getReferenceData<Record<string, BatchPriceGroup[]>>("wholesale_batch_products").then((v) => v && setOfflineWholesaleBatches(v)).catch(() => { });
+  }, []);
+  useEffect(() => {
+    if (!isDesktopApp() || !wholesaleBatchesFromApi) return;
+    saveReferenceData("wholesale_batch_products", wholesaleBatchesFromApi).catch(() => { });
+  }, [wholesaleBatchesFromApi]);
+  const wholesaleBatchMap: Record<string, BatchPriceGroup[]> = wholesaleBatchesFromApi ?? offlineWholesaleBatches;
+  const itemWholesalePriceMap = useMemo(() => {
+    const list = stockListFromApi && stockListFromApi.length > 0 ? stockListFromApi : offlineStockList;
+    const map = new Map<string, number>();
+    for (const s of list ?? []) {
+      const price = Number((s as any).wholesale_price ?? 0);
+      if (price > 0) map.set(String(s.stock_id), price);
+    }
+    return map;
+  }, [stockListFromApi, offlineStockList]);
+  // Batch groups of a product that can be sold wholesale.
+  const wholesaleGroupsOf = (stockId: string) =>
+    (wholesaleBatchMap[stockId] ?? []).filter((g) => Number(g.wholesale_price) > 0);
 
   // New-cost purchases wait without a price until it is set on Set Price — the
   // till must not sell them. Only those products are listed; cached for offline.
@@ -706,6 +762,8 @@ export default function PosCheckoutPage() {
           wholesale_qty_threshold: item.wholesale_qty_threshold != null ? Number(item.wholesale_qty_threshold) : undefined,
           wholesale_price: item.wholesale_price != null ? Number(item.wholesale_price) : undefined,
           batch_id: item.batch_id != null ? Number(item.batch_id) : undefined,
+          bill_wholesale: item.bill_wholesale ? true : undefined,
+          retail_snapshot: item.retail_snapshot,
         },
       ];
     });
@@ -802,7 +860,7 @@ export default function PosCheckoutPage() {
       { unitPrice: initialUnitPrice, discountPercent: initialDiscountPercent }
     );
 
-    if (!isOffline && selectedItem.batch_id == null && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
+    if (!isOffline && !selectedItem.bill_wholesale && selectedItem.batch_id == null && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
       resolveSellingPrice(stockId).then((resolved) => {
         if (resolved !== undefined) {
           const resolvedDiscountPercent = manualDiscountMode2 === "percent"
@@ -816,7 +874,7 @@ export default function PosCheckoutPage() {
     }
     // Picked packet (MRP popup): an active promotion still applies — but only when it
     // is lower than that packet's own price, so a packet is never charged more.
-    if (!isOffline && selectedItem.batch_id != null && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
+    if (!isOffline && !selectedItem.bill_wholesale && selectedItem.batch_id != null && !(manualSellingPriceTouched && manualSellingPrice !== "")) {
       const batchLineId = lineId({ stock_id: stockId, batch_id: Number(selectedItem.batch_id) });
       resolvePromoPrice(stockId).then((promo) => {
         if (promo === undefined || !(promo > 0) || promo >= catalogPrice) return;
@@ -860,16 +918,16 @@ export default function PosCheckoutPage() {
     setLastViewedProduct(item);
     const pickedBatch = item.batch_id != null;
     const preloadedSp = salesPricingMap.get(String(item.stock_id));
-    setManualSellingPrice(String(Number(pickedBatch ? item.sale_price : (preloadedSp ?? item.sale_price ?? item.purchase_cost)) || 0));
+    setManualSellingPrice(String(Number(pickedBatch || item.bill_wholesale ? item.sale_price : (preloadedSp ?? item.sale_price ?? item.purchase_cost)) || 0));
     setManualSellingPriceTouched(false);
     setManualDiscountInput("");
     setManualDiscountMode2("net");
-    if (!isOffline && !pickedBatch) {
+    if (!isOffline && !pickedBatch && !item.bill_wholesale) {
       resolveSellingPrice(String(item.stock_id)).then((sp) => {
         if (sp != null) { setManualSellingPrice(String(Number(sp))); setManualSellingPriceTouched(false); }
       }).catch(() => {});
     }
-    if (!isOffline && pickedBatch) {
+    if (!isOffline && pickedBatch && !item.bill_wholesale) {
       // Show the promotion price for the picked packet when it is lower than its own price.
       resolvePromoPrice(String(item.stock_id)).then((promo) => {
         if (promo !== undefined && promo > 0 && promo < Number(item.sale_price)) {
@@ -884,7 +942,8 @@ export default function PosCheckoutPage() {
   // packet). Opened a moment later so the Enter that selected the item can't
   // also pick a price. Returns false for every normal single-price item.
   const openBatchPickerIfNeeded = (item: any): boolean => {
-    if (!item || item.batch_id != null || item.matched_variant || item.is_weighted) return false;
+    if (item && isWholesaleBill && !item.bill_wholesale) return startWholesaleItem(item);
+    if (!item || item.bill_wholesale || item.batch_id != null || item.matched_variant || item.is_weighted) return false;
     const groups = multiPriceMap[String(item.stock_id)];
     if (!groups || groups.length < 2) return false;
     batchPickerGuardRef.current = true;
@@ -892,9 +951,89 @@ export default function PosCheckoutPage() {
     return true;
   };
 
+  // Toggle on Wholesale: several MRPs in stock -> the cashier picks a batch that
+  // has a wholesale price; otherwise the batch's price, then the item's. An item
+  // with no wholesale price can't be sold on a wholesale bill.
+  const startWholesaleItem = (item: any): boolean => {
+    const stockId = String(item.stock_id);
+    const groups = wholesaleGroupsOf(stockId);
+    const severalMrps = (multiPriceMap[stockId]?.length ?? 0) >= 2;
+    if (severalMrps || groups.length >= 2) {
+      if (groups.length === 0) {
+        notify.error(`"${item.description}" has no wholesale price — set it on the Set Price page`);
+        return true;
+      }
+      batchPickerGuardRef.current = true;
+      setTimeout(() => setBatchPicker({ item, groups }), 150);
+      return true;
+    }
+    const wholesale = Number(groups[0]?.wholesale_price) || itemWholesalePriceMap.get(stockId) || 0;
+    if (wholesale <= 0) {
+      notify.error(`"${item.description}" has no wholesale price — set it on the Set Price page`);
+      return true;
+    }
+    const retail = Number(item.sale_price ?? salesPricingMap.get(stockId) ?? item.purchase_cost) || 0;
+    selectItemFromBarcode({
+      ...item,
+      sale_price: wholesale,
+      bill_wholesale: true,
+      retail_snapshot: { unit_price: retail, original_unit_price: retail, discount_percent: 0 },
+    });
+    return true;
+  };
+
+  // Wholesale price of a cart line: its batch's group first, then the item's.
+  const wholesalePriceOfLine = (l: CartLine): number => {
+    const stockId = String(l.stock_id);
+    const groups = wholesaleGroupsOf(stockId);
+    const multi = multiPriceMap[stockId] ?? [];
+    if (l.batch_id != null && multi.length >= 2) {
+      return Number(groups.find((g) => g.batch_id === l.batch_id)?.wholesale_price) || 0;
+    }
+    return Number(groups[0]?.wholesale_price) || itemWholesalePriceMap.get(stockId) || 0;
+  };
+
+  // Toggle: every cart line moves with it. Switching to Wholesale stops, changing
+  // nothing, if any line has no wholesale price.
+  const changeBillPriceMode = (mode: "retail" | "wholesale") => {
+    if (mode === billPriceMode) return;
+    if (mode === "wholesale") {
+      const missing = cart.filter((l) => wholesalePriceOfLine(l) <= 0);
+      if (missing.length > 0) {
+        notify.error(`No wholesale price for: ${missing.map((l) => l.description).join(", ")}`);
+        return;
+      }
+      setCart((prev) => prev.map((l) => {
+        const wholesale = wholesalePriceOfLine(l);
+        return {
+          ...l,
+          unit_price: wholesale,
+          original_unit_price: wholesale,
+          discount_percent: 0,
+          bill_wholesale: true,
+          retail_snapshot: l.bill_wholesale ? l.retail_snapshot : { unit_price: l.unit_price, original_unit_price: l.original_unit_price, discount_percent: l.discount_percent },
+        };
+      }));
+    } else {
+      setCart((prev) => prev.map((l) => (
+        l.bill_wholesale && l.retail_snapshot
+          ? { ...l, ...l.retail_snapshot, bill_wholesale: undefined, retail_snapshot: undefined }
+          : l
+      )));
+    }
+    setBillPriceMode(mode);
+  };
+
   const pickBatch = (g: BatchPriceGroup) => {
     if (!batchPicker) return;
-    const item = {
+    const item = isWholesaleBill ? {
+      ...batchPicker.item,
+      batch_id: g.batch_id,
+      sale_price: Number(g.wholesale_price),
+      mrp_price: g.mrp ?? batchPicker.item.mrp_price,
+      bill_wholesale: true,
+      retail_snapshot: { unit_price: g.selling_price, original_unit_price: g.selling_price, discount_percent: 0 },
+    } : {
       ...batchPicker.item,
       batch_id: g.batch_id,
       sale_price: g.selling_price,
@@ -1024,6 +1163,7 @@ export default function PosCheckoutPage() {
         .find(
           (l) =>
             !l.wholesale_applied &&
+            !l.bill_wholesale &&
             l.wholesale_price != null &&
             l.wholesale_qty_threshold != null &&
             l.quantity >= l.wholesale_qty_threshold
@@ -1041,6 +1181,7 @@ export default function PosCheckoutPage() {
 
   const resetSaleState = () => {
     setCart([]);
+    setBillPriceMode(defaultBillPriceMode);
     setCartDiscountPercent(0);
     setCouponCode("");
     setAppliedCoupon(null);
@@ -1134,8 +1275,11 @@ export default function PosCheckoutPage() {
         setTimeout(() => { savePosReceiptCopy(result.trans_no, receiptCopy).catch(() => {}); }, 2000);
       }
       // A sale can sell out one of the prices — refresh the 2+ price list later, off the print path.
-      if (cart.some((l) => l.batch_id != null)) {
-        setTimeout(() => { queryClient.invalidateQueries({ queryKey: ["pos-multi-price"] }); }, 3000);
+      if (cart.some((l) => l.batch_id != null || l.bill_wholesale)) {
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["pos-multi-price"] });
+          queryClient.invalidateQueries({ queryKey: ["pos-wholesale-batches"] });
+        }, 3000);
       }
       resetSaleState();
     },
@@ -1203,7 +1347,7 @@ export default function PosCheckoutPage() {
       }
       if (e.key === "F10") {
         e.preventDefault();
-        if (s.cart.length > 0) s.handleHoldSale();
+        s.changeBillPriceMode(s.billPriceMode === "wholesale" ? "retail" : "wholesale");
         return;
       }
       if (e.key === "F2") {
@@ -1649,7 +1793,7 @@ export default function PosCheckoutPage() {
     cart, customer, cashAccount,
     checkoutPending: checkoutMutation.isPending,
     quotePending: quoteMutation.isPending,
-    handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine,
+    handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine, changeBillPriceMode, billPriceMode,
     reprintActive: false,
     batchPickerActive: false,
   });
@@ -1658,7 +1802,7 @@ export default function PosCheckoutPage() {
       cart, customer, cashAccount,
       checkoutPending: checkoutMutation.isPending,
       quotePending: quoteMutation.isPending,
-      handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine,
+      handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine, changeBillPriceMode, billPriceMode,
       // While reprinting, Enter/F-keys belong to the reprint screens — never complete a sale.
       reprintActive: reprintOpen || !!reprintReceipt,
       batchPickerActive: !!batchPicker,
@@ -1668,6 +1812,7 @@ export default function PosCheckoutPage() {
   const handleRecall = (held: any) => {
     const snap = held.cart_snapshot;
     setCart(snap.cart ?? []);
+    setBillPriceMode((snap.cart ?? []).some((l: CartLine) => l.bill_wholesale) ? "wholesale" : "retail");
     setCustomer(snap.customer ?? null);
     setBranchCode(snap.branchCode ?? "");
     setLocCode(snap.locCode ?? "");
@@ -1736,71 +1881,81 @@ export default function PosCheckoutPage() {
         </Box>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent="flex-end">
           <Button
-            variant="contained" color="primary" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="primary" size={compactTopRow ? "small" : "medium"}
             startIcon={<SearchIcon />} onClick={() => scanInputRef.current?.focus()}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
-            {isSquareScreen ? "Find" : "Find (F9)"}
+            {compactTopRow ? "Find" : "Find (F9)"}
           </Button>
           <Button
-            variant="contained" color="warning" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="warning" size={compactTopRow ? "small" : "medium"}
             startIcon={<PauseCircleOutlineIcon />} onClick={handleHoldSale} disabled={cart.length === 0}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
             Hold Sale
           </Button>
           <Button
-            variant="contained" color="info" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="info" size={compactTopRow ? "small" : "medium"}
             startIcon={<RestoreIcon />} onClick={() => setRecallOpen(true)}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
             Recall Sale {heldSales && heldSales.length > 0 ? `(${heldSales.length})` : ""}
           </Button>
           <Button
-            variant="contained" color="secondary" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="secondary" size={compactTopRow ? "small" : "medium"}
             startIcon={<PrintIcon />} onClick={() => setReprintOpen(true)}
             disabled={isOffline}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
             Reprint
           </Button>
           <Button
-            variant="contained" color="error" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="error" size={compactTopRow ? "small" : "medium"}
             startIcon={<CloseIcon />}
             onClick={() => {
               if (cart.length === 0 || window.confirm("Clear the current bill? This does not undo a completed sale.")) {
                 resetSaleState();
               }
             }}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
-            {isSquareScreen ? "Close" : "Close (Esc)"}
+            {compactTopRow ? "Close" : "Close (Esc)"}
           </Button>
           <Button
-            variant="contained" color="success" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="success" size={compactTopRow ? "small" : "medium"}
             startIcon={<AddIcon />}
             onClick={() => {
               if (cart.length === 0 || window.confirm("Start a new bill? Current cart will be cleared.")) {
                 resetSaleState();
               }
             }}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
-            {isSquareScreen ? "New" : "New (F12)"}
+            {compactTopRow ? "New" : "New (F12)"}
           </Button>
+          <ToggleButtonGroup
+            exclusive size="small"
+            value={billPriceMode}
+            onChange={(_, mode) => { if (mode) changeBillPriceMode(mode); }}
+            sx={{
+              minHeight: compactTopRow ? 34 : 44,
+              "& .MuiToggleButton-root": { borderRadius: 1, overflow: "hidden", "&::before, &::after": { display: "none" } },
+              "& .MuiToggleButton-root.Mui-selected, & .MuiToggleButton-root.Mui-selected:hover": {
+                backgroundColor: "#ed6c02", color: "#fff", fontWeight: 700,
+              },
+            }}
+          >
+            <ToggleButton value="retail">Retail</ToggleButton>
+            <ToggleButton value="wholesale">{compactTopRow ? "Wholesale" : "Wholesale (F10)"}</ToggleButton>
+          </ToggleButtonGroup>
           <Button
-            variant="contained" color="secondary" size={isSquareScreen ? "small" : "medium"}
+            variant="contained" color="secondary" size={compactTopRow ? "small" : "medium"}
             startIcon={isFullScreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
             onClick={() => setIsFullScreen((v) => !v)}
-            sx={{ minHeight: isSquareScreen ? 34 : 44 }}
+            sx={{ minHeight: compactTopRow ? 34 : 44 }}
           >
-            {isSquareScreen ? (isFullScreen ? "Exit Full Screen" : "Full Screen") : (isFullScreen ? "Exit Full Screen (F11)" : "Full Screen (F11)")}
+            {compactTopRow ? (isFullScreen ? "Exit Full" : "Full Screen") : (isFullScreen ? "Exit Full Screen (F11)" : "Full Screen (F11)")}
           </Button>
-          <Tooltip title={isFullScreen ? "Exit Full Screen" : "Full Screen"}>
-            <IconButton onClick={() => setIsFullScreen((v) => !v)} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
-              {isFullScreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-            </IconButton>
-          </Tooltip>
         </Stack>
       </Box>
     </>
@@ -2502,7 +2657,7 @@ export default function PosCheckoutPage() {
                           product's threshold, and only ever applied after
                           the Wholesale Authorization PIN is entered; never
                           automatic. */}
-                      {l.wholesale_price != null && l.wholesale_qty_threshold != null && l.quantity > l.wholesale_qty_threshold && (
+                      {!l.bill_wholesale && l.wholesale_price != null && l.wholesale_qty_threshold != null && l.quantity > l.wholesale_qty_threshold && (
                         l.wholesale_applied ? (
                           <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center" sx={{ mt: 0.5 }}>
                             <Chip label="WHOLESALE" size="small" color="success" />
@@ -3056,7 +3211,7 @@ export default function PosCheckoutPage() {
               >
                 <ListItemText
                   primary={`${i + 1}.  MRP ${g.mrp != null ? formatCurrency(g.mrp, 2) : "—"}`}
-                  secondary={`In stock: ${Number(g.qty)}`}
+                  secondary={isWholesaleBill ? `Wholesale: ${formatCurrency(Number(g.wholesale_price), 2)}  |  In stock: ${Number(g.qty)}` : `In stock: ${Number(g.qty)}`}
                   primaryTypographyProps={{ fontWeight: 700 }}
                 />
               </ListItemButton>

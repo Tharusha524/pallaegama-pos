@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Stack, TextField, Autocomplete, Button, Typography, Chip,
@@ -49,15 +49,24 @@ export default function PromotionalPricesPage() {
     enabled: sinhalaSearch.length > 0,
   });
 
+  // Full list for close spellings, which the server search can't find.
+  const { data: allStock } = useQuery({
+    queryKey: ["stock-list-all"],
+    queryFn: () => getStockList(),
+    enabled: search.length > 0,
+    staleTime: 60_000,
+  });
+
   const results = useMemo(() => {
     const seen = new Set<string>();
-    return [...(typedResults ?? []), ...(sinhalaSearch ? sinhalaResults ?? [] : [])].filter((p: any) => {
+    const exact = [...(typedResults ?? []), ...(sinhalaSearch ? sinhalaResults ?? [] : [])].filter((p: any) => {
       const id = String(p.stock_id);
       if (seen.has(id)) return false;
       seen.add(id);
       return true;
     });
-  }, [typedResults, sinhalaResults, sinhalaSearch]);
+    return appendCloseMatches(allStock ?? [], exact, search);
+  }, [typedResults, sinhalaResults, sinhalaSearch, allStock, search]);
 
   const { data: promos, isLoading } = useQuery({ queryKey: ["promotional-prices"], queryFn: () => getPromotionalPrices() });
 

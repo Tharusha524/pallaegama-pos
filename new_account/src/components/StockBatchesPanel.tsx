@@ -25,7 +25,7 @@ const num = (v: unknown) => Number(v ?? 0) || 0;
 export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId: string; formatCurrency: (v: number) => string }) {
   const queryClient = useQueryClient();
   const [showFinished, setShowFinished] = useState(false);
-  const [edits, setEdits] = useState<Record<number, { selling_price: string; mrp: string }>>({});
+  const [edits, setEdits] = useState<Record<number, { selling_price: string; wholesale_price: string; mrp: string }>>({});
 
   const { data: batches = [], isFetching } = useQuery({
     queryKey: ["stock-batches", stockId, showFinished],
@@ -36,6 +36,7 @@ export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["stock-batches", stockId] });
     queryClient.invalidateQueries({ queryKey: ["pos-multi-price"] });
+    queryClient.invalidateQueries({ queryKey: ["pos-wholesale-batches"] });
     queryClient.invalidateQueries({ queryKey: ["pos-pending-price"] });
     // pricing the newest batch also updates the product's current price
     queryClient.invalidateQueries({ queryKey: ["sales-pricing"] });
@@ -46,7 +47,7 @@ export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId
       const e = edits[b.id];
       return updateStockBatch(b.id, {
         ...(e && e.selling_price !== "" ? { selling_price: Number(e.selling_price) } : {}),
-        ...(e ? { mrp: e.mrp === "" ? null : Number(e.mrp) } : {}),
+        ...(e ? { mrp: e.mrp === "" ? null : Number(e.mrp), wholesale_price: e.wholesale_price === "" ? null : Number(e.wholesale_price) } : {}),
         ...(status ? { status } : {}),
       });
     },
@@ -59,13 +60,13 @@ export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId
   });
 
   // A new-cost delivery waits with no price — its boxes start empty.
-  const field = (b: StockBatch, key: "selling_price" | "mrp") =>
-    edits[b.id]?.[key] ?? (b[key] == null || b.status === "pending" ? "" : String(num(b[key])));
+  const field = (b: StockBatch, key: "selling_price" | "wholesale_price" | "mrp") =>
+    edits[b.id]?.[key] ?? (b[key] == null || (b.status === "pending" && key !== "wholesale_price") ? "" : String(num(b[key])));
 
-  const setField = (b: StockBatch, key: "selling_price" | "mrp", value: string) =>
+  const setField = (b: StockBatch, key: "selling_price" | "wholesale_price" | "mrp", value: string) =>
     setEdits((prev) => ({
       ...prev,
-      [b.id]: { selling_price: field(b, "selling_price"), mrp: field(b, "mrp"), ...prev[b.id], [key]: value },
+      [b.id]: { selling_price: field(b, "selling_price"), wholesale_price: field(b, "wholesale_price"), mrp: field(b, "mrp"), ...prev[b.id], [key]: value },
     }));
 
   return (
@@ -93,6 +94,7 @@ export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId
               <TableCell>Location</TableCell>
               <TableCell align="right">Cost</TableCell>
               <TableCell align="right">Selling Price</TableCell>
+              <TableCell align="right">Wholesale Price</TableCell>
               <TableCell align="right">MRP</TableCell>
               <TableCell align="right">In Stock</TableCell>
               <TableCell>Status</TableCell>
@@ -109,6 +111,10 @@ export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId
                 <TableCell align="right">
                   <TextField type="number" size="small" sx={{ width: 110 }} value={field(b, "selling_price")}
                     onChange={(e) => setField(b, "selling_price", e.target.value)} inputProps={{ min: 0, step: "0.01" }} />
+                </TableCell>
+                <TableCell align="right">
+                  <TextField type="number" size="small" sx={{ width: 110 }} value={field(b, "wholesale_price")}
+                    onChange={(e) => setField(b, "wholesale_price", e.target.value)} inputProps={{ min: 0, step: "0.01" }} />
                 </TableCell>
                 <TableCell align="right">
                   <TextField type="number" size="small" sx={{ width: 110 }} value={field(b, "mrp")}

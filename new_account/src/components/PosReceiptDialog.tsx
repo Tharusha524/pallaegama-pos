@@ -93,7 +93,27 @@ interface PosReceiptDialogProps {
  * logo always comes live from Setup → Company Setup, never a separate
  * POS-only logo field.
  */
-const FONT_SIZE: Record<string, number> = { small: 11, medium: 13, large: 15 };
+const NAMED_SIZE: Record<string, number> = { small: 11, medium: 13, large: 15 };
+
+/**
+ * A receipt font size in px. Settings saved before sizes became free numbers
+ * hold "small" / "medium" / "large", so those still resolve.
+ */
+export function fontPx(value: unknown): number {
+  if (typeof value === "number") return value > 0 ? value : NAMED_SIZE.medium;
+  const text = String(value ?? "").trim();
+  if (text in NAMED_SIZE) return NAMED_SIZE[text];
+  const n = Number(text);
+  return Number.isFinite(n) && n > 0 ? n : NAMED_SIZE.medium;
+}
+
+/** Solid rule under the item column headers, shared with the settings preview. */
+export function headerRuleStyle(show: unknown) {
+  return show ? { borderBottom: "1px solid currentColor", paddingBottom: 2 } : {};
+}
+
+/** Size the item column headers had before they got their own setting. */
+export const DEFAULT_COL_HEADER_PX = 12;
 
 function renderCustomFields(fields: any[], position: string) {
   if (!fields?.length) return null;
@@ -101,7 +121,7 @@ function renderCustomFields(fields: any[], position: string) {
     .filter((f) => f.position === position && f.label)
     .map((f) => (
       <Box key={f.id} sx={{ display: "flex", justifyContent: f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start", mt: 0.5 }}>
-        <Typography fontSize={FONT_SIZE[f.font_size] ?? 13} fontWeight={f.weight ?? 400} sx={{ whiteSpace: "pre-wrap" }}>
+        <Typography fontSize={fontPx(f.font_size) ?? 13} fontWeight={f.weight ?? 400} sx={{ whiteSpace: "pre-wrap" }}>
           {f.label}{f.value ? `: ${f.value}` : ""}
         </Typography>
       </Box>
@@ -151,6 +171,7 @@ export default function PosReceiptDialog({
       img { max-width: 100%; display: block; margin: 0 auto; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       td, th { overflow: hidden; word-break: break-all; }
+      #pos-receipt-print-area, #pos-receipt-print-area * { white-space: pre-wrap; }
       #pos-receipt-print-area { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: none !important; }
       [class*="MuiStack"], [class*="MuiBox"] { width: 100% !important; max-width: 100% !important; flex-wrap: wrap !important; overflow: hidden !important; }
       [style*="justify-content: space-between"] { display: flex !important; justify-content: space-between !important; width: 100% !important; }
@@ -165,12 +186,15 @@ export default function PosReceiptDialog({
     show_invoice_id: true, show_cashier: true, show_date_time: true,
     show_shift_id: false, show_branch_name: false,
     show_discount_column: true, show_item_unit: false, show_offer_applied: false,
+    show_col_header_line: true,
     show_payment_info: true, show_change: true, show_card_type: false, show_coupon_used: false, show_currency_symbol: false,
     show_customer_name: true,
     show_thank_you: true, thank_you_message: "THANK YOU FOR YOUR BUSINESS!",
     show_footer: true, footer_text: "Developed by DIO Solutions",
     show_custom_note: false, custom_note: "", show_barcode: true,
     font_header: "medium", font_items: "medium", font_totals: "medium", font_footer: "small",
+    font_col_headers: DEFAULT_COL_HEADER_PX as string | number,
+    font_invoice_info: 13 as string | number,
     weight_shop_name: 800, weight_address: 400, weight_col_headers: 700,
     weight_item_name: 700, weight_unit_price: 400, weight_qty_line: 400,
     weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
@@ -190,14 +214,15 @@ export default function PosReceiptDialog({
   };
   // Replace regular spaces with non-breaking spaces in labels that render
   // via html2canvas — regular spaces collapse on some WebView/font combos.
-  const nbsp = (s: string) => s.replace(/ /g, " ");
-  rs.label_invoice_id = nbsp(rs.label_invoice_id ?? "Invoice ID");
-  rs.label_cashier = nbsp(rs.label_cashier ?? "Cashier");
-  rs.label_shift = nbsp(rs.label_shift ?? "Shift");
-  rs.label_branch = nbsp(rs.label_branch ?? "Branch");
-  rs.footer_text = nbsp(rs.footer_text ?? "Developed by DIO Solutions");
+  rs.label_invoice_id = rs.label_invoice_id ?? "Invoice ID";
+  rs.label_cashier = rs.label_cashier ?? "Cashier";
+  rs.label_shift = rs.label_shift ?? "Shift";
+  rs.label_branch = rs.label_branch ?? "Branch";
+  rs.footer_text = rs.footer_text ?? "Developed by DIO Solutions";
 
-  const fmt = (v: number) => rs.show_currency_symbol ? formatCurrency(v, 2) : v.toFixed(2);
+  const fmt = (v: number) => rs.show_currency_symbol
+    ? formatCurrency(v, 2)
+    : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const { data: companies, isError: companiesFailed } = useQuery({
     queryKey: ["company-setup-list"],
@@ -407,7 +432,7 @@ export default function PosReceiptDialog({
         `}</style>
         <Box
           id="pos-receipt-print-area"
-          sx={{ fontFamily: "'Poppins', sans-serif", width: isThermal ? 280 : "100%", mx: "auto", p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+          sx={{ fontFamily: "'Poppins', sans-serif", width: isThermal ? 280 : "100%", mx: "auto", p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1, whiteSpace: "pre-wrap" }}
         >
           {/* ---- Header ---- */}
           <Stack alignItems="center" spacing={0.25} sx={{ mb: 1 }}>
@@ -415,26 +440,26 @@ export default function PosReceiptDialog({
               <img src={logoSrc} alt="Company logo" style={{ maxWidth: "100%", maxHeight: 64 }} />
             )}
             {rs.show_shop_name && (
-              <Typography align="center" fontWeight={rs.weight_shop_name} fontSize={FONT_SIZE[rs.font_header] + 4}>
+              <Typography align="center" fontWeight={rs.weight_shop_name} fontSize={fontPx(rs.font_header) + 4}>
                 {company?.name || "Your Business Name"}
               </Typography>
             )}
             {rs.show_address && company?.address && (
-              <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]} sx={{ lineHeight: 1.2 }}>{company.address.toUpperCase()}</Typography>
+              <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)} sx={{ lineHeight: 1.2 }}>{company.address.toUpperCase()}</Typography>
             )}
             {rs.show_phone && (company?.phone_number || company?.fax_number) && (
-              <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>
+              <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>
                 {[company?.phone_number, company?.fax_number].filter(Boolean).join(" · ")}
               </Typography>
             )}
             {rs.show_email && rs.shop_email && (
-              <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.shop_email}</Typography>
+              <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>{rs.shop_email}</Typography>
             )}
             {rs.show_website && rs.shop_website && (
-              <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.shop_website}</Typography>
+              <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>{rs.shop_website}</Typography>
             )}
             {rs.show_vat_number && rs.shop_vat_number && (
-              <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>VAT: {rs.shop_vat_number}</Typography>
+              <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>VAT: {rs.shop_vat_number}</Typography>
             )}
           </Stack>
 
@@ -446,25 +471,25 @@ export default function PosReceiptDialog({
           )}
           <Stack spacing={0.25} sx={{ my: 1 }}>
             {rs.show_invoice_id && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
             )}
             {offlineNo && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Offline No:\u00A0${offlineNo}`}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{`Offline No: ${offlineNo}`}</Typography>
             )}
             {rs.show_date_time && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_date_time ?? "Date-Time"}\u00A0\u00A0:\u00A0\u00A0${now.toLocaleDateString("en-GB").replace(/\//g, "-")}\u00A0\u00A0${now.toLocaleTimeString()}`}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{`${rs.label_date_time ?? "Date-Time"}  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>
             )}
             {rs.show_cashier && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_cashier}:\u00A0${cashierName || user?.first_name || user?.email || "—"}`}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{`${rs.label_cashier}: ${cashierName || user?.first_name || user?.email || "—"}`}</Typography>
             )}
             {rs.terminal_id && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`Terminal:\u00A0${rs.terminal_id}`}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{`Terminal: ${rs.terminal_id}`}</Typography>
             )}
             {rs.show_shift_id && shiftId && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_shift}:\u00A0${shiftId}`}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{`${rs.label_shift}: ${shiftId}`}</Typography>
             )}
             {rs.show_branch_name && company?.name && (
-              <Typography fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_branch}:\u00A0${company.name}`}</Typography>
+              <Typography fontSize={fontPx(rs.font_invoice_info)}>{`${rs.label_branch}: ${company.name}`}</Typography>
             )}
             {renderCustomFields(rs.custom_fields, "after_invoice")}
           </Stack>
@@ -473,7 +498,7 @@ export default function PosReceiptDialog({
 
           {/* ---- Line items ---- */}
           <Box sx={{ my: 1 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: FONT_SIZE[rs.font_items] - 1 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: fontPx(rs.font_items) - 1 }}>
               <colgroup>
                 <col style={{ width: "25%" }} />
                 <col style={{ width: "25%" }} />
@@ -481,7 +506,7 @@ export default function PosReceiptDialog({
                 <col style={{ width: "25%" }} />
               </colgroup>
               <thead>
-                <tr style={{ fontWeight: rs.weight_col_headers }}>
+                <tr style={{ fontWeight: rs.weight_col_headers, fontSize: fontPx(rs.font_col_headers), ...headerRuleStyle(rs.show_col_header_line) }}>
                   <td>{rs.label_col_item}</td>
                   <td style={{ textAlign: "right" }}>{rs.label_col_mrp ?? "MRP"}</td>
                   <td style={{ textAlign: "right" }}>{rs.label_col_net}</td>
@@ -496,14 +521,14 @@ export default function PosReceiptDialog({
                   return (
                     <>
                       <tr key={`name-${i}`}>
-                        <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: FONT_SIZE[rs.font_items] + 1 }}>
-                          {l.stock_id ? `${l.stock_id} - ${l.description}` : l.description}
+                        <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: fontPx(rs.font_items) + 1 }}>
+                          {l.stock_id ? `${l.stock_id} - ${l.description}` : l.description}
                           {rs.show_offer_applied && l.offer_name && (
-                            <div style={{ fontSize: FONT_SIZE[rs.font_items] - 1, color: "green" }}>Offer: {l.offer_name}</div>
+                            <div style={{ fontSize: fontPx(rs.font_items) - 1, color: "green" }}>Offer: {l.offer_name}</div>
                           )}
                         </td>
                       </tr>
-                      <tr key={`qty-${i}`} style={{ fontWeight: rs.weight_qty_line, fontSize: FONT_SIZE[rs.font_items] }}>
+                      <tr key={`qty-${i}`} style={{ fontWeight: rs.weight_qty_line, fontSize: fontPx(rs.font_items) }}>
                         <td>{l.quantity} x{rs.show_item_unit && l.unit_name ? ` ${l.unit_name}` : ""}</td>
                         <td style={{ textAlign: "right" }}>{mrp !== null ? mrp.toFixed(2) : "—"}</td>
                         <td style={{ textAlign: "right" }}>{netPrice.toFixed(2)}</td>
@@ -523,8 +548,8 @@ export default function PosReceiptDialog({
           </Stack>
 
           <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
-            <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_total}</Typography>
-            <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>
+            <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_total}</Typography>
+            <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>
               {rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Typography>
           </Box>
@@ -532,29 +557,29 @@ export default function PosReceiptDialog({
           {!isQuote && rs.show_payment_info && (
             <>
               <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
-              <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
+              <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
               <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                   <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
-                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(total)}</Typography>
+                  <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(total)}</Typography>
                 </Box>
-                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                   <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_cash_received}</span>
-                  <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(received)}</Typography>
+                  <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(received)}</Typography>
                 </Box>
                 {rs.show_change && change > 0.001 && (
-                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                     <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_change}</span>
-                    <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{fmt(change)}</Typography>
+                    <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(change)}</Typography>
                   </Box>
                 )}
                 {rs.show_coupon_used && couponCode && (
-                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                     <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_coupon}</span><span>{couponCode}</span>
                   </Box>
                 )}
                 {rs.show_coupon_used && voucherCode && (
-                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                     <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_voucher}</span><span>{voucherCode}</span>
                   </Box>
                 )}
@@ -562,17 +587,17 @@ export default function PosReceiptDialog({
               {youSaved > 0.001 && (
                 <Box sx={{ my: 0.5 }}>
                   <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1, borderColor: "text.primary" }} />
-                  <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: fontPx(rs.font_you_saved ?? "medium"), fontWeight: rs.weight_you_saved ?? 700 }}>
                     <span>{rs.label_you_saved ?? "You Saved"}</span>
-                    <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>{fmt(youSaved)}</Typography>
+                    <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={fontPx(rs.font_you_saved ?? "medium")}>{fmt(youSaved)}</Typography>
                   </Box>
                   <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1, borderColor: "text.primary" }} />
                 </Box>
               )}
               {renderCustomFields(rs.custom_fields, "after_payment")}
-              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals), fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
                 <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
-                <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{String(lines.length).padStart(2, "0")}</Typography>
+                <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{String(lines.length).padStart(2, "0")}</Typography>
               </Box>
             </>
           )}
@@ -580,7 +605,7 @@ export default function PosReceiptDialog({
           {rs.show_customer_name && (
             <>
               <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
-              <Typography fontWeight={rs.weight_customer} fontSize={FONT_SIZE[rs.font_footer] + 2} sx={{ mt: 1.5, display: "block" }}>
+              <Typography fontWeight={rs.weight_customer} fontSize={fontPx(rs.font_footer) + 2} sx={{ mt: 1.5, display: "block" }}>
                 {rs.label_customer} {customerName ? customerName.toUpperCase() : "WALK-IN"}
               </Typography>
             </>
@@ -589,17 +614,17 @@ export default function PosReceiptDialog({
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
 
           {!isQuote && rs.show_thank_you && (
-            <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={FONT_SIZE[rs.font_footer] + 3} sx={{ mt: 2 }}>
+            <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={fontPx(rs.font_footer) + 3} sx={{ mt: 2 }}>
               {rs.thank_you_message}
             </Typography>
           )}
           {rs.show_footer && (
-            <Typography align="center" fontWeight={rs.weight_footer} fontSize={FONT_SIZE[rs.font_footer]} color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            <Typography align="center" fontWeight={rs.weight_footer} fontSize={fontPx(rs.font_footer)} color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
               {rs.footer_text}
             </Typography>
           )}
           {rs.show_custom_note && rs.custom_note && (
-            <Typography align="center" fontWeight={rs.weight_footer} fontSize={FONT_SIZE[rs.font_footer]} sx={{ mt: 1, display: "block" }}>
+            <Typography align="center" fontWeight={rs.weight_footer} fontSize={fontPx(rs.font_footer)} sx={{ mt: 1, display: "block" }}>
               {rs.custom_note}
             </Typography>
           )}

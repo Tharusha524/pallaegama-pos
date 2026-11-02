@@ -73,7 +73,7 @@ export async function testApiConnection(baseUrl?: string): Promise<{
   message: string;
 }> {
   const base = normalizeApiBaseUrl(baseUrl ?? getApiBaseUrl());
-  const url = `${base}/item-categories`;
+  const url = `${base}/login-slideshow-images`;
 
   try {
     const res = await fetch(url, {

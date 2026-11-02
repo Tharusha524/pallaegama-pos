@@ -7,6 +7,7 @@ import {
 import SaveIcon from "@mui/icons-material/Save";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useNavigate } from "react-router-dom";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
@@ -15,10 +16,10 @@ import Breadcrumb from "../../../components/BreadCrumb";
 import { getPosSettings, updatePosSettings } from "../../../api/Pos/posOpsApi";
 import { getCompanies } from "../../../api/CompanySetup/CompanySetupApi";
 import { resolveLogoSrc } from "../../../utils/logoUrl";
+import { DEFAULT_COL_HEADER_PX, fontPx, headerRuleStyle } from "../../../components/PosReceiptDialog";
 import { notify } from "../../../services/notificationService";
 import JsBarcode from "jsbarcode";
 
-const FONT_SIZE: Record<string, number> = { small: 11, medium: 13, large: 15 };
 const WEIGHT_MARKS = [
   { value: 300, label: "Thin" },
   { value: 400, label: "Normal" },
@@ -52,12 +53,15 @@ const DEFAULT_RS = {
   show_vat_number: false, shop_vat_number: "", show_date_time: true,
   show_invoice_id: true, show_cashier: true, show_shift_id: false, show_branch_name: false,
   show_discount_column: true, show_item_unit: false, show_offer_applied: false,
+  show_col_header_line: true,
   show_payment_info: true, show_change: true, show_card_type: false, show_coupon_used: false, show_currency_symbol: false,
   show_customer_name: true,
   show_thank_you: true, thank_you_message: "THANK YOU FOR YOUR BUSINESS!",
   show_footer: true, footer_text: "Developed by DIO Solutions",
   show_custom_note: false, custom_note: "", show_barcode: true,
   font_header: "medium", font_items: "medium", font_totals: "medium", font_footer: "small",
+  font_col_headers: DEFAULT_COL_HEADER_PX,
+  font_invoice_info: 13,
   weight_shop_name: 800, weight_address: 400, weight_col_headers: 700,
   weight_item_name: 700, weight_unit_price: 400, weight_qty_line: 400,
   weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
@@ -90,12 +94,12 @@ const DEFAULT_RS = {
   label_date_time: "Date-Time",
 };
 
-function renderCustomFields(fields: CustomReceiptField[], position: string, fsMap: Record<string, number>) {
+function renderCustomFields(fields: CustomReceiptField[], position: string) {
   return fields
     .filter((f) => f.position === position && f.label)
     .map((f) => (
       <Box key={f.id} sx={{ display: "flex", justifyContent: f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start", mt: 0.5 }}>
-        <Typography fontSize={fsMap[f.font_size]} fontWeight={f.weight} sx={{ whiteSpace: "pre-wrap" }}>
+        <Typography fontSize={fontPx(f.font_size)} fontWeight={f.weight} sx={{ whiteSpace: "pre-wrap" }}>
           {f.label}{f.value ? `: ${f.value}` : ""}
         </Typography>
       </Box>
@@ -140,49 +144,49 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
           <img src={logoSrc} alt="logo" style={{ maxWidth: "100%", maxHeight: 56 }} />
         )}
         {rs.show_shop_name && (
-          <Typography align="center" fontWeight={rs.weight_shop_name} fontSize={FONT_SIZE[rs.font_header] + 4}>
+          <Typography align="center" fontWeight={rs.weight_shop_name} fontSize={fontPx(rs.font_header) + 4}>
             {company?.name || "Shop Name"}
           </Typography>
         )}
         {rs.show_address && company?.address && (
-          <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]} sx={{ lineHeight: 1.2 }}>
+          <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)} sx={{ lineHeight: 1.2 }}>
             {company.address.toUpperCase()}
           </Typography>
         )}
         {rs.show_phone && (company?.phone_number || company?.fax_number) && (
-          <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>
+          <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>
             {[company?.phone_number, company?.fax_number].filter(Boolean).join(" · ")}
           </Typography>
         )}
         {rs.show_email && rs.shop_email && (
-          <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.shop_email}</Typography>
+          <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>{rs.shop_email}</Typography>
         )}
         {rs.show_website && rs.shop_website && (
-          <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.shop_website}</Typography>
+          <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>{rs.shop_website}</Typography>
         )}
         {rs.show_vat_number && rs.shop_vat_number && (
-          <Typography align="center" fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>VAT: {rs.shop_vat_number}</Typography>
+          <Typography align="center" fontWeight={rs.weight_address} fontSize={fontPx(rs.font_header)}>VAT: {rs.shop_vat_number}</Typography>
         )}
       </Stack>
 
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
-      {renderCustomFields(rs.custom_fields ?? [], "after_header", FONT_SIZE)}
+      {renderCustomFields(rs.custom_fields ?? [], "after_header")}
 
       <Stack spacing={0.25} sx={{ my: 1 }}>
-        {rs.show_invoice_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_invoice_id}: 26</Typography>}
-        {rs.show_date_time && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{`${rs.label_date_time ?? "Date-Time"}  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>}
-        {rs.show_cashier && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_cashier}: Admin</Typography>}
-        {rs.terminal_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>Terminal: {rs.terminal_id}</Typography>}
-        {rs.show_shift_id && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_shift}: 3</Typography>}
-        {rs.show_branch_name && company?.name && <Typography fontWeight={rs.weight_address} fontSize={FONT_SIZE[rs.font_header]}>{rs.label_branch}: {company.name}</Typography>}
-        {renderCustomFields(rs.custom_fields ?? [], "after_invoice", FONT_SIZE)}
+        {rs.show_invoice_id && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{rs.label_invoice_id}: 26</Typography>}
+        {rs.show_date_time && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{`${rs.label_date_time ?? "Date-Time"}  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>}
+        {rs.show_cashier && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{rs.label_cashier}: Admin</Typography>}
+        {rs.terminal_id && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>Terminal: {rs.terminal_id}</Typography>}
+        {rs.show_shift_id && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{rs.label_shift}: 3</Typography>}
+        {rs.show_branch_name && company?.name && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{rs.label_branch}: {company.name}</Typography>}
+        {renderCustomFields(rs.custom_fields ?? [], "after_invoice")}
       </Stack>
 
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
 
       {/* Items */}
       <Box sx={{ my: 1 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: FONT_SIZE[rs.font_items] - 1 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: fontPx(rs.font_items) - 1 }}>
           <colgroup>
             <col style={{ width: "25%" }} />
             <col style={{ width: "25%" }} />
@@ -190,7 +194,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
             <col style={{ width: "25%" }} />
           </colgroup>
           <thead>
-            <tr style={{ fontWeight: rs.weight_col_headers }}>
+            <tr style={{ fontWeight: rs.weight_col_headers, fontSize: fontPx(rs.font_col_headers), ...headerRuleStyle(rs.show_col_header_line) }}>
               <td>{rs.label_col_item}</td>
               <td style={{ textAlign: "right" }}>{rs.label_col_mrp ?? "MRP"}</td>
               <td style={{ textAlign: "right" }}>{rs.label_col_net}</td>
@@ -204,14 +208,14 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
               return (
                 <>
                   <tr key={`name-${i}`}>
-                    <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: FONT_SIZE[rs.font_items] + 1 }}>
+                    <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: fontPx(rs.font_items) + 1 }}>
                       {(l as any).stock_id ? `${(l as any).stock_id} - ${l.description}` : l.description}
                       {rs.show_offer_applied && i === 1 && (
-                        <div style={{ fontSize: FONT_SIZE[rs.font_items] - 1, color: "green" }}>Offer: Member 5% Off</div>
+                        <div style={{ fontSize: fontPx(rs.font_items) - 1, color: "green" }}>Offer: Member 5% Off</div>
                       )}
                     </td>
                   </tr>
-                  <tr key={`qty-${i}`} style={{ fontWeight: rs.weight_qty_line, fontSize: FONT_SIZE[rs.font_items] }}>
+                  <tr key={`qty-${i}`} style={{ fontWeight: rs.weight_qty_line, fontSize: fontPx(rs.font_items) }}>
                     <td>{l.quantity} x{rs.show_item_unit ? ` ${l.unit_name}` : ""}</td>
                     <td style={{ textAlign: "right" }}>{l.mrp_price.toFixed(2)}</td>
                     <td style={{ textAlign: "right" }}>{net.toFixed(2)}</td>
@@ -225,11 +229,11 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       </Box>
 
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
-      {renderCustomFields(rs.custom_fields ?? [], "after_items", FONT_SIZE)}
+      {renderCustomFields(rs.custom_fields ?? [], "after_items")}
 
       <Stack spacing={0.25} sx={{ my: 1 }}>
         {discountTotal > 0.001 && (
-          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_subtotal }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals), fontWeight: rs.weight_subtotal }}>
             <span>{rs.label_discount}</span><span>-{discountTotal.toFixed(2)}</span>
           </Box>
         )}
@@ -238,47 +242,47 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
 
       <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
-        <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_total}</Typography>
-        <Typography fontWeight={rs.weight_total} fontSize={FONT_SIZE[rs.font_totals] + 7}>{rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{DUMMY_TOTAL.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
+        <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_total}</Typography>
+        <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{DUMMY_TOTAL.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
       </Box>
 
       {rs.show_payment_info && (
         <>
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
-          <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
+          <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
           <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
               <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
-              <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>520.00</Typography>
+              <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>520.00</Typography>
             </Box>
-            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
               <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_cash_received}</span>
-              <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{DUMMY_RECEIVED.toFixed(2)}</Typography>
+              <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{DUMMY_RECEIVED.toFixed(2)}</Typography>
             </Box>
             {rs.show_change && (
-              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                 <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_change}</span>
-                <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{DUMMY_CHANGE.toFixed(2)}</Typography>
+                <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{DUMMY_CHANGE.toFixed(2)}</Typography>
               </Box>
             )}
             {rs.show_coupon_used && (
-              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals] }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                 <span style={{ fontWeight: rs.weight_payment_lines }}>COUPON</span><span>SAVE10</span>
               </Box>
             )}
           </Stack>
           <Box sx={{ my: 0.5 }}>
             <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
-            <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: FONT_SIZE[rs.font_you_saved ?? "medium"], fontWeight: rs.weight_you_saved ?? 700 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", py: 0.5, fontSize: fontPx(rs.font_you_saved ?? "medium"), fontWeight: rs.weight_you_saved ?? 700 }}>
               <span>{rs.label_you_saved ?? "You Saved"}</span>
-              <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={FONT_SIZE[rs.font_you_saved ?? "medium"]}>50.00</Typography>
+              <Typography fontWeight={rs.weight_you_saved ?? 700} fontSize={fontPx(rs.font_you_saved ?? "medium")}>50.00</Typography>
             </Box>
             <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
           </Box>
-          {renderCustomFields(rs.custom_fields ?? [], "after_payment", FONT_SIZE)}
-          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: FONT_SIZE[rs.font_totals], fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
+          {renderCustomFields(rs.custom_fields ?? [], "after_payment")}
+          <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals), fontWeight: rs.weight_payment_lines, mt: 0.5 }}>
             <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_items ?? "Items"}</span>
-            <Typography fontWeight={rs.weight_payment_lines} fontSize={FONT_SIZE[rs.font_totals]}>{String(DUMMY_LINES.length).padStart(2, "0")}</Typography>
+            <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{String(DUMMY_LINES.length).padStart(2, "0")}</Typography>
           </Box>
         </>
       )}
@@ -286,7 +290,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       {rs.show_customer_name && (
         <>
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
-          <Typography fontWeight={rs.weight_customer} fontSize={FONT_SIZE[rs.font_footer] + 2} sx={{ mt: 1.5, display: "block" }}>
+          <Typography fontWeight={rs.weight_customer} fontSize={fontPx(rs.font_footer) + 2} sx={{ mt: 1.5, display: "block" }}>
             {rs.label_customer} VINOD JAYASUNDARA
           </Typography>
         </>
@@ -295,21 +299,21 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
 
       {rs.show_thank_you && (
-        <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={FONT_SIZE[rs.font_footer] + 3} sx={{ mt: 2 }}>
+        <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={fontPx(rs.font_footer) + 3} sx={{ mt: 2 }}>
           {rs.thank_you_message || "THANK YOU FOR YOUR BUSINESS!"}
         </Typography>
       )}
       {rs.show_footer && (
-        <Typography align="center" fontWeight={rs.weight_footer} fontSize={FONT_SIZE[rs.font_footer]} color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+        <Typography align="center" fontWeight={rs.weight_footer} fontSize={fontPx(rs.font_footer)} color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
           {rs.footer_text}
         </Typography>
       )}
       {rs.show_custom_note && rs.custom_note && (
-        <Typography align="center" fontWeight={rs.weight_footer} fontSize={FONT_SIZE[rs.font_footer]} sx={{ mt: 1, display: "block" }}>
+        <Typography align="center" fontWeight={rs.weight_footer} fontSize={fontPx(rs.font_footer)} sx={{ mt: 1, display: "block" }}>
           {rs.custom_note}
         </Typography>
       )}
-      {renderCustomFields(rs.custom_fields ?? [], "footer", FONT_SIZE)}
+      {renderCustomFields(rs.custom_fields ?? [], "footer")}
       {rs.show_barcode && (
         <Box sx={{ textAlign: "center", mt: 2 }}>
           <svg ref={barcodeRef} />
@@ -328,17 +332,26 @@ function SectionToggle({ label, checked, onChange }: { label: string; checked: b
   );
 }
 
-function FontSizePicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+const MIN_FONT = 6;
+const MAX_FONT = 30;
+
+function FontSizePicker({ label, value, onChange }: { label: string; value: unknown; onChange: (v: string) => void }) {
+  const px = fontPx(value);
+  const step = (by: number) => onChange(String(Math.min(MAX_FONT, Math.max(MIN_FONT, px + by))));
   return (
     <Stack direction="row" alignItems="center" spacing={1}>
       <Typography variant="caption" color="text.secondary" sx={{ minWidth: 100 }}>{label}</Typography>
-      <FormControl size="small" sx={{ width: 110 }}>
-        <Select value={value} onChange={(e) => onChange(e.target.value)}>
-          <MenuItem value="small">Small</MenuItem>
-          <MenuItem value="medium">Medium</MenuItem>
-          <MenuItem value="large">Large</MenuItem>
-        </Select>
-      </FormControl>
+      <IconButton size="small" onClick={() => step(-1)} disabled={px <= MIN_FONT}><RemoveIcon fontSize="small" /></IconButton>
+      <TextField
+        size="small"
+        type="number"
+        value={px}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => step(0)}
+        inputProps={{ min: MIN_FONT, max: MAX_FONT, style: { width: 46, textAlign: "center" } }}
+      />
+      <IconButton size="small" onClick={() => step(1)} disabled={px >= MAX_FONT}><AddIcon fontSize="small" /></IconButton>
+      <Typography variant="caption" color="text.secondary">px</Typography>
     </Stack>
   );
 }
@@ -443,6 +456,8 @@ export default function ReceiptCustomizePage() {
                 <SectionToggle label="Show Cashier Name" checked={!!rs.show_cashier} onChange={(v) => set("show_cashier", v)} />
                 <SectionToggle label="Show Shift ID" checked={!!rs.show_shift_id} onChange={(v) => set("show_shift_id", v)} />
                 <SectionToggle label="Show Branch Name" checked={!!rs.show_branch_name} onChange={(v) => set("show_branch_name", v)} />
+                <Divider sx={{ my: 0.5 }} />
+                <FontSizePicker label="Invoice info font size" value={rs.font_invoice_info} onChange={(v) => set("font_invoice_info", v)} />
               </Stack>
             </CardContent>
           </Card>
@@ -455,8 +470,10 @@ export default function ReceiptCustomizePage() {
                 <SectionToggle label="Show Discount Column" checked={!!rs.show_discount_column} onChange={(v) => set("show_discount_column", v)} />
                 <SectionToggle label="Show Item Unit (KG, PCS...)" checked={!!rs.show_item_unit} onChange={(v) => set("show_item_unit", v)} />
                 <SectionToggle label="Show Offer/Discount Name Applied" checked={!!rs.show_offer_applied} onChange={(v) => set("show_offer_applied", v)} />
+                <SectionToggle label="Line Under Column Headers" checked={!!rs.show_col_header_line} onChange={(v) => set("show_col_header_line", v)} />
                 <Divider sx={{ my: 0.5 }} />
                 <FontSizePicker label="Items font size" value={rs.font_items} onChange={(v) => set("font_items", v)} />
+                <FontSizePicker label="Column headers font size" value={rs.font_col_headers} onChange={(v) => set("font_col_headers", v)} />
                 <WeightSlider label="Column headers weight" value={rs.weight_col_headers} onChange={(v) => set("weight_col_headers", v)} />
                 <WeightSlider label="Item name weight" value={rs.weight_item_name} onChange={(v) => set("weight_item_name", v)} />
                 <WeightSlider label="Unit price weight" value={rs.weight_unit_price} onChange={(v) => set("weight_unit_price", v)} />

@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { getStockList } from "../../../api/Inventory/StockListApi";
+import DescriptionCell from "./DescriptionCell";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Stack, TextField, Typography, Table, TableHead, TableRow,
@@ -46,6 +48,19 @@ export default function AddItemPage() {
   const { data: subcategories } = useQuery({ queryKey: ["subcategories"], queryFn: () => getSubcategories() });
   const { data: brands } = useQuery({ queryKey: ["brands"], queryFn: () => getBrands() });
   const { data: units } = useQuery({ queryKey: ["item-units"], queryFn: () => getItemUnits() });
+
+  // Existing item names, so a new item is spelled the way the old ones are.
+  const anyTyping = rows.some((r) => r.description.trim().length >= 3);
+  const { data: allStock } = useQuery({
+    queryKey: ["stock-list-all"],
+    queryFn: () => getStockList(),
+    enabled: anyTyping,
+    staleTime: 60_000,
+  });
+  const existingNames = useMemo(
+    () => (allStock ?? []).map((s: any) => String(s.description ?? "")).filter(Boolean),
+    [allStock],
+  );
 
   const categoryIdByName = useMemo(() => {
     const m = new Map<string, number>();
@@ -207,9 +222,11 @@ export default function AddItemPage() {
                     onChange={(e) => updateRow(r._id, "stock_id", e.target.value)} />
                 </TableCell>
                 <TableCell>
-                  <TextField size="small" value={r.description}
-                    inputProps={{ style: { width: 190 } }}
-                    onChange={(e) => updateRow(r._id, "description", e.target.value)} />
+                  <DescriptionCell
+                    value={r.description}
+                    existingNames={existingNames}
+                    onChange={(val) => updateRow(r._id, "description", val)}
+                  />
                 </TableCell>
                 <TableCell>
                   <TextField size="small" value={r.category ?? ""}

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Card, CardContent, Stack, TextField, Autocomplete, Table, TableHead, TableRow,
@@ -128,7 +128,7 @@ function ProductsTab() {
     }),
     enabled: sinhalaSearch.length > 0,
   });
-  const stockFromApi = useMemo(() => {
+  const exactStockFromApi = useMemo(() => {
     if (!typedStockFromApi) return undefined;
     if (!sinhalaSearch || !sinhalaStockFromApi) return typedStockFromApi;
     const seen = new Set(typedStockFromApi.map((s: any) => String(s.stock_id)));
@@ -153,18 +153,18 @@ function ProductsTab() {
 
   // Offline: filter the cached full snapshot client-side the same way the
   // server would, since there's nothing to send the search/category to.
-  const stock = isOffline
-    ? offlineStock.filter((s: any) => {
-        const matchesSearch = !search || [s.description, s.stock_id, s.barcode].some((v) => {
-          const value = String(v ?? "").toLowerCase();
-          return value.includes(search.toLowerCase()) || (!!sinhalaSearch && value.includes(sinhalaSearch));
-        });
-        const matchesCategory = !category?.category_id || s.category_id === category.category_id;
-        const matchesBrand = !brand?.id || s.brand_id === brand.id;
-        const matchesSubcategory = !subcategory?.id || s.subcategory_id === subcategory.id;
-        return matchesSearch && matchesCategory && matchesBrand && matchesSubcategory;
-      })
-    : (stockFromApi ?? []);
+  const inFilters = (s: any) =>
+    (!category?.category_id || String(s.category_id) === String(category.category_id))
+    && (!brand?.id || String(s.brand_id) === String(brand.id))
+    && (!subcategory?.id || String(s.subcategory_id) === String(subcategory.id));
+  const closeSource = (isOffline ? offlineStock : fullStockFromApi ?? []).filter(inFilters);
+  const exactStock = isOffline
+    ? closeSource.filter((s: any) => !search || [s.description, s.stock_id, s.barcode].some((v) => {
+        const value = String(v ?? "").toLowerCase();
+        return value.includes(search.toLowerCase()) || (!!sinhalaSearch && value.includes(sinhalaSearch));
+      }))
+    : (exactStockFromApi ?? []);
+  const stock = appendCloseMatches(closeSource, exactStock, search);
 
   const toggleSelected = (stockId: string) => {
     setSelectedStockIds((prev) => {
@@ -513,13 +513,14 @@ function StockDamageTab() {
     const term = inputValue.trim().toLowerCase();
     if (!term) return options;
     const sinhala = toSinhalaSearch(inputValue);
-    return options.filter((i: any) => {
+    const exact = options.filter((i: any) => {
       const name = String(i.description ?? "").toLowerCase();
       return name.includes(term)
         || String(i.stock_id ?? "").toLowerCase().includes(term)
         || String(i.barcode ?? "").includes(inputValue.trim())
         || (!!sinhala && name.includes(sinhala));
     });
+    return appendCloseMatches(options, exact, inputValue);
   };
 
   const createMutation = useMutation({

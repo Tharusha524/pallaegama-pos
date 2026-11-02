@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 
 /** Today's date (YYYY-MM-DD) in the PC's own time zone, not UTC. */
 const localToday = () => {
@@ -12,12 +12,13 @@ const filterOfferProducts = (options: any[], { inputValue }: { inputValue: strin
   const term = inputValue.trim().toLowerCase();
   if (!term) return options;
   const sinhala = toSinhalaSearch(inputValue);
-  return options.filter((i: any) => {
+  const exact = options.filter((i: any) => {
     const name = String(i.description ?? "").toLowerCase();
     return name.includes(term)
       || String(i.stock_id ?? "").toLowerCase().includes(term)
       || (!!sinhala && name.includes(sinhala));
   });
+  return appendCloseMatches(options, exact, inputValue);
 };
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {

@@ -193,10 +193,10 @@ Route::get('/user', function (Request $request) {
         'last_name' => $user->last_name ?? ($user->lastName ?? null),
         'strict_access' => (bool) ($user->strict_access ?? false),
     ]);
-})->middleware('auth:sanctum');
+})->middleware(['auth:sanctum', 'staff.auth']);
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
-Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::post('/logout', [AuthController::class, 'logout'])->middleware(['auth:sanctum', 'staff.auth']);
 
 // Public — the login/signup page itself isn't authenticated yet.
 Route::get('login-slideshow-images', [\App\Http\Controllers\LoginSlideshowImageController::class, 'index']);
@@ -207,7 +207,7 @@ Route::get('login-slideshow-images', [\App\Http\Controllers\LoginSlideshowImageC
 Route::get('storage-file/{path}', [\App\Http\Controllers\StorageFileController::class, 'show'])
     ->where('path', '.*');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'staff.auth'])->group(function () {
     Route::post('login-slideshow-images', [\App\Http\Controllers\LoginSlideshowImageController::class, 'store']);
     Route::delete('login-slideshow-images/{id}', [\App\Http\Controllers\LoginSlideshowImageController::class, 'destroy']);
     Route::post('login-slideshow-images/reorder', [\App\Http\Controllers\LoginSlideshowImageController::class, 'reorder']);
@@ -549,6 +549,7 @@ Route::post('pos-receipts/{transNo}/copy', [\App\Http\Controllers\PosReprintCont
 Route::get('stock-batches', [\App\Http\Controllers\StockBatchController::class, 'index']);
 Route::get('stock-batches/sellable', [\App\Http\Controllers\StockBatchController::class, 'sellable']);
 Route::get('stock-batches/multi-price', [\App\Http\Controllers\StockBatchController::class, 'multiPrice']);
+Route::get('stock-batches/wholesale', [\App\Http\Controllers\StockBatchController::class, 'wholesale']);
 Route::get('stock-batches/pending', [\App\Http\Controllers\StockBatchController::class, 'pending']);
 Route::get('stock-batches/report', [\App\Http\Controllers\StockBatchController::class, 'report']);
 Route::post('stock-batches/fix-mismatches', [\App\Http\Controllers\StockBatchController::class, 'fixMismatches']);

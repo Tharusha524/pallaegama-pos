@@ -20,7 +20,7 @@ import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryL
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { getBrands } from "../../../api/Brands/BrandsApi";
 import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
-import { toSinhalaSearch } from "../../../utils/singlishSearch";
+import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 import { notify } from "../../../services/notificationService";
 
 const statusColor: Record<string, "default" | "warning" | "info" | "success" | "error"> = {
@@ -62,22 +62,25 @@ export default function StockTransfersPage() {
   const sinhalaSearch = useMemo(() => toSinhalaSearch(search), [search]);
   const sameId = (a: unknown, b: unknown) => a != null && b != null && String(a) === String(b);
 
-  const visibleProducts = useMemo(() => (products ?? []).filter((p: any) => {
-    const term = search.trim().toLowerCase();
-    if (term) {
+  const visibleProducts = useMemo(() => {
+    const inFilters = (products ?? []).filter((p: any) => {
+      if (category && !sameId(p.category_id, category.category_id)) return false;
+      if (subcategory && !sameId(p.subcategory_id, subcategory.id)) return false;
+      if (brand && !sameId(p.brand_id, brand.id)) return false;
+      if (inStockOnly && fromLoc && available(p.stock_id) <= 0) return false;
+      return true;
+    });
+    const exact = inFilters.filter((p: any) => {
+      const term = search.trim().toLowerCase();
+      if (!term) return true;
       const name = String(p.description ?? "").toLowerCase();
-      const matches = name.includes(term)
+      return name.includes(term)
         || String(p.stock_id ?? "").toLowerCase().includes(term)
         || String(p.barcode ?? "").includes(search.trim())
         || (!!sinhalaSearch && name.includes(sinhalaSearch));
-      if (!matches) return false;
-    }
-    if (category && !sameId(p.category_id, category.category_id)) return false;
-    if (subcategory && !sameId(p.subcategory_id, subcategory.id)) return false;
-    if (brand && !sameId(p.brand_id, brand.id)) return false;
-    if (inStockOnly && fromLoc && available(p.stock_id) <= 0) return false;
-    return true;
-  }), [products, search, sinhalaSearch, category, subcategory, brand, inStockOnly, fromLoc, availableAtFrom]);
+    });
+    return appendCloseMatches(inFilters, exact, search);
+  }, [products, search, sinhalaSearch, category, subcategory, brand, inStockOnly, fromLoc, availableAtFrom]);
 
   const qtyError = (stockId: string, qtyText: string): string | null => {
     const qty = Number(qtyText);
