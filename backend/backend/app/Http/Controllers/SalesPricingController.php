@@ -45,6 +45,10 @@ class SalesPricingController extends Controller
     {
         $validated = $request->validated();
 
+        if ($message = $this->belowCost($validated)) {
+            return response()->json(['message' => $message], 422);
+        }
+
         if ($this->duplicateExists($validated)) {
             return response()->json([
                 'message' => 'A sales pricing with this currency and sales type already exists for this item.',
@@ -76,6 +80,10 @@ class SalesPricingController extends Controller
     public function update(SalesPricingRequest $request, string $id)
     {
         $validated = $request->validated();
+
+        if ($message = $this->belowCost($validated)) {
+            return response()->json(['message' => $message], 422);
+        }
 
         if ($this->duplicateExists($validated, $id)) {
             return response()->json([
@@ -148,6 +156,18 @@ class SalesPricingController extends Controller
             'created' => $created,
             'errors' => $errors,
         ]);
+    }
+
+    /** No LKR selling price below the product's cost (StockBatchService::costFloor). */
+    private function belowCost(array $validated): ?string
+    {
+        if ((int) ($validated['currency_id'] ?? 0) !== 8 || empty($validated['stock_id']) || (float) ($validated['price'] ?? 0) <= 0) {
+            return null;
+        }
+        $batches = app(\App\Services\Inventory\StockBatchService::class);
+        $stockId = (string) $validated['stock_id'];
+
+        return $batches->belowCostMessage($stockId, (float) $validated['price'], $batches->costFloor($stockId, null, null, true));
     }
 
     /**

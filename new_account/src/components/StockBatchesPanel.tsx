@@ -129,7 +129,17 @@ export default function StockBatchesPanel({ stockId, formatCurrency }: { stockId
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button size="small" variant="contained" disabled={!edits[b.id] || saveMutation.isPending}
-                      onClick={() => saveMutation.mutate({ b })}>
+                      onClick={() => {
+                        // No selling / wholesale price below what this batch cost.
+                        const cost = num(b.purchase_cost);
+                        const low = (["selling_price", "wholesale_price"] as const)
+                          .find((k) => field(b, k) !== "" && Number(field(b, k)) > 0 && Number(field(b, k)) < cost - 0.005);
+                        if (low) {
+                          notify.error(`${low === "selling_price" ? "Selling" : "Wholesale"} price can't be below cost (${formatCurrency(cost)})`);
+                          return;
+                        }
+                        saveMutation.mutate({ b });
+                      }}>
                       Save
                     </Button>
                     {b.status !== "finished" && (

@@ -136,7 +136,7 @@ class StockBatchService
             ->where('status', 'active')
             ->where('qty_remaining', '>', 0)
             ->orderBy('id')
-            ->get(['id', 'selling_price', 'wholesale_price', 'mrp', 'qty_remaining', 'received_date']);
+            ->get(['id', 'selling_price', 'wholesale_price', 'mrp', 'qty_remaining', 'received_date', 'purchase_cost']);
 
         $groups = [];
         foreach ($rows as $r) {
@@ -149,8 +149,11 @@ class StockBatchService
                     'wholesale_price' => null,
                     'qty' => 0.0,
                     'received_date' => $r->received_date,
+                    'purchase_cost' => 0.0,
                 ];
             }
+            // Highest cost of the packets in the group — the till may not sell below it.
+            $groups[$key]['purchase_cost'] = max($groups[$key]['purchase_cost'], round((float) $r->purchase_cost, 4));
             $groups[$key]['selling_price'] = (float) $r->selling_price;
             // Newest batch in the group that has a wholesale price set.
             if ($r->wholesale_price !== null && (float) $r->wholesale_price > 0) {
@@ -160,6 +163,104 @@ class StockBatchService
         }
 
         return array_values($groups);
+    }
+
+    /**
+     * Lowest price a product may be sold at: the highest cost among its batches
+     * in stock, so no packet goes out below what it cost. With a batch, only the
+     * packets of that batch's MRP group (and the batch itself). With no batches,
+     * the product's average cost, else its purchase cost. 0 = no cost known.
+     * $includePending also counts new-cost deliveries still waiting for a price
+     * (Set Price); the till can't sell those, so it leaves them out.
+     */
+    public function costFloor(string $stockId, ?string $locCode = null, ?int $batchId = null, bool $includePending = false): float
+    {
+        $stockId = trim($stockId);
+        $loc = $locCode !== null && trim($locCode) !== '' ? strtoupper(trim($locCode)) : null;
+
+        if ($this->enabled()) {
+            $inStock = DB::table('stock_batches')
+                ->where('stock_id', $stockId)
+                ->where('qty_remaining', '>', 0)
+                ->whereIn('status', $includePending ? ['active', 'pending'] : ['active']);
+
+            $batch = $batchId !== null
+                ? DB::table('stock_batches')->where('id', $batchId)->first(['stock_id', 'loc_code', 'mrp', 'purchase_cost'])
+                : null;
+            if ($batch && trim((string) $batch->stock_id) === $stockId) {
+                $key = $this->mrpKey($batch->mrp);
+                $groupMax = (float) $inStock->where('loc_code', $batch->loc_code)->get(['mrp', 'purchase_cost'])
+                    ->filter(fn ($r) => $this->mrpKey($r->mrp) === $key)
+                    ->max('purchase_cost');
+
+                return round(max((float) $batch->purchase_cost, $groupMax), 4);
+            }
+
+            $max = (float) $inStock->when($loc !== null, fn ($q) => $q->where('loc_code', $loc))->max('purchase_cost');
+            if ($max > 0) {
+                return round($max, 4);
+            }
+        }
+
+        $stock = DB::table('stock_master')->where('stock_id', $stockId)->first(['material_cost', 'purchase_cost']);
+
+        return $stock ? $this->masterCost($stock) : 0.0;
+    }
+
+    /**
+     * POS preload: costFloor() for every product, { stock_id: cost } (only
+     * products with a known cost), so the till can check prices offline too.
+     *
+     * @return array<string, float>
+     */
+    public function costFloors(?string $locCode = null): array
+    {
+        $loc = $locCode !== null && trim($locCode) !== '' ? strtoupper(trim($locCode)) : null;
+
+        $out = [];
+        foreach (DB::table('stock_master')->get(['stock_id', 'material_cost', 'purchase_cost']) as $s) {
+            $cost = $this->masterCost($s);
+            if ($cost > 0) {
+                $out[(string) $s->stock_id] = $cost;
+            }
+        }
+
+        if ($this->enabled()) {
+            $rows = DB::table('stock_batches')
+                ->where('status', 'active')->where('qty_remaining', '>', 0)
+                ->when($loc !== null, fn ($q) => $q->where('loc_code', $loc))
+                ->groupBy('stock_id')
+                ->selectRaw('stock_id, MAX(purchase_cost) as cost')
+                ->get();
+            foreach ($rows as $r) {
+                if ((float) $r->cost > 0) {
+                    $out[(string) $r->stock_id] = round((float) $r->cost, 4);
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** The "can't sell below cost" message for a price, or null when the price is fine. */
+    public function belowCostMessage(string $stockId, float $price, float $floor, string $what = 'Selling price'): ?string
+    {
+        if ($floor <= 0 || $price >= $floor - 0.005) {
+            return null;
+        }
+        $name = DB::table('stock_master')->where('stock_id', trim($stockId))->value('description') ?? $stockId;
+
+        return sprintf("%s for %s (%s) can't be below its cost (%s).", $what, $name, number_format($price, 2), number_format($floor, 2));
+    }
+
+    private function masterCost(object $stock): float
+    {
+        $cost = (float) ($stock->material_cost ?? 0);
+        if ($cost <= 0) {
+            $cost = (float) ($stock->purchase_cost ?? 0);
+        }
+
+        return round(max(0, $cost), 4);
     }
 
     /**

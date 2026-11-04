@@ -33,6 +33,10 @@ class SalesInvoiceController extends Controller
 
     public function directInvoice(PostDirectSalesInvoiceRequest $request): JsonResponse
     {
+        if ($message = $this->posLineBelowCost($request->validated())) {
+            return response()->json(['message' => $message], 422);
+        }
+
         try {
             $result = $this->invoiceService->directInvoice($request->validated());
             $this->afterInvoicePosted($result);
@@ -147,6 +151,30 @@ class SalesInvoiceController extends Controller
      * Deliberately best-effort and isolated from the invoice's own DB transaction —
      * a loyalty hiccup must never fail or roll back an already-posted invoice.
      */
+    /**
+     * Online POS sales (reference "POS-...") may not price an item below its cost.
+     * Offline sales ("OFF-...") were already checked on the till when they were made
+     * and the customer has paid - rejecting them at sync would lose the sale.
+     * Line discounts aren't checked here: they also carry vouchers / loyalty
+     * points, which are payments, not discounts (the till checks real discounts).
+     */
+    private function posLineBelowCost(array $data): ?string
+    {
+        if (! str_starts_with((string) ($data['reference'] ?? ''), 'POS-')) {
+            return null;
+        }
+        $batches = app(\App\Services\Inventory\StockBatchService::class);
+        foreach ($data['lines'] ?? [] as $line) {
+            $stockId = (string) ($line['stock_id'] ?? '');
+            $floor = $batches->costFloor($stockId, $data['from_stk_loc'] ?? null, isset($line['batch_id']) ? (int) $line['batch_id'] : null);
+            if ($message = $batches->belowCostMessage($stockId, (float) ($line['unit_price'] ?? 0), $floor)) {
+                return $message;
+            }
+        }
+
+        return null;
+    }
+
     private function afterInvoicePosted(array $result): void
     {
         try {

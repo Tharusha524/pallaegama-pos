@@ -551,6 +551,7 @@ Route::get('stock-batches', [\App\Http\Controllers\StockBatchController::class, 
 Route::get('stock-batches/sellable', [\App\Http\Controllers\StockBatchController::class, 'sellable']);
 Route::get('stock-batches/multi-price', [\App\Http\Controllers\StockBatchController::class, 'multiPrice']);
 Route::get('stock-batches/wholesale', [\App\Http\Controllers\StockBatchController::class, 'wholesale']);
+Route::get('stock-batches/cost-floors', [\App\Http\Controllers\StockBatchController::class, 'costFloors']);
 Route::get('stock-batches/pending', [\App\Http\Controllers\StockBatchController::class, 'pending']);
 Route::get('stock-batches/report', [\App\Http\Controllers\StockBatchController::class, 'report']);
 Route::post('stock-batches/fix-mismatches', [\App\Http\Controllers\StockBatchController::class, 'fixMismatches']);

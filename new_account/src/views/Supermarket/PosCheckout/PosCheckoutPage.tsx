@@ -35,7 +35,7 @@ import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/Sale
 import { createQuotation } from "../../../api/Quotations/QuotationsApi";
 import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
-import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getWholesaleBatchProducts, getPendingPriceQty, type BatchPriceGroup } from "../../../api/Pos/posApi";
+import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getWholesaleBatchProducts, getPendingPriceQty, getCostFloors, type BatchPriceGroup } from "../../../api/Pos/posApi";
 import { getStockList } from "../../../api/Inventory/StockListApi";
 import { getSalesPricing, getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
 import { getPromotionalPrices } from "../../../api/PromotionalPrice/PromotionalPriceApi";
@@ -520,6 +520,26 @@ export default function PosCheckoutPage() {
     saveReferenceData("pending_price_qty", pendingPriceFromApi).catch(() => { });
   }, [pendingPriceFromApi]);
   const pendingPriceMap: Record<string, number> = pendingPriceFromApi ?? offlinePendingPrice;
+
+  // Each product's cost — nothing may be sold below it (typed price, discount,
+  // promotion or coupon alike). Cached for offline sales.
+  const { data: costFloorsFromApi } = useQuery({
+    queryKey: ["pos-cost-floors", locCode],
+    queryFn: () => getCostFloors({ locCode: locCode || undefined }),
+    enabled: !isOffline,
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 0,
+  });
+  const [offlineCostFloors, setOfflineCostFloors] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    getReferenceData<Record<string, number>>("cost_floors").then((v) => v && setOfflineCostFloors(v)).catch(() => { });
+  }, []);
+  useEffect(() => {
+    if (!isDesktopApp() || !costFloorsFromApi) return;
+    saveReferenceData("cost_floors", costFloorsFromApi).catch(() => { });
+  }, [costFloorsFromApi]);
+  const costFloorMap: Record<string, number> = costFloorsFromApi ?? offlineCostFloors;
   /** All the stock left has no selling price yet (set it on Set Price first). */
   const onlyUnpricedStock = (stockId: string, totalQty: number) => {
     const pending = Number(pendingPriceMap[stockId] ?? 0);
@@ -667,7 +687,9 @@ export default function PosCheckoutPage() {
       ? Number(birthdayOffer.discount_value) || 0
       : (lineSubtotal > 0 ? Math.min(100, (Number(birthdayOffer.discount_value) / lineSubtotal) * 100) : 0);
     if (pct > 0) {
-      setCartDiscountPercent(pct);
+      const allowedPct = checkedCartDiscountPercent(pct);
+      if (allowedPct <= 0) return;
+      setCartDiscountPercent(allowedPct);
       notify.success(`🎂 Birthday offer applied automatically: ${birthdayOffer.offer_name}`);
     }
   }, [customer, applicableOffers, lineSubtotal]);
@@ -679,6 +701,69 @@ export default function PosCheckoutPage() {
   const extraDiscountPercent = lineSubtotal > 0
     ? (1 - (grandTotal / lineSubtotal)) * 100
     : 0;
+
+  // Below-cost check. A line's cost is its picked price group's cost, else the
+  // product's. Bill discount + coupon count as discounts; a gift voucher and
+  // loyalty points don't — they are payments, not a lower price.
+  const costOf = (stockId: string, batchId?: number | null): number => {
+    if (batchId != null) {
+      const group = [...(multiPriceMap[stockId] ?? []), ...(wholesaleBatchMap[stockId] ?? [])]
+        .find((g) => g.batch_id === batchId);
+      if (group?.purchase_cost != null && Number(group.purchase_cost) > 0) return Number(group.purchase_cost);
+    }
+    return Number(costFloorMap[stockId] ?? 0);
+  };
+  const costOfLine = (l: CartLine): number => costOf(l.stock_id, l.batch_id);
+  const billDiscountPercent = lineSubtotal > 0
+    ? Math.min(100, ((cartDiscountAmount + couponDiscountAmount) / lineSubtotal) * 100)
+    : 0;
+  const sellingPriceOfLine = (l: CartLine) =>
+    l.unit_price * (1 - l.discount_percent / 100) * (1 - billDiscountPercent / 100);
+  const isBelowCost = (l: CartLine) => {
+    const cost = costOfLine(l);
+    return cost > 0 && sellingPriceOfLine(l) < cost - 0.005;
+  };
+  const belowCostLines = cart.filter(isBelowCost);
+
+  // The most bill discount (bill % + coupon) the cart can take before some
+  // line drops below its cost. 100 = no limit.
+  const maxBillDiscountPercent = cart.reduce((max, l) => {
+    const cost = costOfLine(l);
+    const net = l.unit_price * (1 - l.discount_percent / 100);
+    if (cost <= 0) return max;
+    return Math.min(max, net > 0 ? Math.max(0, (1 - cost / net) * 100) : 0);
+  }, 100);
+  const firstLineCappingDiscount = () => cart.find((l) => {
+    const cost = costOfLine(l);
+    const net = l.unit_price * (1 - l.discount_percent / 100);
+    return cost > 0 && Math.abs((net > 0 ? Math.max(0, (1 - cost / net) * 100) : 0) - maxBillDiscountPercent) < 0.0001;
+  });
+  // A bill discount % the cashier sets, cut back to the most the cart can
+  // take (with the coupon already on) so no item goes below its cost.
+  const checkedCartDiscountPercent = (pct: number): number => {
+    const couponPct = lineSubtotal > 0 ? (couponDiscountAmount / lineSubtotal) * 100 : 0;
+    const allowed = Math.max(0, maxBillDiscountPercent - couponPct);
+    if (pct <= allowed + 0.0001) return pct;
+    const item = firstLineCappingDiscount();
+    notify.error(`Discount can't take ${item?.description ?? "an item"} below cost — most allowed is ${allowed.toFixed(2)}%`);
+    return Math.floor(allowed * 100) / 100;
+  };
+
+  // Anything else that pushes a cart line below cost (quantity change with a
+  // fixed coupon, wholesale price, recalled sale...) is flagged once it settles —
+  // the short wait keeps it quiet while a price is still being typed.
+  const belowCostKey = belowCostLines.map(lineId).join("|");
+  const prevBelowCostRef = useRef<string[]>([]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const added = belowCostLines.find((l) => !prevBelowCostRef.current.includes(lineId(l)));
+      prevBelowCostRef.current = belowCostLines.map(lineId);
+      if (added) {
+        notify.error(`${added.description} is below cost (${formatCurrency(costOfLine(added), 2)}) — change the price or discount`);
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [belowCostKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPaid = useMemo(
     () => paymentLines.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
@@ -801,8 +886,33 @@ export default function PosCheckoutPage() {
     return undefined;
   };
 
+  // Net price the selected item would be added at — same rules as addToCart below.
+  const selectedItemNetPrice = (): number => {
+    if (!selectedItem) return 0;
+    const catalogPrice = Number(selectedItem.sale_price ?? salesPricingMap.get(String(selectedItem.stock_id)) ?? selectedItem.purchase_cost) || 0;
+    const typed = manualSellingPriceTouched && manualSellingPrice !== "";
+    const unit = typed ? Number(manualSellingPrice) || 0 : catalogPrice;
+    if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") return unit;
+    const discountRaw = Math.max(0, Number(manualDiscountInput) || 0);
+    if (manualDiscountMode2 === "net") return manualDiscountInput.trim() === "" ? unit : discountRaw;
+    if (manualDiscountMode2 === "percent") return unit * (1 - Math.min(100, discountRaw) / 100);
+    return Math.max(0, unit - discountRaw);
+  };
+  // Typed selling price / discount below cost: say so and keep the cashier on
+  // the price box instead of adding the item. true = blocked.
+  const selectedItemBelowCost = (): boolean => {
+    if (!selectedItem) return false;
+    const cost = costOf(String(selectedItem.stock_id), selectedItem.batch_id != null ? Number(selectedItem.batch_id) : null);
+    const net = selectedItemNetPrice() * (1 - billDiscountPercent / 100);
+    if (cost <= 0 || net >= cost - 0.005) return false;
+    notify.error(`${selectedItem.description}: price ${formatCurrency(net, 2)} is below cost (${formatCurrency(cost, 2)})`);
+    setTimeout(() => { sellingPriceInputRef.current?.focus(); sellingPriceInputRef.current?.select(); }, 0);
+    return true;
+  };
+
   const addToCart = async () => {
     if (!selectedItem) return;
+    if (selectedItemBelowCost()) return;
     const stockQty = stockQtyByStockId.get(String(selectedItem.stock_id)) ?? 0;
     if (stockQty <= 0) {
       notify.error(`"${selectedItem.description}" is out of stock`);
@@ -868,6 +978,11 @@ export default function PosCheckoutPage() {
             : manualDiscountMode2 === "net"
               ? (manualDiscountInput.trim() === "" ? 0 : (resolved > 0 ? Math.min(100, ((resolved - discountRaw) / resolved) * 100) : 0))
               : (resolved > 0 ? Math.min(100, (discountRaw / resolved) * 100) : 0);
+          const cost = costOf(stockId);
+          if (cost > 0 && Number(resolved) * (1 - resolvedDiscountPercent / 100) < cost - 0.005) {
+            notify.error(`${selectedItem.description}: promotion price is below cost — not applied`);
+            return;
+          }
           updateLine(stockId, { unit_price: Number(resolved), original_unit_price: Number(resolved), discount_percent: resolvedDiscountPercent });
         }
       }).catch(() => { /* keep catalog price on error */ });
@@ -883,6 +998,11 @@ export default function PosCheckoutPage() {
           : manualDiscountMode2 === "net"
             ? (manualDiscountInput.trim() === "" ? 0 : Math.min(100, ((promo - discountRaw) / promo) * 100))
             : Math.min(100, (discountRaw / promo) * 100);
+        const cost = costOf(stockId, Number(selectedItem.batch_id));
+        if (cost > 0 && promo * (1 - promoDiscountPercent / 100) < cost - 0.005) {
+          notify.error(`${selectedItem.description}: promotion price is below cost — not applied`);
+          return;
+        }
         updateLine(batchLineId, { unit_price: promo, original_unit_price: promo, discount_percent: promoDiscountPercent });
       }).catch(() => { /* keep the packet's price on error */ });
     }
@@ -1127,6 +1247,23 @@ export default function PosCheckoutPage() {
   const endQtyTyping = (key: string) =>
     setQtyDraft((d) => { const { [key]: _, ...rest } = d; return rest; });
   useEffect(() => { if (cart.length === 0) setQtyDraft({}); }, [cart.length]);
+
+  // Leaving the price / discount box: a line can't end up below its cost —
+  // a typed price goes back to the catalog price, a discount is cleared.
+  const enforceLineCost = (key: string, field: "price" | "discount") => {
+    const l = cart.find((x) => lineId(x) === key);
+    if (!l) return;
+    const cost = costOfLine(l);
+    if (cost <= 0 || l.unit_price * (1 - l.discount_percent / 100) >= cost - 0.005) return;
+    if (field === "price") {
+      const back = l.original_unit_price != null && l.original_unit_price >= cost ? l.original_unit_price : cost;
+      notify.error(`${l.description}: price can't be below cost (${formatCurrency(cost, 2)})`);
+      updateLine(key, { unit_price: back });
+    } else {
+      notify.error(`${l.description}: discount takes the price below cost (${formatCurrency(cost, 2)})`);
+      updateLine(key, { discount_percent: 0, discount_input: "" });
+    }
+  };
 
   const removeLine = (key: string) => {
     setCart((prev) => prev.filter((l) => lineId(l) !== key));
@@ -1377,7 +1514,7 @@ export default function PosCheckoutPage() {
       }
       if (e.ctrlKey && ["1", "2", "3", "4"].includes(e.key)) {
         e.preventDefault();
-        setCartDiscountPercent(QUICK_DISCOUNTS[Number(e.key) - 1]);
+        setCartDiscountPercent(s.checkedCartDiscountPercent(QUICK_DISCOUNTS[Number(e.key) - 1]));
         return;
       }
       if (e.ctrlKey && e.key === "Delete") {
@@ -1401,6 +1538,17 @@ export default function PosCheckoutPage() {
   const handleCheckout = () => {
     if (!customer || !branchCode || cart.length === 0) {
       notify.error("Select a customer and add at least one item before checkout");
+      return;
+    }
+
+    // No item may be sold below its cost — by a typed price, a discount, a
+    // promotion or the coupon / bill discount.
+    if (belowCostLines.length > 0) {
+      const first = belowCostLines[0];
+      notify.error(
+        `Can't sell below cost: ${first.description} — price ${formatCurrency(sellingPriceOfLine(first), 2)}, cost ${formatCurrency(costOfLine(first), 2)}`
+        + (belowCostLines.length > 1 ? ` (+${belowCostLines.length - 1} more)` : "")
+      );
       return;
     }
 
@@ -1724,6 +1872,15 @@ export default function PosCheckoutPage() {
     setCouponChecking(true);
     try {
       const offer = await applyCoupon({ coupon_code: couponCode.trim(), debtor_no: customer?.debtor_no });
+      const couponAmount = offer.discount_type === "percent"
+        ? (lineSubtotal * Number(offer.discount_value)) / 100
+        : Math.min(lineSubtotal, Number(offer.discount_value));
+      const billPct = lineSubtotal > 0 ? ((cartDiscountAmount + couponAmount) / lineSubtotal) * 100 : 0;
+      if (billPct > maxBillDiscountPercent + 0.0001) {
+        const item = firstLineCappingDiscount();
+        notify.error(`Coupon not applied — it takes ${item?.description ?? "an item"} below cost`);
+        return;
+      }
       setAppliedCoupon(offer);
       notify.success(`Coupon applied: ${offer.offer_name}`);
     } catch (err: any) {
@@ -2105,6 +2262,7 @@ export default function PosCheckoutPage() {
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
                       e.preventDefault();
+                      if (selectedItemBelowCost()) return;
                       if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") {
                         qtyInputRef.current?.focus(); qtyInputRef.current?.select();
                       } else {
@@ -2305,7 +2463,9 @@ export default function PosCheckoutPage() {
                     setManualDiscountValue(raw);
                     const val = Math.max(0, Number(raw) || 0);
                     const pct = manualDiscountMode === "percent" ? Math.min(100, val) : (subtotal > 0 ? Math.min(100, (val / subtotal) * 100) : 0);
-                    setCartDiscountPercent(pct);
+                    const allowedPct = checkedCartDiscountPercent(pct);
+                    if (allowedPct < pct) setManualDiscountValue(manualDiscountMode === "percent" ? String(allowedPct) : ((subtotal * allowedPct) / 100).toFixed(2));
+                    setCartDiscountPercent(allowedPct);
                   }}
                 />
                 <FormControl size="small" sx={{ width: 80 }}>
@@ -2560,6 +2720,7 @@ export default function PosCheckoutPage() {
                         onKeyDown={(e) => {
                           if (e.key !== "Enter") return;
                           e.preventDefault();
+                          if (selectedItemBelowCost()) return;
                           if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") {
                             qtyInputRef.current?.focus(); qtyInputRef.current?.select();
                           } else {
@@ -2687,6 +2848,8 @@ export default function PosCheckoutPage() {
                         type="text" inputMode="numeric" size="small" value={l.unit_price.toLocaleString()} sx={{ width: 140 }}
                         inputProps={{ style: { textAlign: "right" } }}
                         onChange={(e) => updateLine(lineId(l), { unit_price: parseFormattedNumber(e.target.value) })}
+                        onBlur={() => enforceLineCost(lineId(l), "price")}
+                        onKeyDown={(e) => { if (e.key === "Enter") enforceLineCost(lineId(l), "price"); }}
                       />
                       {/* Wholesale — only offered once quantity passes this
                           product's threshold, and only ever applied after
@@ -2735,6 +2898,8 @@ export default function PosCheckoutPage() {
                               : (l.unit_price > 0 ? Math.min(100, (val / l.unit_price) * 100) : 0);
                             updateLine(lineId(l), { discount_input: raw, discount_percent: pct });
                           }}
+                          onBlur={() => enforceLineCost(lineId(l), "discount")}
+                          onKeyDown={(e) => { if (e.key === "Enter") enforceLineCost(lineId(l), "discount"); }}
                         />
                         )}
                         <FormControl size="small" sx={{ width: 68 }}>
@@ -2752,9 +2917,14 @@ export default function PosCheckoutPage() {
                       </Stack>
                     </TableCell>
                     <TableCell align="right">
-                      <Typography variant="body2">
+                      <Typography variant="body2" color={isBelowCost(l) ? "error" : undefined} fontWeight={isBelowCost(l) ? 700 : undefined}>
                         {formatNumber(l.unit_price * (1 - l.discount_percent / 100))}
                       </Typography>
+                      {isBelowCost(l) && (
+                        <Typography variant="caption" color="error" sx={{ display: "block", whiteSpace: "nowrap" }}>
+                          Below cost {formatNumber(costOfLine(l))}
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <Typography variant="body2" fontWeight={700}>
@@ -2949,7 +3119,9 @@ export default function PosCheckoutPage() {
                     const pct = manualDiscountMode === "percent"
                       ? Math.min(100, val)
                       : (subtotal > 0 ? Math.min(100, (val / subtotal) * 100) : 0);
-                    setCartDiscountPercent(pct);
+                    const allowedPct = checkedCartDiscountPercent(pct);
+                    if (allowedPct < pct) setManualDiscountValue(manualDiscountMode === "percent" ? String(allowedPct) : ((subtotal * allowedPct) / 100).toFixed(2));
+                    setCartDiscountPercent(allowedPct);
                   }}
                 />
                 <FormControl size="small" sx={{ width: 90 }}>

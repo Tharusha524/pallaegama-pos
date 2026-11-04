@@ -73,6 +73,27 @@ class StockBatchController extends Controller
         return response()->json((object) $this->batches->multiPriceProducts($data['loc_code'] ?? null));
     }
 
+    /**
+     * POS / Set Price: the lowest price each product may be sold at (its cost),
+     * { stock_id: cost }. With stock_id, just that product (counting deliveries
+     * still waiting for a price, as Set Price prices those).
+     */
+    public function costFloors(Request $request)
+    {
+        $data = $request->validate([
+            'loc_code' => 'nullable|string|max:20',
+            'stock_id' => 'nullable|string|max:50',
+        ]);
+
+        if (! empty($data['stock_id'])) {
+            $stockId = trim($data['stock_id']);
+
+            return response()->json((object) [$stockId => $this->batches->costFloor($stockId, $data['loc_code'] ?? null, null, true)]);
+        }
+
+        return response()->json((object) $this->batches->costFloors($data['loc_code'] ?? null));
+    }
+
     /** POS preload: { stock_id: [price groups] } for products with a batch wholesale price. */
     public function wholesale(Request $request)
     {
@@ -160,6 +181,18 @@ class StockBatchController extends Controller
         if (array_key_exists('wholesale_price', $data)) {
             $update['wholesale_price'] = $data['wholesale_price'] === null ? null : round((float) $data['wholesale_price'], 4);
         }
+        // No selling / wholesale price below what the packets cost.
+        $floor = null;
+        foreach (['selling_price' => 'Selling price', 'wholesale_price' => 'Wholesale price'] as $key => $label) {
+            if (isset($update[$key]) && (float) $update[$key] > 0) {
+                $floor ??= $this->batches->costFloor((string) $batch->stock_id, (string) $batch->loc_code, $id, true);
+                $message = $this->batches->belowCostMessage((string) $batch->stock_id, (float) $update[$key], $floor, $label);
+                if ($message !== null) {
+                    return response()->json(['message' => $message], 422);
+                }
+            }
+        }
+
         $price = (float) ($update['selling_price'] ?? $batch->selling_price);
         $hasStock = (float) $batch->qty_remaining > 0;
         if (! empty($data['status'])) {

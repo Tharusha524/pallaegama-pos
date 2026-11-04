@@ -17,7 +17,21 @@ export interface BatchPriceGroup {
   mrp: number | null;
   qty: number;
   received_date: string | null;
+  // Highest cost of the packets in this price group — never sold below it.
+  purchase_cost?: number;
 }
+
+/**
+ * Lowest price each product may be sold at (its cost), { stock_id: cost }.
+ * With stockId, just that product.
+ */
+export const getCostFloors = async (params?: { locCode?: string; stockId?: string }): Promise<Record<string, number>> => {
+  const response = await api.get("/stock-batches/cost-floors", {
+    params: { loc_code: params?.locCode || undefined, stock_id: params?.stockId || undefined },
+    skipErrorDialog: true,
+  } as any);
+  return response.data ?? {};
+};
 
 /** Only the products that currently have 2+ prices at this location. */
 export const getMultiPriceProducts = async (locCode?: string): Promise<Record<string, BatchPriceGroup[]>> => {

@@ -14,6 +14,7 @@ import { createItemCode } from "../../../api/ItemCodes/ItemCodesApi";
 import { updateMrpPrice, updateExpiryDate, updateWholesalePricing, updateEoqSettings } from "../../../api/Item/ItemApi";
 import { useNavigate } from "react-router-dom";
 import { getSalesPricingByStockId, createSalesPricing, updateSalesPricing } from "../../../api/SalesPricing/SalesPricingApi";
+import { getCostFloors } from "../../../api/Pos/posApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
 import StockBatchesPanel from "../../../components/StockBatchesPanel";
@@ -98,6 +99,21 @@ export default function SetPricePage() {
   );
 
   const cost = Number(product?.purchase_cost) || 0;
+  // What the stock in hand cost — no selling or wholesale price may go below it.
+  const { data: costFloors } = useQuery({
+    queryKey: ["cost-floor", product?.stock_id],
+    queryFn: () => getCostFloors({ stockId: String(product.stock_id) }),
+    enabled: !!product,
+  });
+  const minPrice = Number(costFloors?.[String(product?.stock_id)] ?? 0);
+  const belowCost = (price: string) => price !== "" && Number(price) > 0 && minPrice > 0 && Number(price) < minPrice - 0.005;
+  const saveIfNotBelowCost = (price: string, label: string, save: () => void) => {
+    if (belowCost(price)) {
+      notify.error(`${label} can't be below cost (${formatCurrency(minPrice)})`);
+      return;
+    }
+    save();
+  };
   // Weighed items (kg, g, ...) vs counted items (pcs, unit, ...) — labels
   // the Wholesale Threshold field with whichever this product actually uses,
   // instead of assuming it's always a plain piece count.
@@ -364,6 +380,8 @@ export default function SetPricePage() {
                         label="Selling Price" type="number" size="small" sx={{ flex: 1 }}
                         value={sellingPrice}
                         onChange={(e) => { setLastEdited("price"); setSellingPrice(e.target.value); }}
+                        error={belowCost(sellingPrice)}
+                        helperText={minPrice > 0 ? `Can't be below cost ${formatCurrency(minPrice)}` : undefined}
                       />
                       <TextField
                         label="MRP Price" type="number" size="small" sx={{ flex: 1 }}
@@ -390,7 +408,7 @@ export default function SetPricePage() {
                       <Button
                         variant="contained" size="large" startIcon={<PriceChangeIcon />}
                         disabled={!sellingPrice || Number(sellingPrice) <= 0 || saveMutation.isPending}
-                        onClick={() => saveMutation.mutate()}
+                        onClick={() => saveIfNotBelowCost(sellingPrice, "Selling price", () => saveMutation.mutate())}
                       >
                         {saveMutation.isPending ? "Saving..." : "Save Selling Price"}
                       </Button>
@@ -441,13 +459,14 @@ export default function SetPricePage() {
                         type="number" size="small" sx={{ flex: 1 }}
                         value={wholesalePrice}
                         onChange={(e) => setWholesalePrice(e.target.value)}
-                        helperText="Price once the threshold is passed"
+                        error={belowCost(wholesalePrice)}
+                        helperText={minPrice > 0 ? `Price once the threshold is passed — can't be below cost ${formatCurrency(minPrice)}` : "Price once the threshold is passed"}
                       />
                     </Stack>
                     <Button
                       variant="contained" size="large" startIcon={<PriceChangeIcon />}
                       disabled={saveWholesaleMutation.isPending}
-                      onClick={() => saveWholesaleMutation.mutate()}
+                      onClick={() => saveIfNotBelowCost(wholesalePrice, "Wholesale price", () => saveWholesaleMutation.mutate())}
                       sx={{ alignSelf: "flex-start" }}
                     >
                       {saveWholesaleMutation.isPending ? "Saving..." : "Save Wholesale Pricing"}

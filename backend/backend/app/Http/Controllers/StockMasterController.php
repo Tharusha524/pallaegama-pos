@@ -635,6 +635,15 @@ class StockMasterController extends Controller
             'wholesale_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
+        if ((float) ($validated['wholesale_price'] ?? 0) > 0) {
+            $batches = app(\App\Services\Inventory\StockBatchService::class);
+            $stockId = (string) $stockMaster->stock_id;
+            $message = $batches->belowCostMessage($stockId, (float) $validated['wholesale_price'], $batches->costFloor($stockId, null, null, true), 'Wholesale price');
+            if ($message !== null) {
+                return response()->json(['message' => $message], 422);
+            }
+        }
+
         $stockMaster->wholesale_qty_threshold = $validated['wholesale_qty_threshold'] ?? null;
         $stockMaster->wholesale_price = $validated['wholesale_price'] ?? null;
         $stockMaster->save();
