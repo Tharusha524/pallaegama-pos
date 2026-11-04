@@ -367,6 +367,7 @@ Route::apiResource('brands', \App\Http\Controllers\BrandController::class)->only
 Route::apiResource('subcategories', \App\Http\Controllers\SubcategoryController::class)->only(['index', 'store', 'update', 'destroy']);
 Route::apiResource('item-types', ItemTypeController::class);
 
+Route::get('stock-masters-next-code', [StockMasterController::class, 'nextCode']);
 Route::post('stock-masters/bulk', [StockMasterController::class, 'bulkStore']);
 Route::patch('stock-masters/bulk-units', [StockMasterController::class, 'bulkUpdateUnits']);
 Route::post('stock-masters/safe-delete', [StockMasterController::class, 'safeDelete']);

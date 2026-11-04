@@ -30,8 +30,11 @@ class SalesAnalyticsController extends Controller
             ->selectRaw('SUM(ov_amount - alloc) as total')
             ->value('total');
 
+        // Payments and credit notes are stored negative (-1500) while their
+        // alloc is positive (1500), so "ov_amount - alloc" counted every
+        // allocated payment twice. Apply alloc against the document's own sign.
         $totalCreditors = DB::table('supp_trans')
-            ->selectRaw('SUM(ov_amount - alloc) as total')
+            ->selectRaw('SUM(ov_amount - SIGN(ov_amount) * alloc) as total')
             ->value('total');
 
         $lowStockCount = DB::table('loc_stock')

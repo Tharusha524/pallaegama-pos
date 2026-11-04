@@ -163,7 +163,7 @@ export default function SuppliersPage() {
                   <TableCell>{s.supp_name}</TableCell>
                   <TableCell>{s.contact || "—"}</TableCell>
                   <TableCell>{s.mail_address || "—"}</TableCell>
-                  <TableCell>{s.credit_limit != null ? `LKR ${Number(s.credit_limit).toLocaleString()}` : "—"}</TableCell>
+                  <TableCell>{s.credit_limit != null ? `LKR ${Number(s.credit_limit).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</TableCell>
                   <TableCell>
                     {(paymentTerms ?? []).find((t: any) => t.terms_indicator === s.payment_terms)?.description || (s.payment_terms ? s.payment_terms : "—")}
                   </TableCell>

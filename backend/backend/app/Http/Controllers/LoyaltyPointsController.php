@@ -82,6 +82,36 @@ class LoyaltyPointsController extends Controller
     }
 
     /**
+     * Move the customer's card up to the highest active tier their total
+     * spend (invoices less credit notes) has reached. Upgrade only — a tier
+     * set higher by hand is never lowered.
+     */
+    public static function upgradeTier(int $debtorNo): void
+    {
+        $card = LoyaltyCard::with('tier')->where('debtor_no', $debtorNo)->where('status', 'active')->first();
+        if (!$card) {
+            return;
+        }
+
+        $totalSpend = (float) DB::table('debtor_trans')
+            ->where('debtor_no', $debtorNo)
+            ->whereIn('trans_type', [10, 11])
+            ->selectRaw('SUM(CASE WHEN trans_type = 10 THEN ov_amount ELSE -ABS(ov_amount) END) as spend')
+            ->value('spend');
+
+        $tier = DB::table('loyalty_tiers')
+            ->where('inactive', 0)
+            ->where('min_spend_threshold', '<=', $totalSpend)
+            ->orderByDesc('min_spend_threshold')
+            ->first(['id', 'min_spend_threshold']);
+
+        if ($tier && (float) $tier->min_spend_threshold > (float) ($card->tier->min_spend_threshold ?? -1)) {
+            $card->loyalty_tier_id = $tier->id;
+            $card->save();
+        }
+    }
+
+    /**
      * Static helper used by SalesInvoiceController to award points at invoice time.
      */
     public static function earnPoints(int $debtorNo, float $amountSpent, ?int $transNo = null, ?int $transType = null): ?LoyaltyPointsTransaction

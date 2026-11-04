@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CustomerBranch;
 use App\Models\DebtorsMaster;
+use App\Models\LoyaltyCard;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +90,18 @@ class CustomerAuthController extends Controller
                 'receivables_account' => $receivableAccount,
                 'payment_discount_account' => $promptPaymentDiscountAccount,
                 'inactive' => false,
+            ]);
+
+            // Everyone who joins through the app is a loyalty customer — the
+            // same Silver card a customer added at the POS gets, so they show
+            // on Loyalty Customers and the app has a card to display.
+            LoyaltyCard::create([
+                'debtor_no' => $customer->debtor_no,
+                'card_no' => 'LC' . strtoupper(Str::random(8)),
+                'issue_date' => now()->toDateString(),
+                'loyalty_tier_id' => DB::table('loyalty_tiers')->orderBy('min_spend_threshold')->value('id'),
+                'points_balance' => 0,
+                'status' => 'active',
             ]);
 
             return $customer;

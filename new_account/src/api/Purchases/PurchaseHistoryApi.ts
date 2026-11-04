@@ -13,6 +13,12 @@ export interface PurchaseHistoryRow {
   item_count: number;
   total_qty: number;
   total: number;
+  // From the supplier invoice(s) this GRN was billed on.
+  invoice_nos: number[];
+  billed: number;
+  paid: number;
+  balance: number;
+  payment_status: "paid" | "partial" | "unpaid" | "not_invoiced";
 }
 
 export interface PurchaseHistoryItem {

@@ -161,6 +161,7 @@ class SalesInvoiceController extends Controller
             $transType = $result['trans_type'] ?? null;
 
             LoyaltyPointsController::earnPoints($debtorNo, $amount, $transNo, $transType);
+            LoyaltyPointsController::upgradeTier($debtorNo);
 
             DebtorsMaster::where('debtor_no', $debtorNo)->update(['last_purchase_date' => now()->toDateString()]);
         } catch (\Throwable $e) {

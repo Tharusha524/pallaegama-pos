@@ -274,8 +274,8 @@ function CreatePurchaseOrderTab() {
                   <TableRow key={l.key}>
                     <TableCell>{l.item.description}</TableCell>
                     <TableCell align="right">{l.quantity}</TableCell>
-                    <TableCell align="right">{formatCurrency(Number(l.unit_price) || 0)}</TableCell>
-                    <TableCell align="right">{formatCurrency((Number(l.quantity) || 0) * (Number(l.unit_price) || 0))}</TableCell>
+                    <TableCell align="right">{formatCurrency(Number(l.unit_price) || 0, 2)}</TableCell>
+                    <TableCell align="right">{formatCurrency((Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 2)}</TableCell>
                     <TableCell align="center">
                       <IconButton size="small" color="error" onClick={() => removeLine(l.key)}><DeleteIcon fontSize="small" /></IconButton>
                     </TableCell>
@@ -286,7 +286,7 @@ function CreatePurchaseOrderTab() {
           )}
 
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">Total: {formatCurrency(total)}</Typography>
+            <Typography variant="h6">Total: {formatCurrency(total, 2)}</Typography>
             <Button variant="contained" size="large" startIcon={<DescriptionIcon />} disabled={!canSubmit} onClick={() => createMutation.mutate()}>
               {createMutation.isPending ? "Creating..." : "Create Purchase Order"}
             </Button>
@@ -605,7 +605,7 @@ function SupplierInvoiceTab() {
                     <TableCell>{it.description || it.item_code}</TableCell>
                     <TableCell>{it.grn_reference}</TableCell>
                     <TableCell align="right">{it.qty_open}</TableCell>
-                    <TableCell align="right">{formatCurrency(Number(it.unit_price) || 0)}</TableCell>
+                    <TableCell align="right">{formatCurrency(Number(it.unit_price) || 0, 2)}</TableCell>
                     <TableCell align="right">
                       <TextField
                         type="number" size="small" sx={{ width: 100 }}
@@ -636,7 +636,7 @@ function SupplierInvoiceTab() {
                 />
               )}
               <Typography variant="body2" color="text.secondary">
-                Invoice Total: {formatCurrency(invoiceTotal)}
+                Invoice Total: {formatCurrency(invoiceTotal, 2)}
               </Typography>
             </>
           )}
@@ -745,8 +745,8 @@ function PaySupplierTab() {
                   <TableRow key={inv.id}>
                     <TableCell>{inv.number}{inv.supplier_ref ? ` (${inv.supplier_ref})` : ""}</TableCell>
                     <TableCell>{inv.date}</TableCell>
-                    <TableCell align="right">{formatCurrency(inv.amount)}</TableCell>
-                    <TableCell align="right">{formatCurrency(inv.left)}</TableCell>
+                    <TableCell align="right">{formatCurrency(inv.amount, 2)}</TableCell>
+                    <TableCell align="right">{formatCurrency(inv.left, 2)}</TableCell>
                     <TableCell align="right">
                       <TextField
                         type="number" size="small" sx={{ width: 110 }}
@@ -761,7 +761,7 @@ function PaySupplierTab() {
           )}
 
           {anyAmountEntered && (
-            <Typography variant="h6">Total to Pay: {formatCurrency(totalToPay)}</Typography>
+            <Typography variant="h6">Total to Pay: {formatCurrency(totalToPay, 2)}</Typography>
           )}
 
           <Button

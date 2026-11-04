@@ -52,6 +52,32 @@ class PurchaseHistoryController extends Controller
                 't.item_count', 't.total_qty', 't.total',
             ]);
 
+        // Payment status, read from the supplier invoice(s) each GRN was billed
+        // on: what was billed and how much has been paid/allocated against it.
+        // Read only — the same alloc figures Pay Supplier works from.
+        $invoices = DB::table('grn_items as gi')
+            ->join('supp_invoice_items as si', 'si.grn_item_id', '=', 'gi.id')
+            ->join('supp_trans as st', fn ($j) => $j->on('st.trans_no', '=', 'si.supp_trans_no')
+                ->on('st.trans_type', '=', 'si.supp_trans_type'))
+            ->whereIn('gi.grn_batch_id', $rows->pluck('id'))
+            ->where('st.trans_type', 20)
+            ->distinct()
+            ->get(['gi.grn_batch_id', 'st.trans_no', 'st.ov_amount', 'st.ov_gst', 'st.alloc'])
+            ->groupBy('grn_batch_id');
+
+        foreach ($rows as $row) {
+            $linked = $invoices->get($row->id, collect())->unique('trans_no');
+            $billed = round($linked->sum(fn ($i) => (float) $i->ov_amount + (float) $i->ov_gst), 2);
+            $paid = round($linked->sum(fn ($i) => (float) $i->alloc), 2);
+            $row->billed = $billed;
+            $row->paid = $paid;
+            // The bill number(s) Pay Supplier lists this delivery under.
+            $row->invoice_nos = $linked->pluck('trans_no')->map(fn ($n) => (int) $n)->sort()->values();
+            $row->balance = round(max(0, $billed - $paid), 2);
+            $row->payment_status = $linked->isEmpty() ? 'not_invoiced'
+                : ($row->balance <= 0.005 ? 'paid' : ($paid > 0.005 ? 'partial' : 'unpaid'));
+        }
+
         return response()->json($rows);
     }
 

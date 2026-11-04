@@ -1441,6 +1441,41 @@ export default function PosCheckoutPage() {
       };
     });
 
+    // The cashier types the cash the customer hands over (a 2000 note for a
+    // 1094 bill), and changeDue is what goes back across the counter. Only
+    // what the shop actually keeps may be recorded as settling the invoice —
+    // sending the full note instead left Cash in Hand overstated and Trade
+    // Debtors negative by the change given. Trim that change off the cash
+    // line(s), last one first, since change is never given out of a card
+    // payment. Nothing on screen changes: the cashier still types the note
+    // and the receipt still prints the same change.
+    const settledPayments = (() => {
+      const lines = validPaymentLines.map((p) => ({
+        bank_account_id: Number(p.bank_account_id),
+        amount: Number(p.amount) || 0,
+      }));
+      let excess = lines.reduce((sum, l) => sum + l.amount, 0) - grandTotal;
+      if (excess <= 0.001) return lines;
+
+      const isCash = (id: number) => {
+        const acct = (bankAccounts ?? []).find((a: any) => a.id === id);
+        return Number(acct?.account_type?.id ?? acct?.account_type) === 4;
+      };
+      // Cash lines first (last entered first), then anything left over —
+      // an over-tendered card-only sale shouldn't post more than the bill.
+      const order = [
+        ...lines.map((l, i) => i).filter((i) => isCash(lines[i].bank_account_id)).reverse(),
+        ...lines.map((l, i) => i).filter((i) => !isCash(lines[i].bank_account_id)).reverse(),
+      ];
+      for (const i of order) {
+        if (excess <= 0.001) break;
+        const take = Math.min(lines[i].amount, excess);
+        lines[i].amount = Number((lines[i].amount - take).toFixed(2));
+        excess = Number((excess - take).toFixed(2));
+      }
+      return lines.filter((l) => l.amount > 0);
+    })();
+
     // Flags any line where the cashier typed a different unit price than
     // the catalog price it was added at — audit trail only, the sale still
     // posts at whatever unit_price is on the line either way.
@@ -1465,7 +1500,7 @@ export default function PosCheckoutPage() {
       reference: `POS-${Date.now()}`,
       pos_shift_id: currentShiftId,
       price_overrides: priceOverrides.length > 0 ? priceOverrides : undefined,
-      payments: validPaymentLines.map((p) => ({ bank_account_id: Number(p.bank_account_id), amount: Number(p.amount) })),
+      payments: settledPayments,
       lines: combinedLines,
     } as any;
 

@@ -5,12 +5,13 @@ import {
   TableHead, TableRow, TableCell, TableBody, TableContainer, Paper, IconButton, Typography,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
-import { getLoyaltyTiers, createLoyaltyTier, deleteLoyaltyTier } from "../../../api/Loyalty/loyaltyApi";
+import { getLoyaltyTiers, createLoyaltyTier, updateLoyaltyTier, deleteLoyaltyTier } from "../../../api/Loyalty/loyaltyApi";
 
 const emptyForm = { tier_name: "", min_spend_threshold: "0", points_earn_rate: "0.01", redemption_rate: "1", benefits_description: "" };
 
@@ -18,17 +19,38 @@ export default function LoyaltyTiersPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  // null = adding a new tier; otherwise the id of the tier being edited.
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["loyalty-tiers"], queryFn: getLoyaltyTiers });
 
-  const createMutation = useMutation({
-    mutationFn: createLoyaltyTier,
+  const saveMutation = useMutation({
+    mutationFn: (payload: any) => (editingId === null ? createLoyaltyTier(payload) : updateLoyaltyTier(editingId, payload)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["loyalty-tiers"] });
       setOpen(false);
       setForm(emptyForm);
+      setEditingId(null);
     },
   });
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  };
+
+  const openEdit = (tier: any) => {
+    setEditingId(tier.id);
+    setForm({
+      tier_name: tier.tier_name ?? "",
+      min_spend_threshold: String(tier.min_spend_threshold ?? "0"),
+      points_earn_rate: String(tier.points_earn_rate ?? "0"),
+      redemption_rate: String(tier.redemption_rate ?? "0"),
+      benefits_description: tier.benefits_description ?? "",
+    });
+    setOpen(true);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: deleteLoyaltyTier,
@@ -36,7 +58,7 @@ export default function LoyaltyTiersPage() {
   });
 
   const handleSubmit = () => {
-    createMutation.mutate({
+    saveMutation.mutate({
       tier_name: form.tier_name,
       min_spend_threshold: Number(form.min_spend_threshold) || 0,
       points_earn_rate: Number(form.points_earn_rate) || 0,
@@ -52,7 +74,7 @@ export default function LoyaltyTiersPage() {
           <PageTitle title="Loyalty Tiers" />
           <Breadcrumb breadcrumbs={[{ title: "Smart Supermarket", href: "/supermarket" }, { title: "Loyalty Tiers" }]} />
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Add Tier</Button>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Add Tier</Button>
       </Box>
 
       {isLoading ? <PageLoader /> : (
@@ -76,7 +98,10 @@ export default function LoyaltyTiersPage() {
                   <TableCell align="right">{tier.points_earn_rate}</TableCell>
                   <TableCell align="right">{tier.redemption_rate}</TableCell>
                   <TableCell>{tier.benefits_description}</TableCell>
-                  <TableCell align="center">
+                  <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
+                    <IconButton size="small" color="primary" onClick={() => openEdit(tier)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
                     <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(tier.id)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -92,7 +117,7 @@ export default function LoyaltyTiersPage() {
       )}
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Loyalty Tier</DialogTitle>
+        <DialogTitle>{editingId === null ? "Add Loyalty Tier" : "Edit Loyalty Tier"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField label="Tier Name" fullWidth value={form.tier_name} onChange={(e) => setForm({ ...form, tier_name: e.target.value })} />
@@ -104,8 +129,8 @@ export default function LoyaltyTiersPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={!form.tier_name || createMutation.isPending} onClick={handleSubmit}>
-            {createMutation.isPending ? "Saving..." : "Save"}
+          <Button variant="contained" disabled={!form.tier_name || saveMutation.isPending} onClick={handleSubmit}>
+            {saveMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

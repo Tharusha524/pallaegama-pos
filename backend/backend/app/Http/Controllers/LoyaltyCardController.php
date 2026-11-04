@@ -52,9 +52,20 @@ class LoyaltyCardController extends Controller
         $data = $request->validate([
             'loyalty_tier_id' => 'nullable|exists:loyalty_tiers,id',
             'status' => 'in:active,blocked',
+            // The customer's own details, edited from Loyalty Customers.
+            'name' => 'sometimes|required|string|max:255',
+            'mobile' => 'sometimes|nullable|string|max:30|unique:debtors_master,mobile,' . $card->debtor_no . ',debtor_no',
         ]);
 
-        $card->update($data);
+        DB::transaction(function () use ($card, $data) {
+            $card->update(collect($data)->only(['loyalty_tier_id', 'status'])->all());
+
+            $customer = collect($data)->only(['name', 'mobile'])->all();
+            if ($customer) {
+                DebtorsMaster::where('debtor_no', $card->debtor_no)->update($customer);
+            }
+        });
+
         return response()->json($card->load(['debtor', 'tier']));
     }
 

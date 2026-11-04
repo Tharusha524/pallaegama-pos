@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Stack, TextField, Autocomplete, Table, TableHead, TableRow,
-  TableCell, TableBody, IconButton, Typography, Paper,
+  TableCell, TableBody, IconButton, Typography, Paper, Checkbox, FormControlLabel,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -13,7 +13,8 @@ import Breadcrumb from "../../../components/BreadCrumb";
 import { getSuppliers } from "../../../api/Supplier/SupplierApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import { getItems } from "../../../api/Item/ItemApi";
-import { postDirectSupplierInvoice } from "../../../api/Purchases/PurchasesApi";
+import { postDirectSupplierInvoice, postSupplierPayment } from "../../../api/Purchases/PurchasesApi";
+import { getBankAccounts } from "../../../api/BankAccount/BankAccountApi";
 import { getLastPurchaseCosts } from "../../../api/Purchases/PurchaseHistoryApi";
 import { notify } from "../../../services/notificationService";
 import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, emptyBatchPrice, useRetailPriceMap, type BatchPriceInput } from "../../../components/BatchPriceFields";
@@ -41,12 +42,18 @@ export default function DirectSupplierInvoicePage() {
   const [invoiceDate, setInvoiceDate] = useState(today);
   const [reference, setReference] = useState("");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  // Optional pay-on-the-spot, for a supplier paid when the goods arrive.
+  // Left unticked the bill is on credit, exactly as before.
+  const [payNow, setPayNow] = useState(false);
+  const [paymentAccount, setPaymentAccount] = useState<any>(null);
+  const [payAmount, setPayAmount] = useState(""); // blank = pay the full bill
 
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers-all"], queryFn: getSuppliers });
   const { data: locations = [] } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
   const { data: items = [] } = useQuery({ queryKey: ["items-all"], queryFn: () => getItems() });
   // What each item was last bought at — shown under the Purchase Price box.
   const { data: lastCosts = {} } = useQuery({ queryKey: ["last-purchase-costs"], queryFn: getLastPurchaseCosts });
+  const { data: bankAccounts = [] } = useQuery({ queryKey: ["bank-accounts"], queryFn: getBankAccounts });
 
   const retailPrices = useRetailPriceMap();
 
@@ -64,16 +71,28 @@ export default function DirectSupplierInvoicePage() {
     setInvoiceDate(today);
     setReference("");
     setLines([emptyLine()]);
+    setPayNow(false);
+    setPaymentAccount(null);
+    setPayAmount("");
   };
 
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!supplier) throw new Error("Select a supplier");
       if (!location) throw new Error("Select a delivery location");
       const validLines = lines.filter((l) => l.item && Number(l.quantity) > 0);
       if (!validLines.length) throw new Error("Add at least one item");
 
-      return postDirectSupplierInvoice({
+      // Checked before anything is posted, so a bad payment entry never
+      // leaves a half-done invoice behind.
+      const wantedPay = payAmount.trim() === "" ? total : Number(payAmount);
+      if (payNow) {
+        if (!paymentAccount) throw new Error("Select where the payment is made from");
+        if (!(wantedPay > 0)) throw new Error("Payment amount must be more than zero");
+        if (wantedPay > total + 0.005) throw new Error("Payment cannot be more than the bill total");
+      }
+
+      const invoice = await postDirectSupplierInvoice({
         supplier_id: supplier.supplier_id,
         reference: reference || undefined,
         trans_date: invoiceDate,
@@ -86,10 +105,48 @@ export default function DirectSupplierInvoicePage() {
           ...batchPricePayload(l.batch),
         })),
       });
+
+      if (!payNow) return { invoice, paid: 0, payError: null as string | null };
+
+      // The same supplier payment the Purchase page's "Pay in Full Now" and
+      // "Pay Supplier" tab use: a payment document, its bank/cash line and
+      // ledger entries, allocated straight to the invoice just posted. Capped
+      // at what the server actually booked, in case it rounds differently.
+      const st = invoice?.supp_trans ?? {};
+      const booked = Number(st.ov_amount ?? 0) + Number(st.ov_gst ?? 0);
+      const amount = Math.round(Math.min(wantedPay, booked > 0 ? booked : wantedPay) * 100) / 100;
+      try {
+        await postSupplierPayment({
+          supplier_id: supplier.supplier_id,
+          tran_date: invoiceDate,
+          bank_account_id: paymentAccount.id,
+          amount,
+          reference: reference || undefined,
+          allocations: [{ trans_no_to: invoice.trans_no, trans_type_to: invoice.trans_type, amt: amount }],
+        });
+        return { invoice, paid: amount, payError: null as string | null };
+      } catch (err: any) {
+        // The invoice is already posted and stays posted; only the payment
+        // failed. Say so plainly so it gets paid from Pay Supplier, rather
+        // than the whole bill being entered again.
+        return { invoice, paid: 0, payError: err?.response?.data?.message ?? err?.message ?? "Payment failed" };
+      }
     },
-    onSuccess: () => {
-      notify.success("Supplier invoice posted successfully");
+    onSuccess: ({ invoice, paid, payError }) => {
+      const ref = invoice?.reference ? ` (${invoice.reference})` : "";
+      const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (payError) {
+        notify.error(`Invoice${ref} was posted, but the payment was NOT recorded: ${payError}. Pay it from Purchase > Pay Supplier.`);
+      } else if (paid > 0) {
+        const left = Math.max(0, total - paid);
+        notify.success(left > 0.005
+          ? `Invoice${ref} posted and LKR ${fmt(paid)} paid. LKR ${fmt(left)} still owed.`
+          : `Invoice${ref} posted and paid in full`);
+      } else {
+        notify.success(`Supplier invoice${ref} posted on credit`);
+      }
       queryClient.invalidateQueries({ queryKey: ["last-purchase-costs"] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-payment-allocatable"] });
       reset();
     },
     onError: (err: any) => {
@@ -215,7 +272,7 @@ export default function DirectSupplierInvoicePage() {
                   />
                   <TableCell align="right">
                     <Typography variant="body2" sx={{ pt: 1 }}>
-                      {((Number(line.quantity) || 0) * (Number(line.unit_price) || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      {((Number(line.quantity) || 0) * (Number(line.unit_price) || 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -232,17 +289,49 @@ export default function DirectSupplierInvoicePage() {
             Add Line
           </Button>
 
+          {/* Payment (optional) */}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }}>
+            <FormControlLabel
+              control={<Checkbox checked={payNow} onChange={(e) => setPayNow(e.target.checked)} />}
+              label="Pay now (instead of on credit)"
+            />
+            {payNow && (
+              <>
+                <Autocomplete
+                  sx={{ width: 260 }}
+                  options={Array.isArray(bankAccounts) ? bankAccounts : (bankAccounts as any)?.data ?? []}
+                  getOptionLabel={(a: any) => a.bank_account_name ?? ""}
+                  value={paymentAccount}
+                  onChange={(_, v) => setPaymentAccount(v)}
+                  renderInput={(p) => <TextField {...p} label="Pay From *" size="small" />}
+                />
+                <TextField
+                  label="Amount Paid" size="small" type="number" value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  placeholder={total.toFixed(2)}
+                  helperText={payAmount.trim() === ""
+                    ? "Blank = full bill"
+                    : Number(payAmount) < total
+                      ? `LKR ${(total - (Number(payAmount) || 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} stays owed`
+                      : " "}
+                  inputProps={{ min: 0, step: "any", style: { textAlign: "right" } }}
+                  sx={{ width: 200 }}
+                />
+              </>
+            )}
+          </Stack>
+
           {/* Footer */}
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 1 }}>
             <Typography variant="h6">
-              Total: LKR {total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              Total: LKR {total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Typography>
             <Button
               variant="contained" size="large"
               disabled={mutation.isPending}
               onClick={() => mutation.mutate()}
             >
-              {mutation.isPending ? "Posting…" : "Post Invoice"}
+              {mutation.isPending ? "Posting…" : payNow ? "Post Invoice & Pay" : "Post Invoice"}
             </Button>
           </Stack>
         </Stack>

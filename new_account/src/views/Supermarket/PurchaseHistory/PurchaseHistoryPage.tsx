@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box, Paper, Stack, TextField, Autocomplete, Table, TableHead, TableRow, TableCell, TableBody, TableContainer,
-  Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button,
+  Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button, Chip, MenuItem,
 } from "@mui/material";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
@@ -24,9 +24,10 @@ export default function PurchaseHistoryPage() {
   const [supplier, setSupplier] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PurchaseHistoryRow | null>(null);
+  const [status, setStatus] = useState<"all" | "owed" | PurchaseHistoryRow["payment_status"]>("all");
 
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers-all"], queryFn: getSuppliers });
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: allRows = [], isLoading } = useQuery({
     queryKey: ["purchase-history", fromDate, toDate, supplier?.supplier_id, search],
     queryFn: () => getPurchaseHistory({
       from_date: fromDate || undefined,
@@ -42,7 +43,20 @@ export default function PurchaseHistoryPage() {
   });
 
   const money = (v: unknown) => formatCurrency(Number(v) || 0, 2);
+  // "Still owed" = not paid + part paid, the ones that need paying.
+  const rows = allRows.filter((r) => status === "all"
+    || (status === "owed" ? r.payment_status === "unpaid" || r.payment_status === "partial" : r.payment_status === status));
   const grandTotal = rows.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+  const totalOwed = rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0);
+
+  const statusChip = (r: PurchaseHistoryRow) => {
+    switch (r.payment_status) {
+      case "paid": return <Chip size="small" color="success" label="Paid" />;
+      case "partial": return <Chip size="small" color="warning" label={`Part paid · ${money(r.balance)} left`} />;
+      case "unpaid": return <Chip size="small" color="error" label="Not paid" />;
+      default: return <Chip size="small" variant="outlined" label="Not invoiced" />;
+    }
+  };
 
   return (
     <FormPageLayout>
@@ -67,6 +81,16 @@ export default function PurchaseHistoryPage() {
               onChange={(_, v) => setSupplier(v)}
               renderInput={(p) => <TextField {...p} label="Supplier (all)" size="small" />}
             />
+            <TextField
+              select label="Payment" size="small" sx={{ minWidth: 160 }}
+              value={status} onChange={(e) => setStatus(e.target.value as any)}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="owed">Still owed</MenuItem>
+              <MenuItem value="unpaid">Not paid</MenuItem>
+              <MenuItem value="partial">Part paid</MenuItem>
+              <MenuItem value="paid">Paid</MenuItem>
+            </TextField>
             <TextField label="Search product / reference" size="small" sx={{ flex: 1 }} value={search} onChange={(e) => setSearch(e.target.value)} />
           </Stack>
 
@@ -77,12 +101,14 @@ export default function PurchaseHistoryPage() {
                   <TableRow>
                     <TableCell>Date</TableCell>
                     <TableCell>GRN #</TableCell>
+                    <TableCell>Invoice #</TableCell>
                     <TableCell>Reference</TableCell>
                     <TableCell>Supplier</TableCell>
                     <TableCell>Location</TableCell>
                     <TableCell align="right">Items</TableCell>
                     <TableCell align="right">Total Qty</TableCell>
                     <TableCell align="right">Total</TableCell>
+                    <TableCell>Payment</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -90,21 +116,24 @@ export default function PurchaseHistoryPage() {
                     <TableRow key={r.id} hover sx={{ cursor: "pointer" }} onClick={() => setSelected(r)}>
                       <TableCell>{r.delivery_date}</TableCell>
                       <TableCell>GRN #{r.id}</TableCell>
+                      <TableCell>{r.invoice_nos?.length ? r.invoice_nos.map((n) => `#${n}`).join(", ") : "—"}</TableCell>
                       <TableCell>{r.reference ?? "—"}</TableCell>
                       <TableCell>{r.supp_name ?? "—"}</TableCell>
                       <TableCell>{r.location_name ?? r.loc_code}</TableCell>
                       <TableCell align="right">{r.item_count}</TableCell>
                       <TableCell align="right">{Number(r.total_qty)}</TableCell>
                       <TableCell align="right">{money(r.total)}</TableCell>
+                      <TableCell>{statusChip(r)}</TableCell>
                     </TableRow>
                   ))}
                   {rows.length === 0 && (
-                    <TableRow><TableCell colSpan={8} align="center"><Typography variant="body2">No purchases in this period.</Typography></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} align="center"><Typography variant="body2">No purchases in this period.</Typography></TableCell></TableRow>
                   )}
                   {rows.length > 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} sx={{ fontWeight: 700 }}>Total ({rows.length} purchases)</TableCell>
+                      <TableCell colSpan={8} sx={{ fontWeight: 700 }}>Total ({rows.length} purchases)</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700 }}>{money(grandTotal)}</TableCell>
+                      <TableCell sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>Still owed: {money(totalOwed)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

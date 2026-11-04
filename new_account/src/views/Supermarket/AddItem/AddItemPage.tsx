@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getStockList } from "../../../api/Inventory/StockListApi";
 import DescriptionCell from "./DescriptionCell";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +15,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
-import { bulkCreateItems, AddItemRow } from "../../../api/StockMaster/StockMasterApi";
+import { bulkCreateItems, getNextItemCode, AddItemRow } from "../../../api/StockMaster/StockMasterApi";
 import { notify } from "../../../services/notificationService";
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { getSubcategories } from "../../../api/Subcategories/SubcategoriesApi";
@@ -37,9 +37,48 @@ const emptyRow = (): AddItemRow & { _id: number } => ({
   barcode: "",
 });
 
+/**
+ * Continues an item code by one, keeping whatever prefix and zero padding it
+ * was written with ("5979" -> "5980", "ITN-009" -> "ITN-010"). The same rule
+ * the server uses, repeated here so each extra row numbers itself without a
+ * round trip. `taken` holds the codes already shown in the grid, so two rows
+ * never land on the same code. Returns "" for a code with no trailing number.
+ */
+const bumpCode = (code: string, taken: Set<string>): string => {
+  const m = /^(.*?)(\d+)$/.exec(code.trim());
+  if (!m) return "";
+  const [, prefix, digits] = m;
+  let n = Number(digits);
+  let next = "";
+  do {
+    n += 1;
+    next = prefix + String(n).padStart(digits.length, "0");
+  } while (taken.has(next));
+  return next;
+};
+
 export default function AddItemPage() {
   const [rows, setRows] = useState<Array<AddItemRow & { _id: number }>>([emptyRow()]);
   const queryClient = useQueryClient();
+
+  // The next free code, continuing this shop's own numbering. Only ever a
+  // suggestion: the field stays editable and the server's unique rule on
+  // stock_id is still what actually prevents a duplicate.
+  const { data: suggestedCode, refetch: refetchNextCode } = useQuery({
+    queryKey: ["stock-next-code"],
+    queryFn: () => getNextItemCode(),
+    staleTime: 0,
+  });
+
+  // Fill the first row once the suggestion arrives, without overwriting
+  // anything already typed or imported from Excel.
+  useEffect(() => {
+    if (!suggestedCode) return;
+    setRows((prev) => {
+      if (prev.length !== 1 || prev[0].stock_id.trim() !== "") return prev;
+      return [{ ...prev[0], stock_id: suggestedCode }];
+    });
+  }, [suggestedCode]);
 
   // Existing names offered as a dropdown (native <datalist>, light enough for
   // thousands of imported rows) so the same category/brand isn't retyped with
@@ -96,6 +135,13 @@ export default function AddItemPage() {
         data.errors.forEach((e: any) => notify.error(`Row ${e.row} (${e.stock_id}): ${e.message}`));
       }
       setRows([emptyRow()]);
+      // The codes just saved are taken now — ask for the next free one and
+      // put it in the fresh row (the suggestion may be unchanged if every
+      // row failed, so the row is filled here rather than waiting on it).
+      refetchNextCode().then(({ data }) => {
+        if (data) setRows((prev) => (prev.length === 1 && !prev[0].stock_id.trim()
+          ? [{ ...prev[0], stock_id: data }] : prev));
+      });
       // The save may have created new categories/brands/units — show them in the dropdowns.
       ["item-categories", "subcategories", "brands", "item-units"].forEach((k) =>
         queryClient.invalidateQueries({ queryKey: [k] }));
@@ -107,7 +153,16 @@ export default function AddItemPage() {
     setRows((prev) => prev.map((r) => r._id === id ? { ...r, [field]: value } : r));
   };
 
-  const addRow = () => setRows((prev) => [...prev, emptyRow()]);
+  const addRow = () => setRows((prev) => {
+    // Carry on from the last code in the grid, or from the server's
+    // suggestion if nothing has been typed yet.
+    const taken = new Set(prev.map((r) => r.stock_id.trim()).filter(Boolean));
+    const lastCode = [...prev].reverse().find((r) => r.stock_id.trim())?.stock_id ?? "";
+    const stock_id = lastCode
+      ? bumpCode(lastCode, taken)
+      : (suggestedCode && !taken.has(suggestedCode) ? suggestedCode : "");
+    return [...prev, { ...emptyRow(), stock_id }];
+  });
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([["Item Code", "Description", "Category", "Subcategory", "Brand", "Unit", "Purchase Cost", "Selling Price", "MRP Price", "Barcode"]]);

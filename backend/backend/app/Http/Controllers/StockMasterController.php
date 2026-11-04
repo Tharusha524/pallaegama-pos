@@ -31,6 +31,91 @@ class StockMasterController extends Controller
         return $this->jsonList($request, $query);
     }
 
+    /**
+     * The next item code to suggest on the Add Item page, so the user does
+     * not have to go and look up which number is still free.
+     *
+     * The codes in stock_master are a shop's own convention, not ours: this
+     * install uses plain numbers (1033..5979), another install may use
+     * "ITN-001". So rather than assuming a format, the most-used
+     * prefix is detected from the existing codes and its highest number is
+     * continued, keeping the same prefix and zero padding. Purely a
+     * suggestion — the user can still type any code, and the unique rule on
+     * stock_id stays the real guard against duplicates.
+     *
+     * ?after=<code> continues from a code the caller already holds (the
+     * previous row of the grid) instead of from the database maximum.
+     */
+    public function nextCode(Request $request)
+    {
+        $codes = DB::table('stock_master')->pluck('stock_id')
+            ->map(fn ($c) => (string) $c)->all();
+        $taken = array_flip($codes);
+
+        $after = trim((string) $request->query('after', ''));
+        if ($after !== '' && preg_match('/^(.*?)(\d+)$/', $after, $m)) {
+            // Continue the row above, keeping its prefix and padding.
+            $seed = ['prefix' => $m[1], 'number' => (int) $m[2], 'pad' => strlen($m[2])];
+        } else {
+            $seed = $this->dominantCodePattern($codes);
+        }
+
+        if ($seed === null) {
+            // Nothing numeric to continue from (empty or free-text codes).
+            return response()->json(['next_code' => null]);
+        }
+
+        // Skip over any code already used, so a gap-filled or hand-typed
+        // code above never produces a duplicate suggestion.
+        $number = $seed['number'];
+        do {
+            $number++;
+            $next = $seed['prefix'] . str_pad((string) $number, $seed['pad'], '0', STR_PAD_LEFT);
+        } while (isset($taken[$next]) && $number < $seed['number'] + 100000);
+
+        return response()->json(['next_code' => $next]);
+    }
+
+    /**
+     * Splits every code into "prefix + trailing number" and returns the
+     * prefix the shop actually uses (the most common one), with the highest
+     * number seen under it and the zero padding that number was written
+     * with. Codes with no trailing number are ignored. Null if none qualify.
+     */
+    private function dominantCodePattern(array $codes): ?array
+    {
+        $groups = [];
+        foreach ($codes as $code) {
+            if (!preg_match('/^(.*?)(\d+)$/', $code, $m)) {
+                continue;
+            }
+            $prefix = $m[1];
+            $number = (int) $m[2];
+            if (!isset($groups[$prefix])) {
+                $groups[$prefix] = ['count' => 0, 'number' => -1, 'pad' => strlen($m[2])];
+            }
+            $groups[$prefix]['count']++;
+            if ($number > $groups[$prefix]['number']) {
+                $groups[$prefix]['number'] = $number;
+                $groups[$prefix]['pad'] = strlen($m[2]);
+            }
+        }
+
+        if ($groups === []) {
+            return null;
+        }
+
+        // Most used prefix wins; a tie goes to the one that has got furthest.
+        uasort($groups, fn ($a, $b) => [$b['count'], $b['number']] <=> [$a['count'], $a['number']]);
+        $prefix = array_key_first($groups);
+
+        return [
+            'prefix' => $prefix,
+            'number' => $groups[$prefix]['number'],
+            'pad' => $groups[$prefix]['pad'],
+        ];
+    }
+
     public function store(StockMasterRequest $request)
     {
         $data = $request->validated();
