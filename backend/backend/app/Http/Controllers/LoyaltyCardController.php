@@ -94,6 +94,49 @@ class LoyaltyCardController extends Controller
     }
 
     // Register a new loyalty customer by phone number (creates debtor + loyalty account)
+    /**
+     * Customers who signed up in the mobile app but have no loyalty card yet.
+     */
+    public function normalCustomers()
+    {
+        $rows = DB::table('debtors_master as d')
+            ->whereNotNull('d.password')
+            ->whereNotExists(fn ($q) => $q->from('loyalty_cards as c')->whereColumn('c.debtor_no', 'd.debtor_no'))
+            ->select('d.debtor_no', 'd.name', 'd.mobile', 'd.email', 'd.date_of_birth', 'd.created_at')
+            ->orderByDesc('d.created_at')
+            ->get();
+
+        return response()->json($rows);
+    }
+
+    /**
+     * Turn a normal (app) customer into a loyalty customer: a new card on the
+     * lowest tier (Silver). Tier upgrades count spending from today only.
+     */
+    public function makeLoyalty(string $debtorNo)
+    {
+        return DB::transaction(function () use ($debtorNo) {
+            $debtor = DebtorsMaster::where('debtor_no', $debtorNo)->lockForUpdate()->first();
+            if (! $debtor) {
+                return response()->json(['message' => 'Customer not found.'], 404);
+            }
+            if (LoyaltyCard::where('debtor_no', $debtorNo)->exists()) {
+                return response()->json(['message' => 'This customer is already a loyalty customer.'], 422);
+            }
+
+            $card = LoyaltyCard::create([
+                'debtor_no'       => $debtorNo,
+                'card_no'         => 'LC' . strtoupper(Str::random(8)),
+                'issue_date'      => now()->toDateString(),
+                'loyalty_tier_id' => DB::table('loyalty_tiers')->where('inactive', 0)->orderBy('min_spend_threshold')->value('id'),
+                'points_balance'  => 0,
+                'status'          => 'active',
+            ]);
+
+            return response()->json($card->load(['debtor', 'tier']), 201);
+        });
+    }
+
     public function registerByPhone(Request $request)
     {
         $data = $request->validate([

@@ -40,6 +40,7 @@ class PostDirectSalesInvoiceRequest extends FormRequest
             'delivery_address' => 'nullable|string',
             'deliver_to' => 'nullable|string',
             'cash_sale' => 'nullable|boolean',
+            'pos_credit' => 'nullable|boolean',
             'bank_account_id' => 'nullable|integer',
             'pos_shift_id' => 'nullable|integer|exists:pos_shifts,id',
             'price_overrides' => 'nullable|array',

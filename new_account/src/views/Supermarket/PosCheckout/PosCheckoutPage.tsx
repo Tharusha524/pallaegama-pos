@@ -7,7 +7,7 @@ import {
   TableContainer, Paper, TextField, Button, Stack, IconButton, Autocomplete, Chip, Divider,
   FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
   List, ListItemButton, ListItemText, Tooltip,
-  ToggleButton, ToggleButtonGroup, useMediaQuery,
+  ToggleButton, ToggleButtonGroup, useMediaQuery, Checkbox, FormControlLabel,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
@@ -35,6 +35,7 @@ import { directSalesInvoice, DirectSalesInvoicePayload } from "../../../api/Sale
 import { createQuotation } from "../../../api/Quotations/QuotationsApi";
 import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
+import { getCustomerCreditSummary } from "../../../api/Customer/CustomerCreditApi";
 import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getWholesaleBatchProducts, getPendingPriceQty, getCostFloors, type BatchPriceGroup } from "../../../api/Pos/posApi";
 import { getStockList } from "../../../api/Inventory/StockListApi";
 import { getSalesPricing, getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
@@ -252,6 +253,10 @@ export default function PosCheckoutPage() {
   }, [isOnline]);
 
   const { data: posSettings } = useQuery({ queryKey: ["pos-settings"], queryFn: getPosSettings });
+  // "qty" = cursor goes to Qty first (Enter adds); ↑ from Qty goes to Selling
+  // Price (Enter there adds too). Prices work the same as "selling_price".
+  const qtyFirstMode = posSettings?.focus_after_item_select === "qty";
+  const typedPriceMode = posSettings?.focus_after_item_select === "selling_price" || qtyFirstMode;
   // Receipt settings as the receipt dialog gets them (used for saved copies / reprints).
   const buildReceiptSettings = () => {
     try {
@@ -285,6 +290,9 @@ export default function PosCheckoutPage() {
 
   // Split payments
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([{ id: "p1", bank_account_id: "", amount: "0" }]);
+  // Credit sale: whatever the payment lines don't cover stays owing on the
+  // customer's account (registered customers only, online only).
+  const [creditSale, setCreditSale] = useState(false);
 
   // Held sales (park / recall)
   const [recallOpen, setRecallOpen] = useState(false);
@@ -772,6 +780,32 @@ export default function PosCheckoutPage() {
   const changeDue = Math.max(0, totalPaid - grandTotal);
   const balanceRemaining = Math.max(0, grandTotal - totalPaid);
 
+  const isWalkInCustomer = !customer || String(customer.name ?? "").trim().toLowerCase() === "walk-in customer";
+  const creditAmount = creditSale ? balanceRemaining : 0;
+  const { data: creditSummary } = useQuery({
+    queryKey: ["customer-credit", customer?.debtor_no],
+    queryFn: () => getCustomerCreditSummary(customer.debtor_no),
+    enabled: creditSale && !isWalkInCustomer,
+  });
+  // A credit sale can't stay on when the customer goes back to Walk-in.
+  useEffect(() => {
+    if (creditSale && isWalkInCustomer) setCreditSale(false);
+  }, [creditSale, isWalkInCustomer]);
+  const toggleCreditSale = (on: boolean) => {
+    if (on && isWalkInCustomer) {
+      notify.error("Select a registered customer for a credit sale");
+      return;
+    }
+    if (on && isOffline) {
+      notify.error("Credit sales need a connection — the credit limit can't be checked offline");
+      return;
+    }
+    setCreditSale(on);
+    // On: the whole bill goes on credit unless the cashier types a part
+    // payment. Off: back to the usual one cash line for the full total.
+    setPaymentLines((prev) => [{ ...prev[0], amount: on ? "0" : grandTotal.toFixed(2) }]);
+  };
+
   // Focus search field on page load.
   useEffect(() => { setTimeout(() => itemSearchInputRef.current?.focus(), 200); }, []);
 
@@ -793,7 +827,7 @@ export default function PosCheckoutPage() {
   }, [cashAccount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (paymentLines.length === 1) {
+    if (paymentLines.length === 1 && !creditSale) {
       setPaymentLines((prev) => [{ ...prev[0], amount: grandTotal.toFixed(2) }]);
     }
   }, [grandTotal]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -892,7 +926,7 @@ export default function PosCheckoutPage() {
     const catalogPrice = Number(selectedItem.sale_price ?? salesPricingMap.get(String(selectedItem.stock_id)) ?? selectedItem.purchase_cost) || 0;
     const typed = manualSellingPriceTouched && manualSellingPrice !== "";
     const unit = typed ? Number(manualSellingPrice) || 0 : catalogPrice;
-    if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") return unit;
+    if (typedPriceMode) return unit;
     const discountRaw = Math.max(0, Number(manualDiscountInput) || 0);
     if (manualDiscountMode2 === "net") return manualDiscountInput.trim() === "" ? unit : discountRaw;
     if (manualDiscountMode2 === "percent") return unit * (1 - Math.min(100, discountRaw) / 100);
@@ -943,7 +977,7 @@ export default function PosCheckoutPage() {
     // then resolve promotional/sales pricing in the background and patch the
     // price if a better one is found — cashier sees the correct price within
     // ~0.5 s without any visible delay on Enter.
-    const focusMode = posSettings?.focus_after_item_select ?? "discount";
+    const focusMode = typedPriceMode ? "selling_price" : "discount";
     const typedSellingPrice = manualSellingPriceTouched && manualSellingPrice !== "" ? Number(manualSellingPrice) || 0 : catalogPrice;
     const initialUnitPrice = focusMode === "selling_price"
       ? (typedSellingPrice < catalogPrice ? catalogPrice : typedSellingPrice)
@@ -1025,7 +1059,9 @@ export default function PosCheckoutPage() {
    */
   const focusAfterItemSelect = () => {
     const mode = posSettings?.focus_after_item_select ?? "discount";
-    if (mode === "selling_price") {
+    if (mode === "qty") {
+      setTimeout(() => { qtyInputRef.current?.focus(); qtyInputRef.current?.select(); }, 0);
+    } else if (mode === "selling_price") {
       setTimeout(() => { sellingPriceInputRef.current?.focus(); sellingPriceInputRef.current?.select(); }, 0);
     } else {
       setTimeout(() => { lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select(); }, 0);
@@ -1328,6 +1364,7 @@ export default function PosCheckoutPage() {
     setRedeemPointsInput("");
     setAppliedLoyaltyRedemption(null);
     setPaymentLines([{ id: "p1", bank_account_id: cashAccount?.id ?? "", amount: "0" }]);
+    setCreditSale(false);
     // Reset to Walk-in for the next sale — never carry a customer over.
     const walkIn = (customers ?? []).find((c: any) => c.name === "Walk-in Customer");
     setCustomer(walkIn ?? null);
@@ -1387,7 +1424,13 @@ export default function PosCheckoutPage() {
           method: (bankAccounts ?? []).find((a: any) => a.id === p.bank_account_id)?.bank_account_name ?? "Payment",
           amount: Number(p.amount) || 0,
         }));
-      setLastReceipt({ ...result, lines: cart, subtotal: grandTotal, customer, payments: receiptPayments, cashReceived: totalPaid, couponCode: appliedCoupon?.coupon_code, voucherCode: appliedVoucher?.code, shift_id: currentShiftId });
+      const isCreditBill = creditSale && balanceRemaining > 0.01;
+      if (isCreditBill) {
+        receiptPayments.push({ method: "CREDIT (TO PAY)", amount: Number(balanceRemaining.toFixed(2)) });
+      }
+      const previousBalance = isCreditBill ? Number(Number(creditSummary?.outstanding_balance ?? 0).toFixed(2)) : undefined;
+      if (isCreditBill) queryClient.invalidateQueries({ queryKey: ["customer-credit"] });
+      setLastReceipt({ ...result, previousBalance, lines: cart, subtotal: grandTotal, customer, payments: receiptPayments, cashReceived: totalPaid, couponCode: appliedCoupon?.coupon_code, voucherCode: appliedVoucher?.code, shift_id: currentShiftId });
 
       // Exact copy of this receipt for future reprints — sent in the background a
       // moment later, outside the receipt/print code, failures ignored.
@@ -1407,6 +1450,7 @@ export default function PosCheckoutPage() {
         shiftId: currentShiftId ?? null,
         paperSize: posSettings?.receipt_paper_size ?? null,
         receiptSettings: buildReceiptSettings(),
+        previousBalance: previousBalance ?? null,
       };
       if (result?.trans_no) {
         setTimeout(() => { savePosReceiptCopy(result.trans_no, receiptCopy).catch(() => {}); }, 2000);
@@ -1561,13 +1605,24 @@ export default function PosCheckoutPage() {
     }
 
     const validPaymentLines = paymentLines.filter((p) => p.bank_account_id !== "" && (Number(p.amount) || 0) > 0);
-    if (validPaymentLines.length === 0) {
-      notify.error("Add at least one payment method and amount");
-      return;
-    }
-    if (balanceRemaining > 0.01) {
-      notify.error(`Payments don't cover the total — ${formatCurrency(balanceRemaining, 2)} remaining`);
-      return;
+    if (creditSale) {
+      if (isWalkInCustomer) {
+        notify.error("Select a registered customer for a credit sale");
+        return;
+      }
+      if (isOffline) {
+        notify.error("Credit sales need a connection — the credit limit can't be checked offline");
+        return;
+      }
+    } else {
+      if (validPaymentLines.length === 0) {
+        notify.error("Add at least one payment method and amount");
+        return;
+      }
+      if (balanceRemaining > 0.01) {
+        notify.error(`Payments don't cover the total — ${formatCurrency(balanceRemaining, 2)} remaining`);
+        return;
+      }
     }
 
     // The one place quick-discount/coupon/voucher become real accounting
@@ -1642,13 +1697,16 @@ export default function PosCheckoutPage() {
       order_type: Number(salesTypeId) || 0,
       ship_via: shipVia,
       from_stk_loc: locCode || undefined,
-      cash_sale: true,
+      // Full credit (nothing paid now) posts as the ERP's normal credit
+      // invoice; a part payment posts the paid lines and leaves the rest owing.
+      cash_sale: !(creditSale && settledPayments.length === 0),
+      pos_credit: creditSale || undefined,
       cost_center_id: 0,
       cost_center2_id: 0,
       reference: `POS-${Date.now()}`,
       pos_shift_id: currentShiftId,
       price_overrides: priceOverrides.length > 0 ? priceOverrides : undefined,
-      payments: settledPayments,
+      payments: settledPayments.length > 0 ? settledPayments : undefined,
       lines: combinedLines,
     } as any;
 
@@ -1985,7 +2043,7 @@ export default function PosCheckoutPage() {
     cart, customer, cashAccount,
     checkoutPending: checkoutMutation.isPending,
     quotePending: quoteMutation.isPending,
-    handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine, changeBillPriceMode, billPriceMode,
+    handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine, changeBillPriceMode, billPriceMode, checkedCartDiscountPercent,
     reprintActive: false,
     batchPickerActive: false,
   });
@@ -1994,7 +2052,7 @@ export default function PosCheckoutPage() {
       cart, customer, cashAccount,
       checkoutPending: checkoutMutation.isPending,
       quotePending: quoteMutation.isPending,
-      handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine, changeBillPriceMode, billPriceMode,
+      handleCheckout, handleGiveQuote, handleHoldSale, resetSaleState, removeLine, changeBillPriceMode, billPriceMode, checkedCartDiscountPercent,
       // While reprinting, Enter/F-keys belong to the reprint screens — never complete a sale.
       reprintActive: reprintOpen || !!reprintReceipt,
       batchPickerActive: !!batchPicker,
@@ -2260,17 +2318,24 @@ export default function PosCheckoutPage() {
                     value={manualSellingPrice}
                     onChange={(e) => { setManualSellingPrice(e.target.value); setManualSellingPriceTouched(true); }}
                     onKeyDown={(e) => {
+                      if (qtyFirstMode && e.key === "ArrowDown") {
+                        e.preventDefault();
+                        qtyInputRef.current?.focus(); qtyInputRef.current?.select();
+                        return;
+                      }
                       if (e.key !== "Enter") return;
                       e.preventDefault();
                       if (selectedItemBelowCost()) return;
-                      if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") {
+                      if (qtyFirstMode) {
+                        addToCart();
+                      } else if (posSettings?.focus_after_item_select === "selling_price") {
                         qtyInputRef.current?.focus(); qtyInputRef.current?.select();
                       } else {
                         lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select();
                       }
                     }}
                   />
-                  {(posSettings?.focus_after_item_select ?? "discount") !== "selling_price" && (
+                  {!typedPriceMode && (
                     <>
                       <TextField
                         inputRef={lineDiscountInputRef}
@@ -2303,7 +2368,14 @@ export default function PosCheckoutPage() {
                 inputRef={qtyInputRef}
                 label="Qty" type="number" size="small" sx={{ width: 90, "& .MuiInputBase-root": { minHeight: 44 } }} value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && selectedItem) { e.preventDefault(); addToCart(); } }}
+                onKeyDown={(e) => {
+                  if (qtyFirstMode && e.key === "ArrowUp" && selectedItem) {
+                    e.preventDefault();
+                    sellingPriceInputRef.current?.focus(); sellingPriceInputRef.current?.select();
+                    return;
+                  }
+                  if (e.key === "Enter" && selectedItem) { e.preventDefault(); addToCart(); }
+                }}
               />
               {selectedItem && (() => {
                 const _catalogPrice = Number(selectedItem.sale_price ?? salesPricingMap.get(String(selectedItem.stock_id)) ?? selectedItem.purchase_cost) || 0;
@@ -2567,7 +2639,19 @@ export default function PosCheckoutPage() {
               )}
             </Stack>
           </Stack>
-          {balanceRemaining > 0.01 && (
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
+            <FormControlLabel
+              control={<Checkbox size="small" checked={creditSale} onChange={(e) => toggleCreditSale(e.target.checked)} />}
+              label={<Typography variant="caption">Credit sale</Typography>}
+            />
+            {creditSale && (
+              <Typography variant="caption" fontWeight={700} color="warning.dark">
+                On credit {formatCurrency(creditAmount, 2)}
+                {creditSummary?.has_credit_limit ? ` · Available ${formatCurrency(creditSummary.available_credit ?? 0, 2)}` : ""}
+              </Typography>
+            )}
+          </Stack>
+          {!creditSale && balanceRemaining > 0.01 && (
             <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.25 }}>{formatCurrency(balanceRemaining, 2)} still needs to be covered</Typography>
           )}
 
@@ -2718,17 +2802,24 @@ export default function PosCheckoutPage() {
                         value={manualSellingPrice}
                         onChange={(e) => { setManualSellingPrice(e.target.value); setManualSellingPriceTouched(true); }}
                         onKeyDown={(e) => {
+                          if (qtyFirstMode && e.key === "ArrowDown") {
+                            e.preventDefault();
+                            qtyInputRef.current?.focus(); qtyInputRef.current?.select();
+                            return;
+                          }
                           if (e.key !== "Enter") return;
                           e.preventDefault();
                           if (selectedItemBelowCost()) return;
-                          if ((posSettings?.focus_after_item_select ?? "discount") === "selling_price") {
+                          if (qtyFirstMode) {
+                            addToCart();
+                          } else if (posSettings?.focus_after_item_select === "selling_price") {
                             qtyInputRef.current?.focus(); qtyInputRef.current?.select();
                           } else {
                             lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select();
                           }
                         }}
                       />
-                      {(posSettings?.focus_after_item_select ?? "discount") !== "selling_price" && (
+                      {!typedPriceMode && (
                         <>
                           <TextField
                             inputRef={lineDiscountInputRef}
@@ -2760,7 +2851,14 @@ export default function PosCheckoutPage() {
                   <TextField
                     inputRef={qtyInputRef} label="Qty" type="number" size="small" sx={{ width: 90 }} value={qty}
                     onChange={(e) => setQty(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && selectedItem) { e.preventDefault(); addToCart(); } }}
+                    onKeyDown={(e) => {
+                  if (qtyFirstMode && e.key === "ArrowUp" && selectedItem) {
+                    e.preventDefault();
+                    sellingPriceInputRef.current?.focus(); sellingPriceInputRef.current?.select();
+                    return;
+                  }
+                  if (e.key === "Enter" && selectedItem) { e.preventDefault(); addToCart(); }
+                }}
                   />
                   {selectedItem && (() => {
                     const _catalogPrice2 = Number(selectedItem.sale_price ?? salesPricingMap.get(String(selectedItem.stock_id)) ?? selectedItem.purchase_cost) || 0;
@@ -3240,7 +3338,28 @@ export default function PosCheckoutPage() {
                 ))}
               </Stack>
 
-              {balanceRemaining > 0.01 && (
+              <FormControlLabel
+                sx={{ mt: 1 }}
+                control={<Checkbox size="small" checked={creditSale} onChange={(e) => toggleCreditSale(e.target.checked)} />}
+                label="Credit sale (customer pays later)"
+              />
+              {creditSale && (
+                <Box sx={{ mt: 0.5, p: 1, borderRadius: 1, bgcolor: "#fff8e1", border: "1px solid", borderColor: "warning.light" }}>
+                  <Typography variant="body2" fontWeight={700} color="warning.dark">
+                    On credit: {formatCurrency(creditAmount, 2)}
+                  </Typography>
+                  {creditSummary && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      Owes now {formatCurrency(creditSummary.outstanding_balance, 2)}
+                      {creditSummary.has_credit_limit
+                        ? ` · Limit ${formatCurrency(creditSummary.credit_limit, 2)} · Available ${formatCurrency(creditSummary.available_credit ?? 0, 2)}`
+                        : " · No credit limit"}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
+              {!creditSale && balanceRemaining > 0.01 && (
                 <Typography variant="caption" color="error" sx={{ display: "block", mt: 1 }}>
                   {formatCurrency(balanceRemaining, 2)} still needs to be covered by a payment method
                 </Typography>
@@ -3451,6 +3570,7 @@ export default function PosCheckoutPage() {
         couponCode={lastReceipt?.couponCode}
         voucherCode={lastReceipt?.voucherCode}
         shiftId={lastReceipt?.shift_id}
+        previousBalance={lastReceipt?.previousBalance}
       />
 
       <PosReprintDialog
@@ -3476,6 +3596,7 @@ export default function PosCheckoutPage() {
             onClose={() => { setReprintReceipt(null); setTimeout(() => itemSearchInputRef.current?.focus(), 100); }}
             transNo={reprintReceipt.trans_no}
             offlineNo={copy?.offlineNo ?? undefined}
+            previousBalance={copy?.previousBalance ?? undefined}
             customerName={(copy ? copy.customerName : reprintReceipt.customer_name) ?? undefined}
             lines={sourceLines.map((l) => ({
               stock_id: l.stock_id,

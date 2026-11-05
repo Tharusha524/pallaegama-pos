@@ -102,9 +102,12 @@ class CustomerMeController extends Controller
         $today = now()->toDateString();
         $debtorNo = $request->user()->debtor_no;
 
-        $mine = $offerController->applicable(
-            Request::create('', 'GET', ['debtor_no' => $debtorNo])
-        )->getData();
+        // Birthday / tier / personal offers are for loyalty customers only;
+        // a normal (app) customer sees just the general offers.
+        $isLoyalty = LoyaltyCard::where('debtor_no', $debtorNo)->where('status', 'active')->exists();
+        $mine = $isLoyalty
+            ? $offerController->applicable(Request::create('', 'GET', ['debtor_no' => $debtorNo]))->getData()
+            : [];
 
         $general = Offer::where('status', 'active')
             ->whereIn('offer_type', ['product', 'category'])

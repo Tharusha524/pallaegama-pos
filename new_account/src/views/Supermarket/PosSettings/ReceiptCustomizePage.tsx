@@ -67,6 +67,9 @@ const DEFAULT_RS = {
   weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
   weight_customer: 400, weight_thank_you: 700, weight_footer: 400,
   font_you_saved: "medium", weight_you_saved: 700,
+  show_credit_due: true, label_credit_due: "CREDIT (TO PAY)", weight_credit_due: 700,
+  show_previous_balance: true, label_previous_balance: "PREVIOUS BALANCE", weight_previous_balance: 700,
+  show_total_owed: true, label_total_owed: "TOTAL OWED", weight_total_owed: 700,
   custom_fields: [] as CustomReceiptField[],
   // Editable labels
   label_invoice_id: "Invoice ID",
@@ -269,6 +272,28 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
               <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                 <span style={{ fontWeight: rs.weight_payment_lines }}>COUPON</span><span>SAVE10</span>
               </Box>
+            )}
+            {/* Credit bills only — sample values. */}
+            {rs.show_credit_due !== false && (
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_credit_due ?? rs.font_totals) }}>
+                          <span style={{ fontWeight: rs.weight_credit_due ?? 700 }}>{rs.label_credit_due}</span>
+                          <Typography fontWeight={rs.weight_credit_due ?? 700} fontSize={fontPx(rs.font_credit_due ?? rs.font_totals)}>100.00</Typography>
+                        </Box>
+            )}
+            {(rs.show_previous_balance !== false || rs.show_total_owed !== false) && (
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", my: 0.5 }} />
+            )}
+            {rs.show_previous_balance !== false && (
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_previous_balance ?? rs.font_totals) }}>
+                          <span style={{ fontWeight: rs.weight_previous_balance ?? 700 }}>{rs.label_previous_balance}</span>
+                          <Typography fontWeight={rs.weight_previous_balance ?? 700} fontSize={fontPx(rs.font_previous_balance ?? rs.font_totals)}>500.00</Typography>
+                        </Box>
+            )}
+            {rs.show_total_owed !== false && (
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_total_owed ?? rs.font_totals) }}>
+                          <span style={{ fontWeight: rs.weight_total_owed ?? 700 }}>{rs.label_total_owed}</span>
+                          <Typography fontWeight={rs.weight_total_owed ?? 700} fontSize={fontPx(rs.font_total_owed ?? rs.font_totals)}>600.00</Typography>
+                        </Box>
             )}
           </Stack>
           <Box sx={{ my: 0.5 }}>
@@ -500,6 +525,17 @@ export default function ReceiptCustomizePage() {
                 <Divider sx={{ my: 0.5 }} />
                 <FontSizePicker label="You Saved font size" value={rs.font_you_saved ?? "medium"} onChange={(v) => set("font_you_saved", v)} />
                 <WeightSlider label="You Saved weight" value={rs.weight_you_saved ?? 700} onChange={(v) => set("weight_you_saved", v)} />
+                <Divider sx={{ my: 0.5 }} />
+                <Typography variant="caption" color="text.secondary">Credit bills only</Typography>
+                <SectionToggle label="Show Credit (To Pay)" checked={rs.show_credit_due !== false} onChange={(v) => set("show_credit_due", v)} />
+                <FontSizePicker label="Credit (To Pay) font size" value={rs.font_credit_due ?? rs.font_totals} onChange={(v) => set("font_credit_due", v)} />
+                <WeightSlider label="Credit (To Pay) weight" value={rs.weight_credit_due ?? 700} onChange={(v) => set("weight_credit_due", v)} />
+                <SectionToggle label="Show Previous Balance" checked={rs.show_previous_balance !== false} onChange={(v) => set("show_previous_balance", v)} />
+                <FontSizePicker label="Previous Balance font size" value={rs.font_previous_balance ?? rs.font_totals} onChange={(v) => set("font_previous_balance", v)} />
+                <WeightSlider label="Previous Balance weight" value={rs.weight_previous_balance ?? 700} onChange={(v) => set("weight_previous_balance", v)} />
+                <SectionToggle label="Show Total Owed" checked={rs.show_total_owed !== false} onChange={(v) => set("show_total_owed", v)} />
+                <FontSizePicker label="Total Owed font size" value={rs.font_total_owed ?? rs.font_totals} onChange={(v) => set("font_total_owed", v)} />
+                <WeightSlider label="Total Owed weight" value={rs.weight_total_owed ?? 700} onChange={(v) => set("weight_total_owed", v)} />
               </Stack>
             </CardContent>
           </Card>
@@ -573,6 +609,9 @@ export default function ReceiptCustomizePage() {
                   { key: "label_voucher", placeholder: "VOUCHER" },
                   { key: "label_you_saved", placeholder: "You Saved" },
                   { key: "label_items", placeholder: "Items" },
+                  { key: "label_credit_due", placeholder: "CREDIT (TO PAY)" },
+                  { key: "label_previous_balance", placeholder: "PREVIOUS BALANCE" },
+                  { key: "label_total_owed", placeholder: "TOTAL OWED" },
                 ].map(({ key, placeholder }) => (
                   <TextField
                     key={key}

@@ -138,7 +138,12 @@ class SalesInvoiceService
                 $amounts['ov_amount'] + $amounts['ov_gst'] + $freightCost + $amounts['ov_freight_tax'],
                 2
             );
-            $this->customerCredit->assertCanExtendCredit($debtorNo, $documentTotal);
+            // A direct invoice (POS) already checked the credit limit on the
+            // part left owing; checking the whole bill again here would block
+            // a sale the customer mostly paid for.
+            if (empty($payload['_credit_checked'])) {
+                $this->customerCredit->assertCanExtendCredit($debtorNo, $documentTotal);
+            }
 
             $tranDate = (string) ($payload['tran_date'] ?? $delivery->tran_date ?? now()->toDateString());
             $dueDate = (string) ($payload['due_date'] ?? $delivery->due_date ?? $tranDate);
@@ -325,6 +330,14 @@ class SalesInvoiceService
             $isCashSale = (bool) ($payload['cash_sale'] ?? false);
             if (!$isCashSale) {
                 $this->customerCredit->assertCanExtendCredit($debtorNo, $documentTotal);
+            } elseif (!empty($payload['payments']) && is_array($payload['payments'])) {
+                // Part payment (POS credit): what the payments don't cover stays
+                // owing on the customer's account, so it must fit the credit limit.
+                $paymentsTotal = round(array_sum(array_map(
+                    fn ($p) => max(0, (float) ($p['amount'] ?? 0)),
+                    $payload['payments']
+                )), 2);
+                $this->customerCredit->assertCanExtendCredit($debtorNo, max(0, $documentTotal - $paymentsTotal));
             }
 
             $tranDate = (string) ($payload['tran_date'] ?? now()->toDateString());
@@ -379,6 +392,7 @@ class SalesInvoiceService
                 'comments' => (string) ($payload['comments'] ?? ''),
                 'reference' => $payload['reference'] ?? null,
                 'lines' => $invoiceLines,
+                '_credit_checked' => true,
             ]);
 
             $transNo = (int) ($invoiceResult['trans_no'] ?? 0);

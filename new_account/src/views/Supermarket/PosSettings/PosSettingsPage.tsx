@@ -189,10 +189,12 @@ export default function PosSettingsPage() {
                 >
                   <MenuItem value="discount">Discount field</MenuItem>
                   <MenuItem value="selling_price">Selling Price field</MenuItem>
+                  <MenuItem value="qty">Qty field (↑ for Selling Price)</MenuItem>
                 </Select>
               </FormControl>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                "Selling Price" mode hides the Discount field — cashier types the final price directly
+                "Selling Price" mode hides the Discount field — cashier types the final price directly.
+                "Qty" mode: Enter on Qty adds the item; ↑ moves to Selling Price, where Enter also adds it
               </Typography>
             </Box>
             <Box sx={{ pt: 1 }}>

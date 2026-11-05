@@ -39,6 +39,8 @@ export const getReceivablesAging = async () =>
   (await api.get("/sales-analytics/receivables-aging")).data;
 export const getPayablesAging = async () =>
   (await api.get("/sales-analytics/payables-aging")).data;
+export const getSalesSummary = async (params?: { from_date?: string; to_date?: string }) =>
+  (await api.get("/sales-analytics/sales-summary", { params })).data;
 export const getSalesByCashierShift = async (params?: { from_date?: string; to_date?: string }) =>
   (await api.get("/sales-analytics/sales-by-cashier-shift", { params })).data;
 export const getShiftDayEndSummary = async (shiftId: number | string) =>

@@ -14,7 +14,7 @@ import PageLoader from "../../../components/PageLoader";
 import {
   getVelocityAndDemand, getDeadStock, getProductProfit, getBusinessActivity, getValuation,
   getNegativeStock, getVoucherLiability, getReceivablesAging, getPayablesAging, getSalesByCashierShift,
-  getVoidReport, getPriceOverrideAudit, getSupplierItemList,
+  getVoidReport, getPriceOverrideAudit, getSupplierItemList, getSalesSummary,
 } from "../../../api/Pos/posAdvancedApi";
 import { getSuppliers } from "../../../api/Supplier/SupplierApi";
 import { getLowestCostBySupplier } from "../../../api/Pos/posApi";
@@ -33,14 +33,32 @@ const reportTableLayout = {
   "& .MuiTableCell-alignRight": { whiteSpace: "nowrap" },
 };
 
+// yyyy-mm-dd in the till's own time zone (toISOString would give UTC).
+const localDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export default function SupermarketReportsPage() {
   const { formatCurrency } = useHomeCurrency();
-  const [tab, setTab] = useState("velocity");
+  const [tab, setTab] = useState("sales-summary");
   const [fromDate, setFromDate] = useState(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [locCode, setLocCode] = useState("");
 
   const { data: locations } = useQuery({ queryKey: ["inventory-locations"], queryFn: getInventoryLocations });
+
+  const { data: salesSummary, isLoading: lSummary } = useQuery({
+    queryKey: ["sales-summary", fromDate, toDate],
+    queryFn: () => getSalesSummary({ from_date: fromDate, to_date: toDate }),
+    enabled: tab === "sales-summary",
+  });
+  const setRange = (range: "today" | "month" | "year") => {
+    const now = new Date();
+    const from = range === "today" ? now
+      : range === "month" ? new Date(now.getFullYear(), now.getMonth(), 1)
+      : new Date(now.getFullYear(), 0, 1);
+    setFromDate(localDate(from));
+    setToDate(localDate(now));
+  };
 
   const { data: velocity, isLoading: l1 } = useQuery({
     queryKey: ["velocity-demand", fromDate, toDate], queryFn: () => getVelocityAndDemand({ from_date: fromDate, to_date: toDate }), enabled: tab === "velocity",
@@ -133,6 +151,13 @@ export default function SupermarketReportsPage() {
       <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <TextField label="From" type="date" size="small" value={fromDate} onChange={(e) => setFromDate(e.target.value)} InputLabelProps={{ shrink: true }} />
         <TextField label="To" type="date" size="small" value={toDate} onChange={(e) => setToDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+        {tab === "sales-summary" && (
+          <>
+            <Button size="small" variant="outlined" onClick={() => setRange("today")}>Today</Button>
+            <Button size="small" variant="outlined" onClick={() => setRange("month")}>This Month</Button>
+            <Button size="small" variant="outlined" onClick={() => setRange("year")}>This Year</Button>
+          </>
+        )}
         {(tab === "dead-stock" || tab === "valuation" || tab === "stock-batches") && locations && locations.length > 1 && (
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel>Branch / Location</InputLabel>
@@ -167,6 +192,7 @@ export default function SupermarketReportsPage() {
       </Stack>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }} variant="scrollable">
+        <Tab label="Sales Summary" value="sales-summary" />
         <Tab label="Velocity & Demand" value="velocity" />
         <Tab label="Dead Stock" value="dead-stock" />
         <Tab label="Product Profit" value="profit" />
@@ -185,6 +211,48 @@ export default function SupermarketReportsPage() {
         <Tab label="Supplier Item List" value="supplier-item-list" />
         <Tab label="Stock by Batch" value="stock-batches" />
       </Tabs>
+
+      {tab === "sales-summary" && (lSummary ? <PageLoader /> : (
+        <Stack spacing={2}>
+          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            {[
+              { label: "TOTAL SALES", value: formatCurrency(salesSummary?.total_sales ?? 0), big: true },
+              { label: "BILLS", value: String(salesSummary?.bill_count ?? 0) },
+              { label: "AVERAGE BILL", value: formatCurrency(salesSummary?.average_bill ?? 0) },
+              { label: `RETURNS (${salesSummary?.returns_count ?? 0})`, value: formatCurrency(salesSummary?.returns_total ?? 0) },
+              { label: "NET SALES", value: formatCurrency(salesSummary?.net_sales ?? 0) },
+            ].map((c) => (
+              <Card key={c.label} elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, minWidth: 180, flex: c.big ? "1 1 260px" : "1 1 180px" }}>
+                <CardContent>
+                  <Typography variant="caption" color="text.secondary">{c.label}</Typography>
+                  <Typography variant={c.big ? "h4" : "h6"} fontWeight={800}>{c.value}</Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+          <TableContainer component={Paper} elevation={2}>
+            <Table size="small">
+              <TableHead sx={{ backgroundColor: "var(--pallet-lighter-blue)" }}>
+                <TableRow><TableCell>Date</TableCell><TableCell align="right">Bills</TableCell><TableCell align="right">Sales</TableCell><TableCell align="right">Returns</TableCell><TableCell align="right">Net</TableCell></TableRow>
+              </TableHead>
+              <TableBody>
+                {(salesSummary?.by_day ?? []).map((d: any) => (
+                  <TableRow key={d.date}>
+                    <TableCell>{d.date}</TableCell>
+                    <TableCell align="right">{d.bills}</TableCell>
+                    <TableCell align="right">{formatCurrency(d.sales)}</TableCell>
+                    <TableCell align="right">{formatCurrency(d.returns)}</TableCell>
+                    <TableCell align="right">{formatCurrency(d.net)}</TableCell>
+                  </TableRow>
+                ))}
+                {(salesSummary?.by_day ?? []).length === 0 && (
+                  <TableRow><TableCell colSpan={5} align="center"><Typography variant="body2">No sales in this period.</Typography></TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      ))}
 
       {tab === "velocity" && (l1 ? <PageLoader /> : (
         <Stack spacing={2}>

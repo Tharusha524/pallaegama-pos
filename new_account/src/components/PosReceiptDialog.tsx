@@ -82,6 +82,8 @@ interface PosReceiptDialogProps {
   cashierName?: string;
   // Sale made offline: the number printed on its first receipt (shown on reprints).
   offlineNo?: string;
+  // Credit bill: what the customer owed before this bill (old credit bills + opening balance).
+  previousBalance?: number;
 }
 
 /**
@@ -131,7 +133,7 @@ function renderCustomFields(fields: any[], position: string) {
 export default function PosReceiptDialog({
   open, onClose, transNo, customerName, lines, total, payments, cashReceived,
   paperSize = "80mm Thermal", isQuote = false, receiptSettings, shiftId, couponCode, voucherCode,
-  reprint = false, printedAt, cashierName, offlineNo,
+  reprint = false, printedAt, cashierName, offlineNo, previousBalance,
 }: PosReceiptDialogProps) {
   const { formatCurrency } = useHomeCurrency();
   const { user } = useCurrentUser();
@@ -206,6 +208,10 @@ export default function PosReceiptDialog({
     label_total_due: "TOTAL", label_cash_received: "CASH RECEIVED", label_change: "CHANGE", label_customer: "CUSTOMER",
     label_coupon: "COUPON", label_voucher: "VOUCHER", label_you_saved: "You Saved", label_items: "Items",
     font_you_saved: "medium" as string, weight_you_saved: 700 as number,
+    show_credit_due: true, label_credit_due: "CREDIT (TO PAY)", weight_credit_due: 700 as number,
+    show_previous_balance: true, label_previous_balance: "PREVIOUS BALANCE", weight_previous_balance: 700 as number,
+    show_total_owed: true, label_total_owed: "TOTAL OWED", weight_total_owed: 700 as number,
+    font_credit_due: undefined as string | undefined, font_previous_balance: undefined as string | undefined, font_total_owed: undefined as string | undefined,
     terminal_id: "" as string,
     label_currency_prefix: "LKR",
     thermal_printer_name: "EPSON TM-T82 Receipt",
@@ -360,6 +366,8 @@ export default function PosReceiptDialog({
   const paymentLines = payments && payments.length > 0 ? payments : [{ method: "CASH", amount: total }];
   const received = cashReceived ?? total;
   const change = Math.max(0, received - total);
+  // Credit bill: the part left owing (sent as a "CREDIT (TO PAY)" payment line).
+  const creditDue = (payments ?? []).filter((p) => p.method === "CREDIT (TO PAY)").reduce((s, p) => s + p.amount, 0);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
@@ -567,6 +575,33 @@ export default function PosReceiptDialog({
                   <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_cash_received}</span>
                   <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(received)}</Typography>
                 </Box>
+                {creditDue > 0.001 && (
+                  <>
+                    {rs.show_credit_due !== false && (
+                      <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_credit_due ?? rs.font_totals) }}>
+                          <span style={{ fontWeight: rs.weight_credit_due ?? 700 }}>{rs.label_credit_due}</span>
+                          <Typography fontWeight={rs.weight_credit_due ?? 700} fontSize={fontPx(rs.font_credit_due ?? rs.font_totals)}>{fmt(creditDue)}</Typography>
+                        </Box>
+                    )}
+                    {previousBalance != null && (rs.show_previous_balance !== false || rs.show_total_owed !== false) && (
+                      <>
+                        <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", my: 0.5 }} />
+                        {rs.show_previous_balance !== false && (
+                        <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_previous_balance ?? rs.font_totals) }}>
+                          <span style={{ fontWeight: rs.weight_previous_balance ?? 700 }}>{rs.label_previous_balance}</span>
+                          <Typography fontWeight={rs.weight_previous_balance ?? 700} fontSize={fontPx(rs.font_previous_balance ?? rs.font_totals)}>{fmt(previousBalance)}</Typography>
+                        </Box>
+                        )}
+                        {rs.show_total_owed !== false && (
+                        <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_total_owed ?? rs.font_totals) }}>
+                          <span style={{ fontWeight: rs.weight_total_owed ?? 700 }}>{rs.label_total_owed}</span>
+                          <Typography fontWeight={rs.weight_total_owed ?? 700} fontSize={fontPx(rs.font_total_owed ?? rs.font_totals)}>{fmt(previousBalance + creditDue)}</Typography>
+                        </Box>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
                 {rs.show_change && change > 0.001 && (
                   <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                     <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_change}</span>

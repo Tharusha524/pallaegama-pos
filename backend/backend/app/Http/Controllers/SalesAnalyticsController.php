@@ -25,9 +25,12 @@ class SalesAnalyticsController extends Controller
             ->where('trans_type', 10)
             ->count();
 
+        // Only what customers still owe: a bill paid in full counts 0, and an
+        // over-paid one (old POS sales that saved the change as payment) is
+        // not allowed to pull the total below zero.
         $totalDebtors = DB::table('debtor_trans')
             ->where('trans_type', 10)
-            ->selectRaw('SUM(ov_amount - alloc) as total')
+            ->selectRaw('SUM(GREATEST(ov_amount - alloc, 0)) as total')
             ->value('total');
 
         // Payments and credit notes are stored negative (-1500) while their
@@ -411,6 +414,57 @@ class SalesAnalyticsController extends Controller
             'shift' => $shift,
             'by_payment_method' => $byMethod,
             'total_sales' => $byMethod->sum('total'),
+        ]);
+    }
+
+    /**
+     * Sales total for a date range: sales (invoices, same as the dashboard's
+     * "today sales"), returns (credit notes), net, and a per-day breakdown.
+     * Read only.
+     */
+    public function salesSummary(Request $request)
+    {
+        $fromDate = $request->query('from_date', now()->toDateString());
+        $toDate = $request->query('to_date', now()->toDateString());
+
+        $base = fn () => DB::table('debtor_trans')->whereBetween('tran_date', [$fromDate, $toDate]);
+
+        $sales = $base()->where('trans_type', 10)
+            ->selectRaw('COUNT(*) as bills, COALESCE(SUM(ov_amount), 0) as total')
+            ->first();
+        $returns = $base()->where('trans_type', 11)
+            ->selectRaw('COUNT(*) as count, COALESCE(SUM(ABS(ov_amount)), 0) as total')
+            ->first();
+
+        $byDay = $base()->whereIn('trans_type', [10, 11])
+            ->select('tran_date as date')
+            ->selectRaw('SUM(CASE WHEN trans_type = 10 THEN 1 ELSE 0 END) as bills')
+            ->selectRaw('SUM(CASE WHEN trans_type = 10 THEN ov_amount ELSE 0 END) as sales')
+            ->selectRaw('SUM(CASE WHEN trans_type = 11 THEN ABS(ov_amount) ELSE 0 END) as returns')
+            ->groupBy('tran_date')
+            ->orderBy('tran_date')
+            ->get()
+            ->map(fn ($r) => [
+                'date' => $r->date,
+                'bills' => (int) $r->bills,
+                'sales' => (float) $r->sales,
+                'returns' => (float) $r->returns,
+                'net' => (float) $r->sales - (float) $r->returns,
+            ]);
+
+        $bills = (int) $sales->bills;
+        $total = (float) $sales->total;
+
+        return response()->json([
+            'from_date' => $fromDate,
+            'to_date' => $toDate,
+            'total_sales' => $total,
+            'bill_count' => $bills,
+            'average_bill' => $bills > 0 ? round($total / $bills, 2) : 0,
+            'returns_total' => (float) $returns->total,
+            'returns_count' => (int) $returns->count,
+            'net_sales' => $total - (float) $returns->total,
+            'by_day' => $byDay,
         ]);
     }
 

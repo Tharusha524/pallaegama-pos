@@ -93,9 +93,11 @@ class LoyaltyPointsController extends Controller
             return;
         }
 
+        // Only spending since the customer became a loyalty customer counts.
         $totalSpend = (float) DB::table('debtor_trans')
             ->where('debtor_no', $debtorNo)
             ->whereIn('trans_type', [10, 11])
+            ->when($card->issue_date, fn ($q) => $q->whereDate('tran_date', '>=', $card->issue_date))
             ->selectRaw('SUM(CASE WHEN trans_type = 10 THEN ov_amount ELSE -ABS(ov_amount) END) as spend')
             ->value('spend');
 

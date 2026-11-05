@@ -58,9 +58,25 @@ Open (no token). Creates the customer account.
 }
 ```
 
-Every new account automatically gets a **loyalty card** on the lowest tier
-(Silver, 0 points), so `GET /customer/me/loyalty` works straight after sign-up
-and the customer shows on the store's Loyalty Customers list.
+A new account is a **normal customer** — it does **not** get a loyalty card.
+Right after sign-up, `GET /customer/me/loyalty` returns **404** and
+`loyalty_card` in `GET /customer/me` is `null`.
+
+The customer becomes a **loyalty customer** only when store staff upgrade them
+(back office: Customers → Normal Customers → **Make Loyalty**). They then get a
+card on the lowest tier (Silver, 0 points). The app has no endpoint to do this
+itself — the customer visits the store.
+
+| | Normal customer | Loyalty customer |
+|---|---|---|
+| `GET /customer/me` → `loyalty_card` | `null` | card object with `tier` |
+| `GET /customer/me/loyalty` | **404** | card, points, tier, QR |
+| `GET /customer/me/offers` → `for_you` | always `[]` | tier, personal and birthday offers |
+| `GET /customer/me/offers` → `other_offers` | store-wide offers | store-wide offers |
+| Promotions, purchases, receipts, notifications | yes | yes |
+
+Re-fetch `GET /customer/me` when the app opens: if `loyalty_card` is no longer
+`null`, the staff have upgraded the customer — switch the app to the loyalty view.
 
 **422** — validation errors, or `{"message": "Store is not fully set up yet ..."}`
 if the store company setup is incomplete. Show the `message` as-is.
@@ -156,8 +172,10 @@ eager-loaded.
 }
 ```
 
-`loyalty_card` is `null` if the customer has no card yet. The tier object is
-the same as in `GET /customer/me/loyalty` below — show `tier.tier_name`.
+`loyalty_card` is `null` for a **normal customer** (not upgraded by the store
+yet — see the register notes above). Use it to decide which view to show:
+`null` → normal view; a card → loyalty view with points and tier. The tier
+object is the same as in `GET /customer/me/loyalty` below — show `tier.tier_name`.
 
 ### PUT `/customer/me`
 
@@ -214,15 +232,18 @@ Tier fields:
 Numbers come as strings — parse them before doing maths. `tier` can be `null`
 if the card has no tier set.
 
-The tier moves up automatically: after each sale the customer is moved to the
-highest tier their total spend has reached (never moved down). Re-fetch this
-endpoint when the app opens or the screen is refreshed to show the current tier.
+A new loyalty customer starts at Silver. The tier moves up automatically:
+after each sale the customer is moved to the highest tier their total spend
+**since becoming a loyalty customer** (`issue_date`) has reached — spending as a
+normal customer does not count. Never moved down. Re-fetch this endpoint when
+the app opens or the screen is refreshed to show the current tier.
 
 Render `qr_payload` as a QR code — the cashier scans it at the POS to attach
 the sale to this customer and award points.
 
-**404** `{"message": "No loyalty card found for this account."}` — show a
-"visit the store to get your card" state, not an error.
+**404** `{"message": "No loyalty card found for this account."}` — this is a
+**normal customer** (the normal state right after sign-up). Show a "Visit the
+store to become a loyalty customer" message, not an error.
 
 ### GET `/customer/me/loyalty/history`
 
@@ -259,6 +280,7 @@ Two buckets:
 
 - `for_you` — offers matched to **this** customer: their loyalty `tier`,
   `customer`-specific offers, and a `birthday` offer on their birthday.
+  **Loyalty customers only** — for a normal customer it is always `[]`.
 - `other_offers` — all active `product` / `category` offers (store-wide).
 
 `offer_type` is one of `product`, `category`, `customer`, `tier`, `birthday`.

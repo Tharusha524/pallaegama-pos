@@ -50,6 +50,9 @@ import OfflineEntriesPage from "./views/Supermarket/OfflineEntries/OfflineEntrie
 import WarrantyPage from "./views/Supermarket/Warranty/WarrantyPage";
 import VouchersPage from "./views/Supermarket/Vouchers/VouchersPage";
 import CustomerSegmentsPage from "./views/Supermarket/CustomerSegments/CustomerSegmentsPage";
+import NormalCustomersPage from "./views/Supermarket/NormalCustomers/NormalCustomersPage";
+import CreditCustomersPage from "./views/Supermarket/Credit/CreditCustomersPage";
+import CreditPaymentsPage from "./views/Supermarket/Credit/CreditPaymentsPage";
 import ProductVariantsPage from "./views/Supermarket/ProductVariants/ProductVariantsPage";
 import SetPricePage from "./views/Supermarket/SetPrice/SetPricePage";
 import MrpSetupPage from "./views/Supermarket/SetPrice/MrpSetupPage";
@@ -567,7 +570,10 @@ const AppRoutes = () => {
         <Route path="/supermarket/offline-entries" element={withLayout(MainLayout, OfflineEntriesPage)} />
         <Route path="/supermarket/warranty" element={withLayout(MainLayout, WarrantyPage)} />
         <Route path="/supermarket/vouchers" element={withLayout(MainLayout, VouchersPage)} />
+        <Route path="/supermarket/credit-customers" element={withLayout(MainLayout, CreditCustomersPage)} />
+        <Route path="/supermarket/credit-payments" element={withLayout(MainLayout, CreditPaymentsPage)} />
         <Route path="/supermarket/customer-segments" element={withLayout(MainLayout, CustomerSegmentsPage)} />
+        <Route path="/supermarket/normal-customers" element={withLayout(MainLayout, NormalCustomersPage)} />
         <Route path="/supermarket/product-variants" element={withLayout(MainLayout, ProductVariantsPage)} />
         <Route path="/supermarket/service-tickets" element={withLayout(MainLayout, ServiceTicketsPage)} />
         <Route path="/supermarket/pos-settings" element={withLayout(MainLayout, PosSettingsPage)} />

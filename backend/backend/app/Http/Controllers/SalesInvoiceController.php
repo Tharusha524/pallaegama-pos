@@ -36,6 +36,13 @@ class SalesInvoiceController extends Controller
         if ($message = $this->posLineBelowCost($request->validated())) {
             return response()->json(['message' => $message], 422);
         }
+        // POS credit sale: only a registered customer can owe money.
+        if ($request->boolean('pos_credit')) {
+            $name = (string) DB::table('debtors_master')->where('debtor_no', $request->input('debtor_no'))->value('name');
+            if (strcasecmp(trim($name), 'Walk-in Customer') === 0) {
+                return response()->json(['message' => 'A credit sale needs a registered customer, not Walk-in.'], 422);
+            }
+        }
 
         try {
             $result = $this->invoiceService->directInvoice($request->validated());
@@ -187,6 +194,15 @@ class SalesInvoiceController extends Controller
             $amount = (float) ($debtorTrans['ov_amount'] ?? 0);
             $transNo = $result['trans_no'] ?? null;
             $transType = $result['trans_type'] ?? null;
+
+            // Points are for what is paid. A credit (unpaid) part earns its
+            // points later, when the payment is received (SalesPaymentController).
+            $row = DB::table('debtor_trans')->where('trans_type', $transType)->where('trans_no', $transNo)->first();
+            if ($row) {
+                $billTotal = (float) $row->ov_amount + (float) $row->ov_gst + (float) $row->ov_freight + (float) $row->ov_freight_tax + (float) $row->ov_discount;
+                $paidShare = $billTotal > 0.001 ? min(1, max(0, (float) $row->alloc / $billTotal)) : 1;
+                $amount = round($amount * $paidShare, 2);
+            }
 
             LoyaltyPointsController::earnPoints($debtorNo, $amount, $transNo, $transType);
             LoyaltyPointsController::upgradeTier($debtorNo);

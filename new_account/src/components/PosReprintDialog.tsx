@@ -33,6 +33,7 @@ export interface ReprintReceipt {
     paperSize: string | null;
     receiptSettings: Record<string, any>;
     offlineNo?: string | null;
+    previousBalance?: number | null;
   } | null;
 }
 

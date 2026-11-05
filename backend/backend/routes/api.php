@@ -462,6 +462,13 @@ Route::apiResource('sales-points', SalesPosController::class);
 Route::apiResource('loyalty-tiers', LoyaltyTierController::class);
 Route::get('loyalty-cards/by-phone/{phone}', [\App\Http\Controllers\LoyaltyCardController::class, 'findByPhone']);
 Route::post('loyalty-cards/register-by-phone', [\App\Http\Controllers\LoyaltyCardController::class, 'registerByPhone']);
+// Finance -> Credit Customers / Credit Payments (POS credit sales)
+Route::get('credit-customers', [\App\Http\Controllers\CreditCustomerController::class, 'index']);
+Route::get('credit-customers/{debtorNo}/open-bills', [\App\Http\Controllers\CreditCustomerController::class, 'openBills']);
+Route::put('credit-customers/{debtorNo}/credit-limit', [\App\Http\Controllers\CreditCustomerController::class, 'updateLimit']);
+Route::post('credit-customers/{debtorNo}/opening-balance', [\App\Http\Controllers\CreditCustomerController::class, 'openingBalance']);
+Route::get('loyalty-cards/normal-customers', [\App\Http\Controllers\LoyaltyCardController::class, 'normalCustomers']);
+Route::post('loyalty-cards/make-loyalty/{debtorNo}', [\App\Http\Controllers\LoyaltyCardController::class, 'makeLoyalty']);
 Route::apiResource('loyalty-cards', LoyaltyCardController::class);
 Route::post('loyalty-points/earn', [LoyaltyPointsController::class, 'earn']);
 Route::post('loyalty-points/redeem', [LoyaltyPointsController::class, 'redeem']);
@@ -622,6 +629,7 @@ Route::get('sales-analytics/dead-stock', [SalesAnalyticsController::class, 'dead
 Route::get('sales-analytics/product-profit', [SalesAnalyticsController::class, 'productProfit']);
 Route::get('sales-analytics/business-activity', [SalesAnalyticsController::class, 'businessActivityFeed']);
 Route::get('sales-analytics/valuation', [SalesAnalyticsController::class, 'valuation']);
+Route::get('sales-analytics/sales-summary', [SalesAnalyticsController::class, 'salesSummary']);
 Route::get('sales-analytics/sales-by-cashier-shift', [SalesAnalyticsController::class, 'salesByCashierShift']);
 Route::get('sales-analytics/shift-day-end/{shiftId}', [SalesAnalyticsController::class, 'shiftDayEndSummary']);
 Route::get('sales-analytics/supplier-item-list', [SalesAnalyticsController::class, 'supplierItemList']);

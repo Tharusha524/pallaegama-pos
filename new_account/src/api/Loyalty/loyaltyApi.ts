@@ -23,6 +23,11 @@ export const getLoyaltyByPhone = async (phone: string) =>
 export const registerLoyaltyByPhone = async (data: { name: string; mobile: string; loyalty_tier_id?: number | null }) =>
   (await api.post("/loyalty-cards/register-by-phone", data)).data;
 
+// ---- Normal (mobile app) customers -> loyalty ----
+export const getNormalCustomers = async () => (await api.get("/loyalty-cards/normal-customers")).data;
+export const makeLoyaltyCustomer = async (debtorNo: string) =>
+  (await api.post(`/loyalty-cards/make-loyalty/${encodeURIComponent(debtorNo)}`)).data;
+
 // ---- Loyalty Points ----
 export const earnLoyaltyPoints = async (data: { debtor_no: number; amount_spent: number }) =>
   (await api.post("/loyalty-points/earn", data)).data;

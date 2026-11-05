@@ -140,6 +140,7 @@ const baseSidebarItems: Array<SidebarItem> = [
     requiredPermission: getModulePermissionIds("Smart Supermarket"),
     nestedItems: [
       { title: "Customer Segments", href: "/supermarket/customer-segments", icon: <GroupsIcon fontSize="small" /> },
+      { title: "Normal Customers", href: "/supermarket/normal-customers", icon: <GroupsIcon fontSize="small" /> },
     ],
   },
   {
@@ -157,6 +158,8 @@ const baseSidebarItems: Array<SidebarItem> = [
     requiredPermission: getModulePermissionIds("Smart Supermarket"),
     nestedItems: [
       { title: "Vouchers", href: "/supermarket/vouchers", icon: <CardGiftcardIcon fontSize="small" /> },
+      { title: "Credit Customers", href: "/supermarket/credit-customers", icon: <CardGiftcardIcon fontSize="small" /> },
+      { title: "Credit Payments", href: "/supermarket/credit-payments", icon: <CardGiftcardIcon fontSize="small" /> },
       // Warranty — disabled per request, feature/page code kept as-is.
       // { title: "Warranty", href: "/supermarket/warranty", icon: <VerifiedUserIcon fontSize="small" /> },
     ],
