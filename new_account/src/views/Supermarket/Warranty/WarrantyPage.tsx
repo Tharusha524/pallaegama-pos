@@ -16,6 +16,7 @@ import {
   getWarrantyClaims, updateWarrantyClaim,
 } from "../../../api/Pos/posOpsApi";
 import { getItems } from "../../../api/Item/ItemApi";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 export default function WarrantyPage() {
   const queryClient = useQueryClient();
@@ -225,7 +226,7 @@ export default function WarrantyPage() {
         <DialogTitle>Register Warranty</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Autocomplete
+            <ItemAutocomplete
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={warrantyForm.stock_id}

@@ -16,6 +16,7 @@ import { getCompanies } from "../../../api/CompanySetup/CompanySetupApi";
 import { getSalesPricingByStockId, createSalesPricing, updateSalesPricing } from "../../../api/SalesPricing/SalesPricingApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const LKR_CURRENCY_ID = 8;
 const RETAIL_SALES_TYPE_ID = 3;
@@ -114,7 +115,7 @@ export default function WeighAndPrintPage() {
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Weigh Item</Typography>
               <Stack spacing={2}>
-                <Autocomplete
+                <ItemAutocomplete
                   options={items ?? []}
                   getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
                   value={product}

@@ -17,6 +17,7 @@ import {
 } from "../../../api/PromotionalPrice/PromotionalPriceApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 /**
  * Schedule a temporary selling price for a date range — checkout (via
@@ -123,7 +124,7 @@ export default function PromotionalPricesPage() {
       <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, mb: 2 }}>
         <CardContent>
           <Stack spacing={2}>
-            <Autocomplete
+            <ItemAutocomplete
               options={results ?? []}
               getOptionLabel={(p: any) => p.description ?? p.stock_id ?? ""}
               inputValue={search}

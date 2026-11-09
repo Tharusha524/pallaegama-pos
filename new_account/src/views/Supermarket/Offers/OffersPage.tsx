@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 
 /** Today's date (YYYY-MM-DD) in the PC's own time zone, not UTC. */
 const localToday = () => {
@@ -7,19 +6,6 @@ const localToday = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-// Products search: name, stock ID — plus Singlish ("kakar" → "කැකර්").
-const filterOfferProducts = (options: any[], { inputValue }: { inputValue: string }) => {
-  const term = inputValue.trim().toLowerCase();
-  if (!term) return options;
-  const sinhala = toSinhalaSearch(inputValue);
-  const exact = options.filter((i: any) => {
-    const name = String(i.description ?? "").toLowerCase();
-    return name.includes(term)
-      || String(i.stock_id ?? "").toLowerCase().includes(term)
-      || (!!sinhala && name.includes(sinhala));
-  });
-  return appendCloseMatches(options, exact, inputValue);
-};
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, TextField, Table,
@@ -41,6 +27,7 @@ import { getItems } from "../../../api/Item/ItemApi";
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { getCustomers } from "../../../api/Customer/AddCustomerApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const emptyForm = {
   offer_name: "", offer_type: "product", discount_type: "percent",
@@ -294,11 +281,10 @@ export default function OffersPage() {
             </FormControl>
 
             {form.offer_type === "product" && (
-              <Autocomplete
+              <ItemAutocomplete
                 multiple
                 options={items ?? []}
                 getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
-                filterOptions={filterOfferProducts}
                 isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
                 renderOption={(props, option: any) => (
                   <li {...props} key={option.stock_id}>

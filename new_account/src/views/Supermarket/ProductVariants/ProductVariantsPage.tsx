@@ -23,6 +23,7 @@ import { getItems } from "../../../api/Item/ItemApi";
 import { getCompanies } from "../../../api/CompanySetup/CompanySetupApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const emptyForm = { stock_id: null as any, variant_name: "", sku: "", barcode: "", price_adjustment: "0" };
 
@@ -434,7 +435,7 @@ export default function ProductVariantsPage() {
         <DialogTitle>{editingVariant ? "Edit Product Variant" : "Add Product Variant"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Autocomplete
+            <ItemAutocomplete
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={form.stock_id}

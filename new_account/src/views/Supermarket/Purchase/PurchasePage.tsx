@@ -35,6 +35,7 @@ import {
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
 import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, useMrpMap, useRetailPriceMap, type BatchPriceInput } from "../../../components/BatchPriceFields";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 /**
  * The proper 3-step supermarket purchasing flow — kept as three short tabs
@@ -249,7 +250,7 @@ function CreatePurchaseOrderTab() {
 
           <Typography variant="subtitle2" fontWeight={700}>Add Item</Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
-            <Autocomplete
+            <ItemAutocomplete
               sx={{ flex: 2 }} options={items ?? []} getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={pickedItem} onChange={(_, v) => setPickedItem(v)}
               renderInput={(p) => <TextField {...p} label="Product" size="small" />}

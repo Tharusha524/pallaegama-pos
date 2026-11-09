@@ -16,6 +16,7 @@ import { getItems } from "../../../api/Item/ItemApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import BatchSelect from "../../../components/BatchSelect";
 import { notify } from "../../../services/notificationService";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const emptyForm = { stock_id: null as any, loc_code: "", batch_id: "" as number | "", quantity: "1", reason: "", damage_date: new Date().toISOString().slice(0, 10) };
 
@@ -105,7 +106,7 @@ export default function StockDamagePage() {
         <DialogTitle>Record Stock Damage</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Autocomplete
+            <ItemAutocomplete
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={form.stock_id}

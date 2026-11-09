@@ -6,6 +6,8 @@ import {
   Typography,
 } from "@mui/material";
 import { formatItemLabel } from "../utils/formatItemLabel";
+import ItemAutocomplete from "./ItemAutocomplete";
+import { searchItems } from "../utils/itemSearch";
 
 export interface ItemSearchOption {
   stock_id: string;
@@ -144,7 +146,7 @@ export default function ItemSearchSelect({
   }, [options, selectedStockId, value]);
 
   return (
-    <Autocomplete
+    <ItemAutocomplete
       fullWidth={fullWidth}
       size={size}
       disabled={disabled}
@@ -160,21 +162,20 @@ export default function ItemSearchSelect({
           ? (option) => isOptionDisabled(option)
           : undefined
       }
-      onChange={(_, option) => {
+      onChange={(_: any, option: ItemOption | null) => {
         if (option && isOptionDisabled?.(option)) {
           return;
         }
         onSelect(option);
       }}
-      filterOptions={(opts, { inputValue }) => {
+      // POS checkout search (code first, Singlish, close Sinhala spellings),
+      // plus a category-name match; barcode scan + Enter picks the item.
+      filterOptions={(opts: ItemOption[], { inputValue }: { inputValue: string }) => {
         const q = inputValue.trim().toLowerCase();
         if (!q) return opts;
-        return opts.filter(
-          (o) =>
-            o.description.toLowerCase().includes(q) ||
-            o.stock_id.toLowerCase().includes(q) ||
-            o._category.toLowerCase().includes(q)
-        );
+        const found = searchItems(opts, inputValue);
+        const seen = new Set(found);
+        return [...found, ...opts.filter((o) => !seen.has(o) && o._category.toLowerCase().includes(q))];
       }}
       slotProps={{
         popper: {

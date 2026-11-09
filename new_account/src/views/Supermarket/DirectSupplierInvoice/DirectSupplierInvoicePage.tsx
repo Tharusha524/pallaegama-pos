@@ -18,6 +18,7 @@ import { getBankAccounts } from "../../../api/BankAccount/BankAccountApi";
 import { getLastPurchaseCosts } from "../../../api/Purchases/PurchaseHistoryApi";
 import { notify } from "../../../services/notificationService";
 import { BatchPriceCells, BatchPriceHeadCells, batchPricePayload, emptyBatchPrice, useRetailPriceMap, type BatchPriceInput } from "../../../components/BatchPriceFields";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 interface Line {
   id: number;
@@ -218,7 +219,7 @@ export default function DirectSupplierInvoicePage() {
                   sx={{ "& > td": { verticalAlign: "top" } }}
                 >
                   <TableCell>
-                    <Autocomplete
+                    <ItemAutocomplete
                       options={Array.isArray(items) ? items : (items as any)?.data ?? []}
                       getOptionLabel={(o: any) => `${o.stock_id} — ${o.description}`}
                       value={line.item}

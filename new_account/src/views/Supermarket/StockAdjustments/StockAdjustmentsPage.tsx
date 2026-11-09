@@ -14,6 +14,7 @@ import { getStockAdjustments, createStockAdjustment } from "../../../api/Pos/pos
 import BatchSelect from "../../../components/BatchSelect";
 import { getItems } from "../../../api/Item/ItemApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const emptyForm = { stock_id: null as any, loc_code: "", movement_type: "add" as "add" | "reduce" | "override", quantity: "0", reason: "", batch_id: "" as number | "" };
 
@@ -92,7 +93,7 @@ export default function StockAdjustmentsPage() {
         <DialogTitle>Adjust Stock</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Autocomplete
+            <ItemAutocomplete
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
               value={form.stock_id}

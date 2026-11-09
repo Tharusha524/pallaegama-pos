@@ -21,6 +21,7 @@ import { getLowestCostBySupplier } from "../../../api/Pos/posApi";
 import { getStockMoveHistory } from "../../../api/StockMoves/StockMovesApi";
 import { getItems, getExpiryList } from "../../../api/Item/ItemApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 // Full-width report tables with balanced columns: the first column (product /
 // date) takes the largest share, the rest split the remaining space evenly.
@@ -375,7 +376,7 @@ export default function SupermarketReportsPage() {
 
       {tab === "stock-history" && (
         <Stack spacing={2}>
-          <Autocomplete
+          <ItemAutocomplete
             sx={{ maxWidth: 400 }}
             options={items ?? []}
             getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}

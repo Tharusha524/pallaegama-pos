@@ -123,6 +123,21 @@ interface PaymentLine {
 // "42,066" -> 42066) so the underlying cart value stays a clean number.
 const parseFormattedNumber = (value: string): number => Number(value.replace(/,/g, "")) || 0;
 
+const customerPhone = (c: any) => String(c?.mobile ?? c?.phone ?? c?.contact_number ?? "").trim();
+
+// The customer box matches on name or mobile number, so a cashier can type
+// either one. Digits are compared without spaces/dashes.
+const filterCustomers = (options: any[], state: { inputValue: string }) => {
+  const typed = state.inputValue.trim().toLowerCase();
+  if (!typed) return options;
+  const digits = typed.replace(/\D/g, "");
+  return options.filter((c: any) => {
+    if (String(c?.name ?? "").toLowerCase().includes(typed)) return true;
+    const phone = customerPhone(c).replace(/\D/g, "");
+    return !!digits && !!phone && phone.includes(digits);
+  });
+};
+
 export default function PosCheckoutPage() {
   // Square POS touchscreens (1024x1024, 1080x1080, ...) get a dedicated
   // compact layout further down — everything else keeps the existing
@@ -2511,6 +2526,12 @@ export default function PosCheckoutPage() {
                 size="small"
                 options={customers ?? []}
                 getOptionLabel={(c: any) => c.name ?? ""}
+                filterOptions={filterCustomers}
+                renderOption={(props, c: any) => (
+                  <li {...props} key={c.debtor_no}>
+                    {c.name}{customerPhone(c) ? ` — ${customerPhone(c)}` : ""}
+                  </li>
+                )}
                 value={customer}
                 onChange={(_, val) => setCustomer(val)}
                 renderInput={(params) => <TextField {...params} label="Customer" size="small" inputRef={customerInputRef} />}
@@ -3137,6 +3158,12 @@ export default function PosCheckoutPage() {
                   sx={{ flex: 1 }}
                   options={customers ?? []}
                   getOptionLabel={(c: any) => c.name ?? ""}
+                  filterOptions={filterCustomers}
+                  renderOption={(props, c: any) => (
+                    <li {...props} key={c.debtor_no}>
+                      {c.name}{customerPhone(c) ? ` — ${customerPhone(c)}` : ""}
+                    </li>
+                  )}
                   value={customer}
                   onChange={(_, val) => setCustomer(val)}
                   renderInput={(params) => <TextField {...params} label="Customer" size="small" inputRef={customerInputRef} />}

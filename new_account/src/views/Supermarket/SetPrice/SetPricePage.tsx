@@ -18,6 +18,7 @@ import { getCostFloors } from "../../../api/Pos/posApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
 import StockBatchesPanel from "../../../components/StockBatchesPanel";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const LKR_CURRENCY_ID = 8; // only currency configured in this system
 const RETAIL_SALES_TYPE_ID = 3; // default price list for supermarket walk-in sales
@@ -287,7 +288,7 @@ export default function SetPricePage() {
       <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
         <CardContent>
           <Stack spacing={2}>
-            <Autocomplete
+            <ItemAutocomplete
               options={results ?? []}
               getOptionLabel={(p: any) => p.description ?? p.stock_id ?? ""}
               inputValue={search}

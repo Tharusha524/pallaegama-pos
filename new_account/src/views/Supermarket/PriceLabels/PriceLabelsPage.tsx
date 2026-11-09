@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { appendCloseMatches, toSinhalaSearch } from "../../../utils/singlishSearch";
 import { getItemCategories } from "../../../api/ItemCategories/ItemCategoriesApi";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -24,6 +23,7 @@ import Breadcrumb from "../../../components/BreadCrumb";
 import { getItems } from "../../../api/Item/ItemApi";
 import { getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 const RETAIL_SALES_TYPE_ID = 3;
 const LKR_CURRENCY_ID = 8;
@@ -102,23 +102,6 @@ export default function PriceLabelsPage() {
     !categoryFilter || String(i.category_id) === String(categoryFilter)
   );
 
-  // Typing in the Product box searches name, stock ID and barcode — plus
-  // Singlish, same as POS Checkout ("kakar" also matches "කැකර්").
-  const filterProductOptions = (options: any[], { inputValue }: { inputValue: string }) => {
-    const term = inputValue.trim().toLowerCase();
-    if (!term) return options;
-    const sinhala = toSinhalaSearch(inputValue);
-    const exact = options.filter((i: any) => {
-      const name = String(i.description ?? "").toLowerCase();
-      const label = `${i.description ?? ""} ${i.stock_id ? `(${i.stock_id})` : ""}`.toLowerCase();
-      return name.includes(term)
-        || label.includes(term)
-        || String(i.stock_id ?? "").toLowerCase().includes(term)
-        || String(i.barcode ?? "").includes(inputValue.trim())
-        || (!!sinhala && name.includes(sinhala));
-    });
-    return appendCloseMatches(options, exact, inputValue);
-  };
 
   const addLine = () => {
     if (!pendingProduct) return;
@@ -238,10 +221,9 @@ export default function PriceLabelsPage() {
 
             {/* Add product row — the Product box is also the search box */}
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
-              <Autocomplete
+              <ItemAutocomplete
                 sx={{ flex: 1, minWidth: 240 }}
                 options={filteredItems}
-                filterOptions={filterProductOptions}
                 getOptionLabel={(i: any) => `${i.description ?? ""} ${i.stock_id ? `(${i.stock_id})` : ""}`}
                 isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
                 value={pendingProduct}

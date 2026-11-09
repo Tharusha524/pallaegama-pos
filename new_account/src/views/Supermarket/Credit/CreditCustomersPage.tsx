@@ -1,16 +1,15 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Table, TableHead, TableRow,
-  TableCell, TableBody, TableContainer, Paper, Typography, Stack, FormControlLabel, Checkbox, MenuItem,
+  TableCell, TableBody, TableContainer, Paper, Typography, Stack, FormControlLabel, Checkbox,
 } from "@mui/material";
 import { FormPageLayout } from "../../../components/Layout/FormPageLayout";
 import PageTitle from "../../../components/PageTitle";
 import Breadcrumb from "../../../components/BreadCrumb";
 import PageLoader from "../../../components/PageLoader";
 import { getCreditCustomers, setCreditLimit, postOpeningCreditBalance } from "../../../api/Credit/creditApi";
-import { getChartMasters } from "../../../api/GLAccounts/ChartMasterApi";
 import { notify } from "../../../services/notificationService";
 
 const money = (n: any) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,9 +17,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-// Equity accounts (Share Capital / Retained Earnings) — the other side of an opening balance.
-const EQUITY_TYPES = [5, 6];
-const DEFAULT_OPENING_ACCOUNT = "1330";
+const DEFAULT_OPENING_ACCOUNT = "1300";
 
 // Registered customers who buy on credit: set their credit limit and enter
 // what they already owed before the system (opening credit balance).
@@ -35,11 +32,6 @@ export default function CreditCustomersPage() {
   const [opening, setOpening] = useState({ amount: "", tran_date: today(), credit_account: DEFAULT_OPENING_ACCOUNT, memo: "" });
 
   const { data: customers, isLoading } = useQuery({ queryKey: ["credit-customers"], queryFn: getCreditCustomers });
-  const { data: accounts } = useQuery({ queryKey: ["chart-masters"], queryFn: getChartMasters });
-  const equityAccounts = useMemo(
-    () => (accounts ?? []).filter((a: any) => EQUITY_TYPES.includes(Number(a.account_type?.id ?? a.account_type))),
-    [accounts]
-  );
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["credit-customers"] });
@@ -158,16 +150,11 @@ export default function CreditCustomersPage() {
         <DialogTitle>Opening Credit Balance — {openingFor?.name}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            What this customer already owed before the system. Saved as a journal entry: Trade Debtors (this customer) is debited, the account below is credited.
+            What this customer already owed before the system. Saved as a journal entry: Trade Debtors (this customer) is debited, Investment (1300) is credited.
           </Typography>
           <Stack spacing={2}>
             <TextField autoFocus size="small" type="number" label="Amount owed (LKR)" value={opening.amount} onChange={(e) => setOpening({ ...opening, amount: e.target.value })} />
             <TextField size="small" type="date" label="Date" InputLabelProps={{ shrink: true }} value={opening.tran_date} onChange={(e) => setOpening({ ...opening, tran_date: e.target.value })} />
-            <TextField select size="small" label="Credit account" value={opening.credit_account} onChange={(e) => setOpening({ ...opening, credit_account: e.target.value })}>
-              {equityAccounts.map((a: any) => (
-                <MenuItem key={a.account_code} value={a.account_code}>{a.account_code} — {a.account_name}</MenuItem>
-              ))}
-            </TextField>
             <TextField size="small" label="Note (optional)" value={opening.memo} onChange={(e) => setOpening({ ...opening, memo: e.target.value })} />
           </Stack>
         </DialogContent>

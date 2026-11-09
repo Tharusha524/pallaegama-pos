@@ -14,6 +14,7 @@ import PageLoader from "../../../components/PageLoader";
 import { getInventoryAudits, createInventoryAudit, addInventoryAuditItem, completeInventoryAudit } from "../../../api/Pos/posOpsApi";
 import { getItems } from "../../../api/Item/ItemApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 
 export default function InventoryAuditsPage() {
   const queryClient = useQueryClient();
@@ -126,7 +127,7 @@ export default function InventoryAuditsPage() {
         <DialogTitle>Count Items — {currentAudit?.audit_ref}</DialogTitle>
         <DialogContent>
           <Stack direction="row" spacing={2} sx={{ mt: 1, mb: 2 }}>
-            <Autocomplete
+            <ItemAutocomplete
               sx={{ flex: 1 }}
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}

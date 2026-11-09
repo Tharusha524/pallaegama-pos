@@ -41,6 +41,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useHomeCurrency } from "../../../hooks/useHomeCurrency";
 import { notify } from "../../../services/notificationService";
 import { useOnlineStatus, getOrCreateTerminalId } from "../../../offline/useOnlineStatus";
+import ItemAutocomplete from "../../../components/ItemAutocomplete";
 import {
   isDesktopApp, saveReferenceData, getReferenceData,
   listProducts as listOfflineProducts, queuePendingStockDamage, listAllPendingStockDamages,
@@ -508,20 +509,6 @@ function StockDamageTab() {
     : offlineStockDetails.length > 0 ? offlineStockDetails
     : offlineItems;
 
-  // Product search: name, stock ID, barcode — plus Singlish ("kakar" → "කැකර්").
-  const filterDamageProducts = (options: any[], { inputValue }: { inputValue: string }) => {
-    const term = inputValue.trim().toLowerCase();
-    if (!term) return options;
-    const sinhala = toSinhalaSearch(inputValue);
-    const exact = options.filter((i: any) => {
-      const name = String(i.description ?? "").toLowerCase();
-      return name.includes(term)
-        || String(i.stock_id ?? "").toLowerCase().includes(term)
-        || String(i.barcode ?? "").includes(inputValue.trim())
-        || (!!sinhala && name.includes(sinhala));
-    });
-    return appendCloseMatches(options, exact, inputValue);
-  };
 
   const createMutation = useMutation({
     mutationFn: recordStockDamage,
@@ -656,10 +643,9 @@ function StockDamageTab() {
         <DialogTitle>Record Stock Damage</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Autocomplete
+            <ItemAutocomplete
               options={items ?? []}
               getOptionLabel={(i: any) => i.description ?? i.stock_id ?? ""}
-              filterOptions={filterDamageProducts}
               isOptionEqualToValue={(a: any, b: any) => String(a?.stock_id) === String(b?.stock_id)}
               value={form.stock_id}
               onChange={(_, val) => setForm({ ...form, stock_id: val, batch_id: "" })}
