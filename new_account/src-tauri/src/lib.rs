@@ -269,6 +269,32 @@ pub fn run() {
       ALTER TABLE customers ADD COLUMN customer_json TEXT NOT NULL DEFAULT '{}';
     "#,
     kind: MigrationKind::Up,
+  }, Migration {
+    version: 6,
+    // Money taken at the till for a customer's OLD credit bills while
+    // offline. Only the amount is queued — which bills it settles is worked
+    // out at sync time against the server's real open bills, so a stale
+    // offline copy can never mis-allocate it. Same uuid + terminal id
+    // approach as pending_sales, so it posts exactly once.
+    description: "create offline credit payment queue",
+    sql: r#"
+      CREATE TABLE IF NOT EXISTS pending_credit_payments (
+        uuid TEXT PRIMARY KEY,
+        terminal_id TEXT NOT NULL,
+        cashier_id TEXT NOT NULL,
+        debtor_no TEXT NOT NULL,
+        branch_code TEXT NOT NULL,
+        bank_account_id TEXT NOT NULL,
+        amount REAL NOT NULL,
+        tran_date TEXT NOT NULL,
+        comments TEXT,
+        created_at TEXT NOT NULL,
+        synced_at TEXT,
+        sync_error TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_pending_credit_payments_synced ON pending_credit_payments(synced_at);
+    "#,
+    kind: MigrationKind::Up,
   }];
 
   #[cfg(windows)]

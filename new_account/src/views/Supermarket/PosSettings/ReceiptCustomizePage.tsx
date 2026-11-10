@@ -62,6 +62,10 @@ const DEFAULT_RS = {
   font_header: "medium", font_items: "medium", font_totals: "medium", font_footer: "small",
   font_col_headers: DEFAULT_COL_HEADER_PX,
   font_invoice_info: 13,
+  // Receipt length: the gap above each item row, and the gaps around the
+  // totals / payment blocks. Lower = shorter receipt, less paper.
+  row_spacing: 6,
+  section_spacing: 8,
   weight_shop_name: 800, weight_address: 400, weight_col_headers: 700,
   weight_item_name: 700, weight_unit_price: 400, weight_qty_line: 400,
   weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
@@ -70,6 +74,8 @@ const DEFAULT_RS = {
   show_credit_due: true, label_credit_due: "CREDIT (TO PAY)", weight_credit_due: 700,
   show_previous_balance: true, label_previous_balance: "PREVIOUS BALANCE", weight_previous_balance: 700,
   show_total_owed: true, label_total_owed: "TOTAL OWED", weight_total_owed: 700,
+  show_old_bills_paid: true, label_old_bills_paid: "OLD BILLS PAID", weight_old_bills_paid: 700,
+  show_balance_after: true, label_balance_after: "BALANCE NOW", weight_balance_after: 700,
   custom_fields: [] as CustomReceiptField[],
   // Editable labels
   label_invoice_id: "Invoice ID",
@@ -120,6 +126,10 @@ const DUMMY_CHANGE = 41;
 
 function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; company: any; logoSrc: string | null }) {
   const barcodeRef = useRef<SVGSVGElement>(null);
+  // Must match PosReceiptDialog exactly, or the preview lies about the length.
+  const rowGap = Number(rs.row_spacing ?? 6);
+  const secGap = Number(rs.section_spacing ?? 8);
+  const secPx = (factor = 1) => `${secGap * factor}px`;
 
   useEffect(() => {
     if (rs.show_barcode && barcodeRef.current) {
@@ -175,7 +185,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
       {renderCustomFields(rs.custom_fields ?? [], "after_header")}
 
-      <Stack spacing={0.25} sx={{ my: 1 }}>
+      <Stack spacing={0.25} sx={{ my: secPx() }}>
         {rs.show_invoice_id && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{rs.label_invoice_id}: 26</Typography>}
         {rs.show_date_time && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{`${rs.label_date_time ?? "Date-Time"}  :  ${now.toLocaleDateString("en-GB").replace(/\//g, "-")}  ${now.toLocaleTimeString()}`}</Typography>}
         {rs.show_cashier && <Typography fontWeight={rs.weight_address} fontSize={fontPx(rs.font_invoice_info)}>{rs.label_cashier}: Admin</Typography>}
@@ -188,7 +198,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
 
       {/* Items */}
-      <Box sx={{ my: 1 }}>
+      <Box sx={{ my: secPx() }}>
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: fontPx(rs.font_items) - 1 }}>
           <colgroup>
             <col style={{ width: "25%" }} />
@@ -211,7 +221,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
               return (
                 <>
                   <tr key={`name-${i}`}>
-                    <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: fontPx(rs.font_items) + 1 }}>
+                    <td colSpan={4} style={{ paddingTop: rowGap, fontWeight: rs.weight_item_name, fontSize: fontPx(rs.font_items) + 1 }}>
                       {(l as any).stock_id ? `${(l as any).stock_id} - ${l.description}` : l.description}
                       {rs.show_offer_applied && i === 1 && (
                         <div style={{ fontSize: fontPx(rs.font_items) - 1, color: "green" }}>Offer: Member 5% Off</div>
@@ -234,7 +244,7 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
       {renderCustomFields(rs.custom_fields ?? [], "after_items")}
 
-      <Stack spacing={0.25} sx={{ my: 1 }}>
+      <Stack spacing={0.25} sx={{ my: secPx() }}>
         {discountTotal > 0.001 && (
           <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals), fontWeight: rs.weight_subtotal }}>
             <span>{rs.label_discount}</span><span>-{discountTotal.toFixed(2)}</span>
@@ -244,15 +254,15 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
 
       <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
 
-      <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", mt: secPx() }}>
         <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_total}</Typography>
         <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{DUMMY_TOTAL.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
       </Box>
 
       {rs.show_payment_info && (
         <>
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
-          <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: secPx(1.5) }} />
+          <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: secPx(1.5), display: "block" }}>{rs.label_payment_info}</Typography>
           <Stack spacing={0.25} sx={{ mt: 0.5 }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
               <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
@@ -295,6 +305,21 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
                           <Typography fontWeight={rs.weight_total_owed ?? 700} fontSize={fontPx(rs.font_total_owed ?? rs.font_totals)}>600.00</Typography>
                         </Box>
             )}
+            {(rs.show_old_bills_paid !== false || rs.show_balance_after !== false) && (
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", my: 0.5 }} />
+            )}
+            {rs.show_old_bills_paid !== false && (
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_old_bills_paid ?? rs.font_totals) }}>
+                <span style={{ fontWeight: rs.weight_old_bills_paid ?? 700 }}>{rs.label_old_bills_paid ?? "OLD BILLS PAID"}</span>
+                <Typography fontWeight={rs.weight_old_bills_paid ?? 700} fontSize={fontPx(rs.font_old_bills_paid ?? rs.font_totals)}>400.00</Typography>
+              </Box>
+            )}
+            {rs.show_balance_after !== false && (
+              <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_balance_after ?? rs.font_totals) }}>
+                <span style={{ fontWeight: rs.weight_balance_after ?? 700 }}>{rs.label_balance_after ?? "BALANCE NOW"}</span>
+                <Typography fontWeight={rs.weight_balance_after ?? 700} fontSize={fontPx(rs.font_balance_after ?? rs.font_totals)}>200.00</Typography>
+              </Box>
+            )}
           </Stack>
           <Box sx={{ my: 0.5 }}>
             <Divider sx={{ borderStyle: "solid", borderBottomWidth: 1.5, borderColor: "text.primary" }} />
@@ -314,14 +339,14 @@ function ReceiptPreview({ rs, company, logoSrc }: { rs: Record<string, any>; com
 
       {rs.show_customer_name && (
         <>
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
-          <Typography fontWeight={rs.weight_customer} fontSize={fontPx(rs.font_footer) + 2} sx={{ mt: 1.5, display: "block" }}>
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: secPx(1.5) }} />
+          <Typography fontWeight={rs.weight_customer} fontSize={fontPx(rs.font_footer) + 2} sx={{ mt: secPx(1.5), display: "block" }}>
             {rs.label_customer} VINOD JAYASUNDARA
           </Typography>
         </>
       )}
 
-      <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: 1.5 }} />
+      <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1.5, borderColor: "text.primary", mt: secPx(1.5) }} />
 
       {rs.show_thank_you && (
         <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={fontPx(rs.font_footer) + 3} sx={{ mt: 2 }}>
@@ -391,6 +416,25 @@ function WeightSlider({ label, value, onChange }: { label: string; value: number
         marks={WEIGHT_MARKS}
         onChange={(_, v) => onChange(v as number)}
         valueLabelDisplay="off"
+        size="small"
+        sx={{ mt: 0.5, mb: 1.5 }}
+      />
+    </Box>
+  );
+}
+
+// Receipt length. Lower values print a shorter receipt and use less paper.
+function SpacingSlider({ label, value, fallback, onChange }: { label: string; value: any; fallback: number; onChange: (v: number) => void }) {
+  const current = Number(value ?? fallback);
+  return (
+    <Box sx={{ px: 1 }}>
+      <Typography variant="caption" color="text.secondary">{label} — {current}px</Typography>
+      <Slider
+        value={current}
+        min={0} max={16} step={1}
+        marks={[{ value: 0, label: "Tight" }, { value: fallback, label: "Normal" }, { value: 16, label: "Wide" }]}
+        onChange={(_, v) => onChange(v as number)}
+        valueLabelDisplay="auto"
         size="small"
         sx={{ mt: 0.5, mb: 1.5 }}
       />
@@ -503,6 +547,18 @@ export default function ReceiptCustomizePage() {
                 <WeightSlider label="Item name weight" value={rs.weight_item_name} onChange={(v) => set("weight_item_name", v)} />
                 <WeightSlider label="Unit price weight" value={rs.weight_unit_price} onChange={(v) => set("weight_unit_price", v)} />
                 <WeightSlider label="Qty × line weight" value={rs.weight_qty_line} onChange={(v) => set("weight_qty_line", v)} />
+                <Divider sx={{ my: 0.5 }} />
+                <Typography variant="caption" color="text.secondary" sx={{ px: 1, fontWeight: 700 }}>
+                  Receipt length
+                </Typography>
+                <SpacingSlider
+                  label="Space between item rows" value={rs.row_spacing} fallback={6}
+                  onChange={(v) => set("row_spacing", v)}
+                />
+                <SpacingSlider
+                  label="Space around totals &amp; payment" value={rs.section_spacing} fallback={8}
+                  onChange={(v) => set("section_spacing", v)}
+                />
               </Stack>
             </CardContent>
           </Card>
@@ -536,6 +592,14 @@ export default function ReceiptCustomizePage() {
                 <SectionToggle label="Show Total Owed" checked={rs.show_total_owed !== false} onChange={(v) => set("show_total_owed", v)} />
                 <FontSizePicker label="Total Owed font size" value={rs.font_total_owed ?? rs.font_totals} onChange={(v) => set("font_total_owed", v)} />
                 <WeightSlider label="Total Owed weight" value={rs.weight_total_owed ?? 700} onChange={(v) => set("weight_total_owed", v)} />
+                <Divider sx={{ my: 0.5 }} />
+                <Typography variant="caption" color="text.secondary">When old bills are paid at the till</Typography>
+                <SectionToggle label="Show Old Bills Paid" checked={rs.show_old_bills_paid !== false} onChange={(v) => set("show_old_bills_paid", v)} />
+                <FontSizePicker label="Old Bills Paid font size" value={rs.font_old_bills_paid ?? rs.font_totals} onChange={(v) => set("font_old_bills_paid", v)} />
+                <WeightSlider label="Old Bills Paid weight" value={rs.weight_old_bills_paid ?? 700} onChange={(v) => set("weight_old_bills_paid", v)} />
+                <SectionToggle label="Show Balance Now" checked={rs.show_balance_after !== false} onChange={(v) => set("show_balance_after", v)} />
+                <FontSizePicker label="Balance Now font size" value={rs.font_balance_after ?? rs.font_totals} onChange={(v) => set("font_balance_after", v)} />
+                <WeightSlider label="Balance Now weight" value={rs.weight_balance_after ?? 700} onChange={(v) => set("weight_balance_after", v)} />
               </Stack>
             </CardContent>
           </Card>
@@ -612,6 +676,8 @@ export default function ReceiptCustomizePage() {
                   { key: "label_credit_due", placeholder: "CREDIT (TO PAY)" },
                   { key: "label_previous_balance", placeholder: "PREVIOUS BALANCE" },
                   { key: "label_total_owed", placeholder: "TOTAL OWED" },
+                  { key: "label_old_bills_paid", placeholder: "OLD BILLS PAID" },
+                  { key: "label_balance_after", placeholder: "BALANCE NOW" },
                 ].map(({ key, placeholder }) => (
                   <TextField
                     key={key}

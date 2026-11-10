@@ -36,6 +36,8 @@ import { createQuotation } from "../../../api/Quotations/QuotationsApi";
 import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
 import { getApplicableOffers } from "../../../api/Loyalty/loyaltyApi";
 import { getCustomerCreditSummary } from "../../../api/Customer/CustomerCreditApi";
+import { getCreditOpenBills, getCreditCustomers } from "../../../api/Credit/creditApi";
+import { createCustomerPayment } from "../../../api/SalesPayment/SalesPaymentApi";
 import { lookupBarcode, getLowStock, getPosShifts, getMultiPriceProducts, getWholesaleBatchProducts, getPendingPriceQty, getCostFloors, type BatchPriceGroup } from "../../../api/Pos/posApi";
 import { getStockList } from "../../../api/Inventory/StockListApi";
 import { getSalesPricing, getSalesPricingByStockId } from "../../../api/SalesPricing/SalesPricingApi";
@@ -66,7 +68,7 @@ import { cacheReceiptBranding } from "../../../offline/receiptBranding";
 import {
   isDesktopApp, queuePendingSale, saveProductsSnapshot, saveCustomersSnapshot,
   listProducts as listOfflineProducts, listCustomers, findProductByBarcode,
-  saveReferenceData, getReferenceData,
+  saveReferenceData, getReferenceData, queuePendingCreditPayment,
 } from "../../../offline/db";
 import { syncPendingSales } from "../../../offline/sync";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
@@ -308,6 +310,8 @@ export default function PosCheckoutPage() {
   // Credit sale: whatever the payment lines don't cover stays owing on the
   // customer's account (registered customers only, online only).
   const [creditSale, setCreditSale] = useState(false);
+  const [settleOld, setSettleOld] = useState(false);
+  const [settleAmount, setSettleAmount] = useState("");
 
   // Held sales (park / recall)
   const [recallOpen, setRecallOpen] = useState(false);
@@ -792,20 +796,90 @@ export default function PosCheckoutPage() {
     () => paymentLines.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
     [paymentLines]
   );
-  const changeDue = Math.max(0, totalPaid - grandTotal);
-  const balanceRemaining = Math.max(0, grandTotal - totalPaid);
-
   const isWalkInCustomer = !customer || String(customer.name ?? "").trim().toLowerCase() === "walk-in customer";
-  const creditAmount = creditSale ? balanceRemaining : 0;
   const { data: creditSummary } = useQuery({
     queryKey: ["customer-credit", customer?.debtor_no],
     queryFn: () => getCustomerCreditSummary(customer.debtor_no),
-    enabled: creditSale && !isWalkInCustomer,
+    enabled: !isWalkInCustomer && !!customer?.debtor_no,
   });
-  // A credit sale can't stay on when the customer goes back to Walk-in.
+  // Offline, the live credit summary can't be fetched — fall back to the
+  // balances cached the last time this till was online.
+  const [offlineBalances, setOfflineBalances] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    getReferenceData<Record<string, number>>("credit_balances").then((v) => v && setOfflineBalances(v)).catch(() => { });
+  }, []);
+  const { data: creditCustomerList } = useQuery({
+    queryKey: ["credit-customers"], queryFn: getCreditCustomers, refetchInterval: 5 * 60 * 1000,
+  });
+  useEffect(() => {
+    if (!isDesktopApp() || !Array.isArray(creditCustomerList)) return;
+    const map: Record<string, number> = {};
+    for (const c of creditCustomerList) map[String(c.debtor_no)] = Number(c.outstanding) || 0;
+    setOfflineBalances(map);
+    saveReferenceData("credit_balances", map).catch(() => { });
+  }, [creditCustomerList]);
+
+  const outstanding = creditSummary?.outstanding_balance != null
+    ? Number(creditSummary.outstanding_balance)
+    : Number(offlineBalances[String(customer?.debtor_no)] ?? 0);
+
+  // The customer's old unpaid bills, so money he pays toward them at the till
+  // can be allocated oldest first — the same order the Credit Payments page uses.
+  // Fetched as soon as a customer who owes money is picked — not when the box
+  // is ticked — so the list is already there when the cashier needs it.
+  const { data: openBills, isFetching: openBillsLoading } = useQuery({
+    queryKey: ["credit-open-bills", customer?.debtor_no],
+    queryFn: () => getCreditOpenBills(customer.debtor_no),
+    enabled: !isWalkInCustomer && !!customer?.debtor_no && outstanding > 0.01,
+  });
+
+  // Money the cashier takes pays the old bills first, then today's bill; what
+  // is left over after both is the change handed back. With no old-bill
+  // payment this is exactly the old behaviour (toOld = 0).
+  // Today's bill is settled first and the rest goes to the old bills, so a
+  // short tender never leaves today's sale unpaid. The typed old-bill amount
+  // is a maximum, not a requirement: if less is left over, it pays that.
+  // A credit sale is the one exception — today's bill is meant to stay
+  // unpaid, so everything the customer hands over goes to his old bills.
+  const oldAmount = settleOld ? Math.min(Number(settleAmount) || 0, outstanding) : 0;
+  const toOld = creditSale
+    ? Math.min(totalPaid, oldAmount)
+    : Math.min(Math.max(0, totalPaid - Math.min(totalPaid, grandTotal)), oldAmount);
+  const toInvoice = creditSale
+    ? Math.min(Math.max(0, totalPaid - toOld), grandTotal)
+    : Math.min(totalPaid, grandTotal);
+  const changeDue = Math.max(0, totalPaid - toOld - toInvoice);
+  const balanceRemaining = Math.max(0, grandTotal - toInvoice);
+  const totalToCollect = grandTotal + oldAmount;
+
+  const creditAmount = creditSale ? balanceRemaining : 0;
+  // A credit sale can't stay on when the customer goes back to Walk-in, and
+  // neither can a payment toward another customer's old bills.
   useEffect(() => {
     if (creditSale && isWalkInCustomer) setCreditSale(false);
   }, [creditSale, isWalkInCustomer]);
+  useEffect(() => {
+    setSettleOld(false);
+    setSettleAmount("");
+  }, [customer?.debtor_no]);
+
+  const toggleSettleOld = (on: boolean) => {
+    if (on && isWalkInCustomer) {
+      notify.error("Select a registered customer to pay old bills");
+      return;
+    }
+    if (on && outstanding <= 0.01) {
+      notify.error("This customer has no old credit bills to pay");
+      return;
+    }
+    setSettleOld(on);
+    const old = on ? outstanding : 0;
+    setSettleAmount(on ? outstanding.toFixed(2) : "");
+    setPaymentLines((prev) => prev.length === 1
+      ? [{ ...prev[0], amount: ((creditSale ? 0 : grandTotal) + old).toFixed(2) }]
+      : prev);
+  };
   const toggleCreditSale = (on: boolean) => {
     if (on && isWalkInCustomer) {
       notify.error("Select a registered customer for a credit sale");
@@ -818,7 +892,8 @@ export default function PosCheckoutPage() {
     setCreditSale(on);
     // On: the whole bill goes on credit unless the cashier types a part
     // payment. Off: back to the usual one cash line for the full total.
-    setPaymentLines((prev) => [{ ...prev[0], amount: on ? "0" : grandTotal.toFixed(2) }]);
+    // Money for old bills is collected either way, so it stays in the line.
+    setPaymentLines((prev) => [{ ...prev[0], amount: ((on ? 0 : grandTotal) + oldAmount).toFixed(2) }]);
   };
 
   // Focus search field on page load.
@@ -843,9 +918,16 @@ export default function PosCheckoutPage() {
 
   useEffect(() => {
     if (paymentLines.length === 1 && !creditSale) {
-      setPaymentLines((prev) => [{ ...prev[0], amount: grandTotal.toFixed(2) }]);
+      setPaymentLines((prev) => [{ ...prev[0], amount: (grandTotal + oldAmount).toFixed(2) }]);
     }
   }, [grandTotal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Typing a different old-bill amount re-fills the single payment line, so
+  // the cashier sees what to collect without adding it up by hand.
+  useEffect(() => {
+    if (!settleOld || paymentLines.length !== 1) return;
+    setPaymentLines((prev) => [{ ...prev[0], amount: ((creditSale ? 0 : grandTotal) + oldAmount).toFixed(2) }]);
+  }, [oldAmount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addItemToCart = (
     item: any,
@@ -1380,6 +1462,8 @@ export default function PosCheckoutPage() {
     setAppliedLoyaltyRedemption(null);
     setPaymentLines([{ id: "p1", bank_account_id: cashAccount?.id ?? "", amount: "0" }]);
     setCreditSale(false);
+    setSettleOld(false);
+    setSettleAmount("");
     // Reset to Walk-in for the next sale — never carry a customer over.
     const walkIn = (customers ?? []).find((c: any) => c.name === "Walk-in Customer");
     setCustomer(walkIn ?? null);
@@ -1444,8 +1528,15 @@ export default function PosCheckoutPage() {
         receiptPayments.push({ method: "CREDIT (TO PAY)", amount: Number(balanceRemaining.toFixed(2)) });
       }
       const previousBalance = isCreditBill ? Number(Number(creditSummary?.outstanding_balance ?? 0).toFixed(2)) : undefined;
+      // Money of this tender that went to the customer's old bills, and what
+      // he still owes afterwards — without these the receipt counts the
+      // old-bill money as change.
+      const oldBillsPaid = toOld > 0.001 ? Number(toOld.toFixed(2)) : undefined;
+      const balanceAfter = oldBillsPaid != null
+        ? Number((Math.max(0, outstanding - toOld) + creditAmount).toFixed(2))
+        : undefined;
       if (isCreditBill) queryClient.invalidateQueries({ queryKey: ["customer-credit"] });
-      setLastReceipt({ ...result, previousBalance, lines: cart, subtotal: grandTotal, customer, payments: receiptPayments, cashReceived: totalPaid, couponCode: appliedCoupon?.coupon_code, voucherCode: appliedVoucher?.code, shift_id: currentShiftId });
+      setLastReceipt({ ...result, previousBalance, oldBillsPaid, balanceAfter, lines: cart, subtotal: grandTotal, customer, payments: receiptPayments, cashReceived: totalPaid, couponCode: appliedCoupon?.coupon_code, voucherCode: appliedVoucher?.code, shift_id: currentShiftId });
 
       // Exact copy of this receipt for future reprints — sent in the background a
       // moment later, outside the receipt/print code, failures ignored.
@@ -1466,6 +1557,8 @@ export default function PosCheckoutPage() {
         paperSize: posSettings?.receipt_paper_size ?? null,
         receiptSettings: buildReceiptSettings(),
         previousBalance: previousBalance ?? null,
+        oldBillsPaid: oldBillsPaid ?? null,
+        balanceAfter: balanceAfter ?? null,
       };
       if (result?.trans_no) {
         setTimeout(() => { savePosReceiptCopy(result.trans_no, receiptCopy).catch(() => {}); }, 2000);
@@ -1640,6 +1733,29 @@ export default function PosCheckoutPage() {
       }
     }
 
+    // Old bills are settled out of the same money, so it has to be there.
+    if (settleOld) {
+      if (oldAmount <= 0.01) {
+        notify.error("Enter how much of the old bills the customer is paying");
+        return;
+      }
+      // Online, the payment is matched to his bills right away, so the list
+      // has to be here. Offline it is queued and matched at sync instead.
+      if (!isOffline && (openBillsLoading || !openBills?.bills)) {
+        notify.error("Loading his bills — try again in a second");
+        return;
+      }
+      // Ticking the box but handing over nothing beyond today's bill would
+      // settle no old bill at all — say so instead of finishing quietly.
+      if (toOld <= 0.01) {
+        notify.error(
+          `Nothing left for the old bills — he still owes ${formatCurrency(outstanding, 2)}.`
+          + ` Take more cash, or untick "Pay old credit bills".`
+        );
+        return;
+      }
+    }
+
     // The one place quick-discount/coupon/voucher become real accounting
     // numbers: fold the combined percent into each line's discount_percent
     // (multiplicatively, so a line's own discount and the cart-level
@@ -1667,13 +1783,11 @@ export default function PosCheckoutPage() {
     // line(s), last one first, since change is never given out of a card
     // payment. Nothing on screen changes: the cashier still types the note
     // and the receipt still prints the same change.
-    const settledPayments = (() => {
+    const { settledPayments, oldBillPayments } = (() => {
       const lines = validPaymentLines.map((p) => ({
         bank_account_id: Number(p.bank_account_id),
         amount: Number(p.amount) || 0,
       }));
-      let excess = lines.reduce((sum, l) => sum + l.amount, 0) - grandTotal;
-      if (excess <= 0.001) return lines;
 
       const isCash = (id: number) => {
         const acct = (bankAccounts ?? []).find((a: any) => a.id === id);
@@ -1682,16 +1796,34 @@ export default function PosCheckoutPage() {
       // Cash lines first (last entered first), then anything left over —
       // an over-tendered card-only sale shouldn't post more than the bill.
       const order = [
-        ...lines.map((l, i) => i).filter((i) => isCash(lines[i].bank_account_id)).reverse(),
-        ...lines.map((l, i) => i).filter((i) => !isCash(lines[i].bank_account_id)).reverse(),
+        ...lines.map((_l, i) => i).filter((i) => isCash(lines[i].bank_account_id)).reverse(),
+        ...lines.map((_l, i) => i).filter((i) => !isCash(lines[i].bank_account_id)).reverse(),
       ];
+
+      // Drop the change first: only what the shop keeps may be posted.
+      let excess = lines.reduce((sum, l) => sum + l.amount, 0) - (toOld + toInvoice);
       for (const i of order) {
         if (excess <= 0.001) break;
         const take = Math.min(lines[i].amount, excess);
         lines[i].amount = Number((lines[i].amount - take).toFixed(2));
         excess = Number((excess - take).toFixed(2));
       }
-      return lines.filter((l) => l.amount > 0);
+
+      // Then take the old-bill money off the top — the rest settles today's
+      // invoice, so neither side is counted twice.
+      let need = toOld;
+      const forOldBills: { bank_account_id: number; amount: number }[] = [];
+      for (const i of order) {
+        if (need <= 0.001) break;
+        const take = Math.min(lines[i].amount, need);
+        if (take > 0.001) {
+          forOldBills.push({ bank_account_id: lines[i].bank_account_id, amount: Number(take.toFixed(2)) });
+          lines[i].amount = Number((lines[i].amount - take).toFixed(2));
+          need = Number((need - take).toFixed(2));
+        }
+      }
+
+      return { settledPayments: lines.filter((l) => l.amount > 0.001), oldBillPayments: forOldBills };
     })();
 
     // Flags any line where the cashier typed a different unit price than
@@ -1758,6 +1890,10 @@ export default function PosCheckoutPage() {
         paperSize: posSettings?.receipt_paper_size ?? null,
         receiptSettings: buildReceiptSettings(),
         offlineNo,
+        oldBillsPaid: toOld > 0.001 ? Number(toOld.toFixed(2)) : null,
+        balanceAfter: toOld > 0.001
+          ? Number((Math.max(0, outstanding - toOld) + creditAmount).toFixed(2))
+          : null,
       };
       queuePendingSale({
         uuid,
@@ -1771,6 +1907,28 @@ export default function PosCheckoutPage() {
         notify.error("Could not save this sale offline — please retry");
       });
 
+      // Old-bill money taken at the till: queued on its own, with only the
+      // amount. Which bills it settles is worked out at sync time against
+      // the server's real bills, so the cached balance can't mis-allocate it.
+      if (settleOld && oldBillPayments.length > 0) {
+        for (const line of oldBillPayments) {
+          queuePendingCreditPayment({
+            uuid: crypto.randomUUID(),
+            terminal_id: getOrCreateTerminalId(),
+            cashier_id: String(user?.id ?? user?.email ?? "unknown"),
+            debtor_no: String(customer.debtor_no),
+            branch_code: String(branchCode),
+            bank_account_id: String(line.bank_account_id),
+            amount: Number(line.amount.toFixed(2)),
+            tran_date: new Date().toISOString().slice(0, 10),
+            comments: `POS old bill payment (offline) - ${customer.name}`,
+            created_at: new Date().toISOString(),
+          }).catch(() => {
+            notify.error("Could not save the old-bill payment offline — take it in Finance → Credit Payments");
+          });
+        }
+      }
+
       notify.success("Sale saved offline — it will sync automatically once the connection is back");
       setIsQuoteReceipt(false);
       setLastReceipt({
@@ -1780,6 +1938,10 @@ export default function PosCheckoutPage() {
         customer,
         payments: receiptPayments,
         cashReceived: totalPaid,
+        oldBillsPaid: toOld > 0.001 ? Number(toOld.toFixed(2)) : undefined,
+        balanceAfter: toOld > 0.001
+          ? Number((Math.max(0, outstanding - toOld) + creditAmount).toFixed(2))
+          : undefined,
         couponCode: appliedCoupon?.coupon_code,
         voucherCode: appliedVoucher?.code,
         shift_id: currentShiftId,
@@ -1794,6 +1956,59 @@ export default function PosCheckoutPage() {
 
     checkoutMutation.mutate(payload, {
       onSuccess: async (result) => {
+        // Money the customer handed over for his OLD bills — posted as the
+        // same customer payment the Credit Payments page makes, allocated
+        // oldest bill first. Today's invoice above is untouched by it.
+        if (settleOld && oldBillPayments.length > 0) {
+          try {
+            const bills: any[] = openBills?.bills ?? [];
+            // How much of each bill earlier payment lines already covered, so
+            // two lines never allocate the same money twice.
+            const used = new Map<number, number>();
+            for (const line of oldBillPayments) {
+              let left = line.amount;
+              const allocations: { trans_no_to: number; trans_type_to: number; amt: number }[] = [];
+              for (const b of bills) {
+                if (left <= 0.005) break;
+                const transNo = Number(b.trans_no);
+                const owing = Number(b.owing) - (used.get(transNo) ?? 0);
+                if (owing <= 0.005) continue;
+                const amt = Math.min(left, owing);
+                allocations.push({ trans_no_to: transNo, trans_type_to: 10, amt: Number(amt.toFixed(2)) });
+                used.set(transNo, (used.get(transNo) ?? 0) + amt);
+                left = Number((left - amt).toFixed(2));
+              }
+              const post = () => createCustomerPayment({
+                debtor_no: Number(customer.debtor_no),
+                branch_code: Number(branchCode),
+                tran_date: new Date().toISOString().slice(0, 10),
+                bank_account_id: line.bank_account_id,
+                amount: Number(line.amount.toFixed(2)),
+                comments: `POS old bill payment - ${customer.name}`,
+                allocations,
+              } as any);
+              // One retry: most failures here are a brief network blip.
+              try {
+                await post();
+              } catch {
+                await post();
+              }
+            }
+            notify.success(`Old bills paid: ${formatCurrency(toOld, 2)}`);
+            queryClient.invalidateQueries({ queryKey: ["credit-open-bills"] });
+            queryClient.invalidateQueries({ queryKey: ["credit-customers"] });
+            queryClient.invalidateQueries({ queryKey: ["customer-credit"] });
+          } catch {
+            // The receipt was already built claiming the old bills were paid.
+            // It wasn't — take those rows off before it is printed.
+            setLastReceipt((prev: any) => prev ? { ...prev, oldBillsPaid: undefined, balanceAfter: undefined } : prev);
+            notify.error(
+              `The sale was saved, but the old-bill payment of ${formatCurrency(toOld, 2)} failed`
+              + ` — take it in Finance → Credit Payments`
+            );
+          }
+        }
+
         // Best-effort: keep each variant's supplementary stock count in sync.
         // The base product's real stock is already decremented by the
         // invoice/delivery flow above — this never touches accounting.
@@ -2341,9 +2556,9 @@ export default function PosCheckoutPage() {
                       if (e.key !== "Enter") return;
                       e.preventDefault();
                       if (selectedItemBelowCost()) return;
-                      if (qtyFirstMode) {
-                        addToCart();
-                      } else if (posSettings?.focus_after_item_select === "selling_price") {
+                      if (qtyFirstMode || posSettings?.focus_after_item_select === "selling_price") {
+                        // Enter never adds from the price field - it returns to Qty, so the
+                        // last key before an item is added is always Enter on Qty.
                         qtyInputRef.current?.focus(); qtyInputRef.current?.select();
                       } else {
                         lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select();
@@ -2672,6 +2887,28 @@ export default function PosCheckoutPage() {
               </Typography>
             )}
           </Stack>
+          {!isWalkInCustomer && outstanding > 0.01 && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <FormControlLabel
+                control={<Checkbox size="small" checked={settleOld} onChange={(e) => toggleSettleOld(e.target.checked)} />}
+                label={<Typography variant="caption">Pay old bills ({formatCurrency(outstanding, 2)})</Typography>}
+              />
+              {settleOld && (
+                <>
+                  <TextField
+                    size="small" type="number" label="Paying"
+                    value={settleAmount}
+                    onChange={(e) => setSettleAmount(e.target.value)}
+                    inputProps={{ min: 0, max: outstanding, step: "0.01" }}
+                    sx={{ width: 120 }}
+                  />
+                  <Typography variant="caption" fontWeight={700} color="success.dark">
+                    Collect {formatCurrency(creditSale ? oldAmount : totalToCollect, 2)} · old bills {formatCurrency(toOld, 2)}
+                  </Typography>
+                </>
+              )}
+            </Stack>
+          )}
           {!creditSale && balanceRemaining > 0.01 && (
             <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.25 }}>{formatCurrency(balanceRemaining, 2)} still needs to be covered</Typography>
           )}
@@ -2831,9 +3068,9 @@ export default function PosCheckoutPage() {
                           if (e.key !== "Enter") return;
                           e.preventDefault();
                           if (selectedItemBelowCost()) return;
-                          if (qtyFirstMode) {
-                            addToCart();
-                          } else if (posSettings?.focus_after_item_select === "selling_price") {
+                          if (qtyFirstMode || posSettings?.focus_after_item_select === "selling_price") {
+                            // Enter never adds from the price field - it returns to Qty, so the
+                            // last key before an item is added is always Enter on Qty.
                             qtyInputRef.current?.focus(); qtyInputRef.current?.select();
                           } else {
                             lineDiscountInputRef.current?.focus(); lineDiscountInputRef.current?.select();
@@ -3386,6 +3623,40 @@ export default function PosCheckoutPage() {
                 </Box>
               )}
 
+              {!isWalkInCustomer && outstanding > 0.01 && (
+                <>
+                  <FormControlLabel
+                    control={<Checkbox size="small" checked={settleOld} onChange={(e) => toggleSettleOld(e.target.checked)} />}
+                    label={`Pay old credit bills (owes ${formatCurrency(outstanding, 2)})`}
+                  />
+                  {settleOld && (
+                    <Box sx={{ mt: 0.5, p: 1, borderRadius: 1, bgcolor: "#e8f5e9", border: "1px solid", borderColor: "success.light" }}>
+                      <TextField
+                        size="small" type="number" fullWidth label="Paying toward old bills"
+                        value={settleAmount}
+                        onChange={(e) => setSettleAmount(e.target.value)}
+                        inputProps={{ min: 0, max: outstanding, step: "0.01" }}
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                        <b>Collect {formatCurrency(creditSale ? oldAmount : totalToCollect, 2)}</b>
+                        {" · "}of what is paid: today {formatCurrency(toInvoice, 2)}, old bills {formatCurrency(toOld, 2)}
+                        {" · "}then he owes {formatCurrency(Math.max(0, outstanding - toOld) + creditAmount, 2)}
+                      </Typography>
+                      {toOld <= 0.01 && (
+                        <Typography variant="caption" color="error" fontWeight={700} sx={{ display: "block", mt: 0.5 }}>
+                          Nothing left for the old bills — take more cash, or untick the box.
+                        </Typography>
+                      )}
+                      {toOld > 0.01 && toOld < oldAmount - 0.01 && (
+                        <Typography variant="caption" color="warning.dark" fontWeight={700} sx={{ display: "block", mt: 0.5 }}>
+                          Only {formatCurrency(toOld, 2)} of the {formatCurrency(oldAmount, 2)} typed will go to the old bills.
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                </>
+              )}
+
               {!creditSale && balanceRemaining > 0.01 && (
                 <Typography variant="caption" color="error" sx={{ display: "block", mt: 1 }}>
                   {formatCurrency(balanceRemaining, 2)} still needs to be covered by a payment method
@@ -3598,6 +3869,8 @@ export default function PosCheckoutPage() {
         voucherCode={lastReceipt?.voucherCode}
         shiftId={lastReceipt?.shift_id}
         previousBalance={lastReceipt?.previousBalance}
+        oldBillsPaid={lastReceipt?.oldBillsPaid}
+        balanceAfter={lastReceipt?.balanceAfter}
       />
 
       <PosReprintDialog
@@ -3624,6 +3897,8 @@ export default function PosCheckoutPage() {
             transNo={reprintReceipt.trans_no}
             offlineNo={copy?.offlineNo ?? undefined}
             previousBalance={copy?.previousBalance ?? undefined}
+            oldBillsPaid={copy?.oldBillsPaid ?? undefined}
+            balanceAfter={copy?.balanceAfter ?? undefined}
             customerName={(copy ? copy.customerName : reprintReceipt.customer_name) ?? undefined}
             lines={sourceLines.map((l) => ({
               stock_id: l.stock_id,

@@ -18,7 +18,7 @@ import { ThemeContextProvider, useThemeContext } from "./context/ThemeContext";
 import React, { useEffect } from "react";
 import { checkForUpdate } from "./offline/updater";
 import { syncUserDirectory } from "./offline/userSync";
-import { syncPendingStockDamages } from "./offline/sync";
+import { syncPendingStockDamages, syncPendingCreditPayments } from "./offline/sync";
 
 const InnerApp = () => {
   const { mode } = useThemeContext();
@@ -50,6 +50,14 @@ const InnerApp = () => {
     syncPendingStockDamages();
     window.addEventListener("online", syncPendingStockDamages);
     return () => window.removeEventListener("online", syncPendingStockDamages);
+  }, []);
+
+  // Same for old-bill payments taken at the till while offline — they are
+  // matched to the customer's real bills at this point, not before.
+  useEffect(() => {
+    syncPendingCreditPayments();
+    window.addEventListener("online", syncPendingCreditPayments);
+    return () => window.removeEventListener("online", syncPendingCreditPayments);
   }, []);
 
   return (

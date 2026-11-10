@@ -62,7 +62,8 @@ export default function CreditPaymentsPage() {
   const bills: any[] = open?.bills ?? [];
   const paid = Number(amount) || 0;
 
-  // Oldest bill first.
+  // The amount goes to the oldest bill first — the bills table beside this
+  // form is there to look at, not to pick from.
   const allocations = useMemo(() => {
     let left = paid;
     const out: { trans_no_to: number; trans_type_to: number; amt: number }[] = [];
@@ -74,8 +75,6 @@ export default function CreditPaymentsPage() {
     }
     return out;
   }, [bills, paid]);
-  const toBills = allocations.reduce((s, a) => s + a.amt, 0);
-  const toOpening = Math.max(0, paid - toBills);
 
   const payMutation = useMutation({
     mutationFn: () => createCustomerPayment({
@@ -98,7 +97,8 @@ export default function CreditPaymentsPage() {
     onError: (err: any) => notify.error(err?.response?.data?.message || "Failed to save payment"),
   });
 
-  const canSave = !!customer && !!customer.branch_code && bankAccountId !== "" && paid > 0 && paid <= owes + 0.01 && !payMutation.isPending;
+  const canSave = !!customer && !!customer.branch_code && bankAccountId !== "" && paid > 0
+    && paid <= owes + 0.01 && !payMutation.isPending;
 
   return (
     <FormPageLayout>
@@ -155,12 +155,6 @@ export default function CreditPaymentsPage() {
                 <TextField size="small" type="date" label="Date" InputLabelProps={{ shrink: true }} value={tranDate} onChange={(e) => setTranDate(e.target.value)} />
                 <TextField size="small" label="Note (optional)" value={comments} onChange={(e) => setComments(e.target.value)} />
 
-                {paid > 0 && customer && (
-                  <Typography variant="caption" color="text.secondary">
-                    Pays {allocations.length} bill(s): LKR {money(toBills)}
-                    {toOpening > 0.005 ? ` · Opening balance: LKR ${money(toOpening)}` : ""}
-                  </Typography>
-                )}
                 {customer && !customer.branch_code && (
                   <Typography variant="caption" color="error">This customer has no branch — add one under Customers first.</Typography>
                 )}
@@ -183,33 +177,28 @@ export default function CreditPaymentsPage() {
                   <TableCell align="right">Bill</TableCell>
                   <TableCell align="right">Paid</TableCell>
                   <TableCell align="right">Owing</TableCell>
-                  <TableCell align="right">This payment</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {bills.map((b: any) => {
-                  const a = allocations.find((x) => x.trans_no_to === Number(b.trans_no));
-                  return (
-                    <TableRow key={b.trans_no}>
-                      <TableCell>{String(b.tran_date).slice(0, 10)}</TableCell>
-                      <TableCell>#{b.trans_no}{b.reference ? ` (${b.reference})` : ""}</TableCell>
-                      <TableCell align="right">{money(b.total)}</TableCell>
-                      <TableCell align="right">{money(b.paid)}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>{money(b.owing)}</TableCell>
-                      <TableCell align="right" sx={{ color: "success.main", fontWeight: 700 }}>{a ? money(a.amt) : ""}</TableCell>
-                    </TableRow>
-                  );
-                })}
+                {bills.map((b: any) => (
+                  <TableRow key={b.trans_no} hover>
+                    <TableCell>{String(b.tran_date).slice(0, 10)}</TableCell>
+                    <TableCell>#{b.trans_no}{b.reference ? ` (${b.reference})` : ""}</TableCell>
+                    <TableCell align="right">{money(b.total)}</TableCell>
+                    <TableCell align="right">{money(b.paid)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>{money(b.owing)}</TableCell>
+                  </TableRow>
+                ))}
                 {customer && !isFetching && bills.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={5} align="center">
                       <Typography variant="body2">No unpaid credit bills{Number(open?.opening_balance) > 0 ? " — the payment goes to the opening balance." : "."}</Typography>
                     </TableCell>
                   </TableRow>
                 )}
                 {!customer && (
                   <TableRow>
-                    <TableCell colSpan={6} align="center"><Typography variant="body2">Select a credit customer to see their unpaid bills.</Typography></TableCell>
+                    <TableCell colSpan={5} align="center"><Typography variant="body2">Select a credit customer to see their unpaid bills.</Typography></TableCell>
                   </TableRow>
                 )}
               </TableBody>

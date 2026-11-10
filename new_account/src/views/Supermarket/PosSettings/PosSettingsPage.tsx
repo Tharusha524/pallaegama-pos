@@ -194,7 +194,7 @@ export default function PosSettingsPage() {
               </FormControl>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
                 "Selling Price" mode hides the Discount field — cashier types the final price directly.
-                "Qty" mode: Enter on Qty adds the item; ↑ moves to Selling Price, where Enter also adds it
+                "Qty" mode: only Enter on Qty adds the item; ↑ moves to Selling Price, and Enter or ↓ there comes back to Qty
               </Typography>
             </Box>
             <Box sx={{ pt: 1 }}>

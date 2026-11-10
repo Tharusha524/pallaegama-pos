@@ -76,6 +76,26 @@ export interface PendingStockDamage {
   sync_error: string | null;
 }
 
+/**
+ * Money taken at the till for a customer's OLD credit bills while offline.
+ * Only the amount is queued — which bills it settles is decided at sync time
+ * against the server's real open bills.
+ */
+export interface PendingCreditPayment {
+  uuid: string;
+  terminal_id: string;
+  cashier_id: string;
+  debtor_no: string;
+  branch_code: string;
+  bank_account_id: string;
+  amount: number;
+  tran_date: string;
+  comments: string | null;
+  created_at: string;
+  synced_at: string | null;
+  sync_error: string | null;
+}
+
 /** Replaces the local product cache with a fresh snapshot from the server. */
 export async function saveProductsSnapshot(products: OfflineProduct[]): Promise<void> {
   const db = await getDb();
@@ -267,6 +287,42 @@ export async function markStockDamageSynced(uuid: string): Promise<void> {
 export async function markStockDamageSyncFailed(uuid: string, error: string): Promise<void> {
   const db = await getDb();
   await db.execute("UPDATE pending_stock_damages SET sync_error = $1 WHERE uuid = $2", [error, uuid]);
+}
+
+export async function queuePendingCreditPayment(
+  payment: Omit<PendingCreditPayment, "synced_at" | "sync_error">,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO pending_credit_payments
+       (uuid, terminal_id, cashier_id, debtor_no, branch_code, bank_account_id, amount, tran_date, comments, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      payment.uuid, payment.terminal_id, payment.cashier_id, payment.debtor_no,
+      payment.branch_code, payment.bank_account_id, payment.amount,
+      payment.tran_date, payment.comments, payment.created_at,
+    ],
+  );
+}
+
+export async function listUnsyncedCreditPayments(): Promise<PendingCreditPayment[]> {
+  const db = await getDb();
+  return db.select<PendingCreditPayment[]>(
+    "SELECT * FROM pending_credit_payments WHERE synced_at IS NULL ORDER BY created_at",
+  );
+}
+
+export async function markCreditPaymentSynced(uuid: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE pending_credit_payments SET synced_at = $1, sync_error = NULL WHERE uuid = $2", [
+    new Date().toISOString(),
+    uuid,
+  ]);
+}
+
+export async function markCreditPaymentSyncFailed(uuid: string, error: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE pending_credit_payments SET sync_error = $1 WHERE uuid = $2", [error, uuid]);
 }
 
 /** Removes a still-unsynced damage entry — the "delete" action on one that never reached the server yet. */

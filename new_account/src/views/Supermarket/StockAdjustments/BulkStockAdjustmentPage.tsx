@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Button, Stack, TextField, Typography, FormControl, InputLabel, Select,
@@ -15,6 +15,8 @@ import { getStockList } from "../../../api/Inventory/StockListApi";
 import { getInventoryLocations } from "../../../api/InventoryLocation/InventoryLocationApi";
 import { postInventoryAdjustment } from "../../../api/Inventory/InventoryTransactionApi";
 import { notify } from "../../../services/notificationService";
+import { lookupBarcode } from "../../../api/Pos/posApi";
+import { looksLikeCode } from "../../../utils/itemSearch";
 import * as XLSX from "xlsx";
 
 interface AdjLine { stock_id: string; description: string; quantity: number; standard_cost?: number; }
@@ -24,6 +26,7 @@ function ManualBulkTab() {
   const queryClient = useQueryClient();
   const [locCode, setLocCode] = useState("");
   const [search, setSearch] = useState("");
+  const [barcodeIds, setBarcodeIds] = useState<string[]>([]);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterSubcategory, setFilterSubcategory] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
@@ -47,6 +50,26 @@ function ManualBulkTab() {
   const subcategories = useMemo(() => [...new Set(stockList.filter((s: any) => !filterCategory || s.category === filterCategory).map((s: any) => s.subcategory ?? "").filter(Boolean))].sort(), [stockList, filterCategory]);
   const brands = useMemo(() => [...new Set(stockList.filter((s: any) => (!filterCategory || s.category === filterCategory) && (!filterSubcategory || s.subcategory === filterSubcategory)).map((s: any) => s.brand ?? "").filter(Boolean))].sort(), [stockList, filterCategory, filterSubcategory]);
 
+  // A scanned barcode isn't on the stock row, so resolve it on the server and
+  // keep the matching stock_ids as an extra way for a row to match the search.
+  useEffect(() => {
+    const code = search.trim();
+    if (!looksLikeCode(code)) { setBarcodeIds([]); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      lookupBarcode(code)
+        .then((result: any) => {
+          if (cancelled) return;
+          const ids = result?.matches
+            ? result.matches.map((m: any) => String(m.stock_id))
+            : result?.stock_id != null ? [String(result.stock_id)] : [];
+          setBarcodeIds(ids);
+        })
+        .catch(() => { if (!cancelled) setBarcodeIds([]); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [search]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return stockList.filter((s: any) => {
@@ -54,9 +77,11 @@ function ManualBulkTab() {
       if (filterSubcategory && s.subcategory !== filterSubcategory) return false;
       if (filterBrand && s.brand !== filterBrand) return false;
       if (!q) return true;
-      return String(s.stock_id ?? "").toLowerCase().includes(q) || String(s.description ?? "").toLowerCase().includes(q);
+      return String(s.stock_id ?? "").toLowerCase().includes(q)
+        || String(s.description ?? "").toLowerCase().includes(q)
+        || barcodeIds.includes(String(s.stock_id));
     });
-  }, [stockList, search, filterCategory, filterSubcategory, filterBrand]);
+  }, [stockList, search, barcodeIds, filterCategory, filterSubcategory, filterBrand]);
 
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -129,7 +154,7 @@ function ManualBulkTab() {
           </Select>
         </FormControl>
         <TextField
-          size="small" placeholder="Search by item ID or name" value={search}
+          size="small" placeholder="Search by item ID, name or barcode" value={search}
           onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 220 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
         />

@@ -21,7 +21,7 @@ class BrandController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:100',
-            'category_id' => 'required|integer|exists:item_category,category_id',
+            'category_id' => 'nullable|integer|exists:item_category,category_id',
         ]);
 
         return response()->json(Brand::create($data)->load('category'), 201);
@@ -31,7 +31,7 @@ class BrandController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:100',
-            'category_id' => 'required|integer|exists:item_category,category_id',
+            'category_id' => 'nullable|integer|exists:item_category,category_id',
         ]);
 
         $brand->update($data);

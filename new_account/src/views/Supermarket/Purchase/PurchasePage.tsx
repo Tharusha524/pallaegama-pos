@@ -115,11 +115,10 @@ function CreatePurchaseOrderTab() {
 
   const { data: categories } = useQuery({ queryKey: ["item-categories"], queryFn: () => getItemCategories() });
   const { data: brands } = useQuery({ queryKey: ["brands-all"], queryFn: getBrands });
-  const brandsForCategory = (brands ?? []).filter((b: any) => b.category_id === newProductCategory?.category_id);
   const { data: subcategories } = useQuery({
-    queryKey: ["subcategories-for-brand", newProductBrand?.id],
-    queryFn: () => getSubcategories(newProductBrand.id),
-    enabled: !!newProductBrand,
+    queryKey: ["subcategories-for-category", newProductCategory?.category_id],
+    queryFn: () => getSubcategories(newProductCategory.category_id),
+    enabled: !!newProductCategory,
   });
   const { data: chartMasters } = useQuery({ queryKey: ["chart-masters"], queryFn: getChartMasters });
   const { data: taxTypes } = useQuery({ queryKey: ["item-tax-types"], queryFn: getItemTaxTypes });
@@ -307,24 +306,23 @@ function CreatePurchaseOrderTab() {
               options={categories ?? []}
               getOptionLabel={(c: any) => c.description ?? ""}
               value={newProductCategory}
-              onChange={(_, v) => { setNewProductCategory(v); setNewProductBrand(null); setNewProductSubcategory(null); }}
+              onChange={(_, v) => { setNewProductCategory(v); setNewProductSubcategory(null); }}
               renderInput={(p) => <TextField {...p} label="Category" />}
             />
             <Autocomplete
-              options={brandsForCategory}
+              options={brands ?? []}
               getOptionLabel={(b: any) => b.name ?? ""}
               value={newProductBrand}
-              onChange={(_, v) => { setNewProductBrand(v); setNewProductSubcategory(null); }}
-              disabled={!newProductCategory}
-              renderInput={(p) => <TextField {...p} label="Brand (optional)" helperText={!newProductCategory ? "Pick a category first" : undefined} />}
+              onChange={(_, v) => setNewProductBrand(v)}
+              renderInput={(p) => <TextField {...p} label="Brand (optional)" />}
             />
             <Autocomplete
               options={subcategories ?? []}
               getOptionLabel={(s: any) => s.name ?? ""}
               value={newProductSubcategory}
               onChange={(_, v) => setNewProductSubcategory(v)}
-              disabled={!newProductBrand}
-              renderInput={(p) => <TextField {...p} label="Subcategory (optional)" helperText={!newProductBrand ? "Pick a brand first" : undefined} />}
+              disabled={!newProductCategory}
+              renderInput={(p) => <TextField {...p} label="Subcategory (optional)" helperText={!newProductCategory ? "Pick a category first" : undefined} />}
             />
             <TextField
               label="Cost / unit" type="number" fullWidth

@@ -70,6 +70,10 @@ interface PosReceiptDialogProps {
   total: number;
   payments?: ReceiptPaymentLine[];
   cashReceived?: number;
+  /** Money of this tender that settled the customer's OLD credit bills. */
+  oldBillsPaid?: number;
+  /** What the customer still owes once this sale and that payment are done. */
+  balanceAfter?: number;
   paperSize?: string;
   isQuote?: boolean;
   receiptSettings?: Record<string, any>;
@@ -134,6 +138,7 @@ export default function PosReceiptDialog({
   open, onClose, transNo, customerName, lines, total, payments, cashReceived,
   paperSize = "80mm Thermal", isQuote = false, receiptSettings, shiftId, couponCode, voucherCode,
   reprint = false, printedAt, cashierName, offlineNo, previousBalance,
+  oldBillsPaid, balanceAfter,
 }: PosReceiptDialogProps) {
   const { formatCurrency } = useHomeCurrency();
   const { user } = useCurrentUser();
@@ -197,6 +202,13 @@ export default function PosReceiptDialog({
     font_header: "medium", font_items: "medium", font_totals: "medium", font_footer: "small",
     font_col_headers: DEFAULT_COL_HEADER_PX as string | number,
     font_invoice_info: 13 as string | number,
+    // Receipt length — see Customize Receipt. Older saved settings have no
+    // value, so these defaults keep the receipt exactly as it printed before.
+    row_spacing: 6,
+    section_spacing: 8,
+    show_old_bills_paid: true, label_old_bills_paid: "OLD BILLS PAID", weight_old_bills_paid: 700,
+    show_balance_after: true, label_balance_after: "BALANCE NOW", weight_balance_after: 700,
+    font_old_bills_paid: undefined as string | undefined, font_balance_after: undefined as string | undefined,
     weight_shop_name: 800, weight_address: 400, weight_col_headers: 700,
     weight_item_name: 700, weight_unit_price: 400, weight_qty_line: 400,
     weight_subtotal: 400, weight_total: 800, weight_payment_lines: 700,
@@ -225,6 +237,12 @@ export default function PosReceiptDialog({
   rs.label_shift = rs.label_shift ?? "Shift";
   rs.label_branch = rs.label_branch ?? "Branch";
   rs.footer_text = rs.footer_text ?? "Developed by DIO Solutions";
+
+  // Receipt length, from Customize Receipt: the gap above each item row and
+  // the gaps around the totals / payment blocks.
+  const rowGap = Number(rs.row_spacing ?? 6);
+  const secGap = Number(rs.section_spacing ?? 8);
+  const secPx = (factor = 1) => `${secGap * factor}px`;
 
   const fmt = (v: number) => rs.show_currency_symbol
     ? formatCurrency(v, 2)
@@ -299,7 +317,7 @@ export default function PosReceiptDialog({
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); win.close(); }, 500);
-  }, [company, now, transNo, offlineNo, user, lines, total, subtotal, payments, cashReceived, customerName, logoSrc, rs, receiptHtml, startRender]);
+  }, [company, now, transNo, offlineNo, user, lines, total, subtotal, payments, cashReceived, oldBillsPaid, balanceAfter, customerName, logoSrc, rs, receiptHtml, startRender]);
 
   // Reset printed state when dialog opens
   useEffect(() => { if (open) setPrinted(false); }, [open]);
@@ -365,7 +383,9 @@ export default function PosReceiptDialog({
   const youSaved = Math.max(0, fullPriceTotal - total);
   const paymentLines = payments && payments.length > 0 ? payments : [{ method: "CASH", amount: total }];
   const received = cashReceived ?? total;
-  const change = Math.max(0, received - total);
+  // Money that settled old credit bills is not change — it stayed in the till.
+  const oldPaid = Number(oldBillsPaid ?? 0);
+  const change = Math.max(0, received - total - oldPaid);
   // Credit bill: the part left owing (sent as a "CREDIT (TO PAY)" payment line).
   const creditDue = (payments ?? []).filter((p) => p.method === "CREDIT (TO PAY)").reduce((s, p) => s + p.amount, 0);
 
@@ -477,7 +497,7 @@ export default function PosReceiptDialog({
           {isQuote && (
             <Typography align="center" fontWeight={800} fontSize={14} sx={{ mb: 0.5 }}>PRICE QUOTATION</Typography>
           )}
-          <Stack spacing={0.25} sx={{ my: 1 }}>
+          <Stack spacing={0.25} sx={{ my: secPx() }}>
             {rs.show_invoice_id && (
               <Typography fontSize={fontPx(rs.font_invoice_info)}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
             )}
@@ -505,7 +525,7 @@ export default function PosReceiptDialog({
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
 
           {/* ---- Line items ---- */}
-          <Box sx={{ my: 1 }}>
+          <Box sx={{ my: secPx() }}>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: fontPx(rs.font_items) - 1 }}>
               <colgroup>
                 <col style={{ width: "25%" }} />
@@ -529,7 +549,7 @@ export default function PosReceiptDialog({
                   return (
                     <>
                       <tr key={`name-${i}`}>
-                        <td colSpan={4} style={{ paddingTop: 6, fontWeight: rs.weight_item_name, fontSize: fontPx(rs.font_items) + 1 }}>
+                        <td colSpan={4} style={{ paddingTop: rowGap, fontWeight: rs.weight_item_name, fontSize: fontPx(rs.font_items) + 1 }}>
                           {l.stock_id ? `${l.stock_id} - ${l.description}` : l.description}
                           {rs.show_offer_applied && l.offer_name && (
                             <div style={{ fontSize: fontPx(rs.font_items) - 1, color: "green" }}>Offer: {l.offer_name}</div>
@@ -552,10 +572,10 @@ export default function PosReceiptDialog({
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
           {renderCustomFields(rs.custom_fields, "after_items")}
 
-          <Stack spacing={0.25} sx={{ my: 1 }}>
+          <Stack spacing={0.25} sx={{ my: secPx() }}>
           </Stack>
 
-          <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", mt: secPx() }}>
             <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_total}</Typography>
             <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>
               {rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -564,8 +584,8 @@ export default function PosReceiptDialog({
 
           {!isQuote && rs.show_payment_info && (
             <>
-              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
-              <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: 1.5, display: "block" }}>{rs.label_payment_info}</Typography>
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: secPx(1.5) }} />
+              <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: secPx(1.5), display: "block" }}>{rs.label_payment_info}</Typography>
               <Stack spacing={0.25} sx={{ mt: 0.5 }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                   <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
@@ -599,6 +619,21 @@ export default function PosReceiptDialog({
                         </Box>
                         )}
                       </>
+                    )}
+                  </>
+                )}
+                {oldPaid > 0.001 && rs.show_old_bills_paid !== false && (
+                  <>
+                    <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", my: 0.5 }} />
+                    <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_old_bills_paid ?? rs.font_totals) }}>
+                      <span style={{ fontWeight: rs.weight_old_bills_paid ?? 700 }}>{rs.label_old_bills_paid ?? "OLD BILLS PAID"}</span>
+                      <Typography fontWeight={rs.weight_old_bills_paid ?? 700} fontSize={fontPx(rs.font_old_bills_paid ?? rs.font_totals)}>{fmt(oldPaid)}</Typography>
+                    </Box>
+                    {balanceAfter != null && rs.show_balance_after !== false && (
+                      <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_balance_after ?? rs.font_totals) }}>
+                        <span style={{ fontWeight: rs.weight_balance_after ?? 700 }}>{rs.label_balance_after ?? "BALANCE NOW"}</span>
+                        <Typography fontWeight={rs.weight_balance_after ?? 700} fontSize={fontPx(rs.font_balance_after ?? rs.font_totals)}>{fmt(balanceAfter)}</Typography>
+                      </Box>
                     )}
                   </>
                 )}
@@ -639,14 +674,14 @@ export default function PosReceiptDialog({
 
           {rs.show_customer_name && (
             <>
-              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
-              <Typography fontWeight={rs.weight_customer} fontSize={fontPx(rs.font_footer) + 2} sx={{ mt: 1.5, display: "block" }}>
+              <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: secPx(1.5) }} />
+              <Typography fontWeight={rs.weight_customer} fontSize={fontPx(rs.font_footer) + 2} sx={{ mt: secPx(1.5), display: "block" }}>
                 {rs.label_customer} {customerName ? customerName.toUpperCase() : "WALK-IN"}
               </Typography>
             </>
           )}
 
-          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: 1.5 }} />
+          <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: secPx(1.5) }} />
 
           {!isQuote && rs.show_thank_you && (
             <Typography align="center" fontWeight={rs.weight_thank_you} fontSize={fontPx(rs.font_footer) + 3} sx={{ mt: 2 }}>

@@ -2,16 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Brand;
 use App\Models\Subcategory;
 use Illuminate\Http\Request;
 
 /**
- * Product-organization data — a Subcategory belongs to a Brand (e.g. Brand
- * "Unilever" -> Subcategory "Rani Shampoo 250g"), completing the chain
- * Category -> Brand -> Subcategory. category_id is kept in sync from the
- * chosen brand automatically so existing category-based lookups/filters
- * keep working; the real GL account mapping still comes entirely from it.
+ * Product-organization data — a Subcategory belongs to a Category (e.g.
+ * Cosmetics -> "Rani Shampoo 250g"). Brand is a separate, flat list that a
+ * product carries on its own; the GL account mapping comes from the Category.
  */
 class SubcategoryController extends Controller
 {
@@ -32,27 +29,23 @@ class SubcategoryController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'brand_id' => 'required|integer|exists:brands,id',
+            'category_id' => 'required|integer|exists:item_category,category_id',
             'name' => 'required|string|max:100',
         ]);
 
-        $data['category_id'] = Brand::findOrFail($data['brand_id'])->category_id;
-
-        return response()->json(Subcategory::create($data)->load(['brand', 'category']), 201);
+        return response()->json(Subcategory::create($data)->load('category'), 201);
     }
 
     public function update(Request $request, Subcategory $subcategory)
     {
         $data = $request->validate([
-            'brand_id' => 'required|integer|exists:brands,id',
+            'category_id' => 'required|integer|exists:item_category,category_id',
             'name' => 'required|string|max:100',
         ]);
 
-        $data['category_id'] = Brand::findOrFail($data['brand_id'])->category_id;
-
         $subcategory->update($data);
 
-        return response()->json($subcategory->load(['brand', 'category']));
+        return response()->json($subcategory->load('category'));
     }
 
     public function destroy(Subcategory $subcategory)

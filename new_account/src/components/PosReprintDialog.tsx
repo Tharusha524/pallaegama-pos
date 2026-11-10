@@ -34,6 +34,8 @@ export interface ReprintReceipt {
     receiptSettings: Record<string, any>;
     offlineNo?: string | null;
     previousBalance?: number | null;
+    oldBillsPaid?: number | null;
+    balanceAfter?: number | null;
   } | null;
 }
 
