@@ -323,18 +323,12 @@ const baseSidebarItems: Array<SidebarItem> = [
     icon: <AccountBalanceWalletOutlinedIcon fontSize="small" />,
     requiredPermission: getModulePermissionIds("Banking And General ledger"),
     nestedItems: [
-      {
-        title: "Transactions",
-        href: "/bankingandgeneralledger/transactions",
-      },
+      // { title: "Transactions", href: "/bankingandgeneralledger/transactions" }, // hidden
       {
         title: "Inquiries and Reports",
         href: "/bankingandgeneralledger/inquiriesandreports",
       },
-      {
-        title: "Maintenance",
-        href: "/bankingandgeneralledger/maintenance",
-      },
+      // { title: "Maintenance", href: "/bankingandgeneralledger/maintenance" }, // hidden
     ],
   },
 ];

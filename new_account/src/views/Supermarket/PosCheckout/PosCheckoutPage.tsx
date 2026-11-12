@@ -313,6 +313,15 @@ export default function PosCheckoutPage() {
   const [settleOld, setSettleOld] = useState(false);
   const [settleAmount, setSettleAmount] = useState("");
 
+  // Ticking "Pay old credit bills" first asks which kind of payment this is:
+  // old bills only (no sale at all), or old bills alongside today's cart.
+  // "Only old bills" posts a customer payment and nothing else — no invoice,
+  // no stock movement, no revenue — because nothing was sold.
+  const [oldBillModeOpen, setOldBillModeOpen] = useState(false);
+  const [oldOnlyOpen, setOldOnlyOpen] = useState(false);
+  const [oldOnlyAmount, setOldOnlyAmount] = useState("");
+  const [oldOnlyPosting, setOldOnlyPosting] = useState(false);
+
   // Held sales (park / recall)
   const [recallOpen, setRecallOpen] = useState(false);
 
@@ -864,21 +873,35 @@ export default function PosCheckoutPage() {
     setSettleAmount("");
   }, [customer?.debtor_no]);
 
+  // Turns the box on for the "old bills + today's bill" case: today's total
+  // plus the old-bill money is pre-filled into the single payment line.
+  const startSettleWithToday = () => {
+    setSettleOld(true);
+    setSettleAmount(outstanding.toFixed(2));
+    setPaymentLines((prev) => prev.length === 1
+      ? [{ ...prev[0], amount: ((creditSale ? 0 : grandTotal) + outstanding).toFixed(2) }]
+      : prev);
+  };
+
   const toggleSettleOld = (on: boolean) => {
-    if (on && isWalkInCustomer) {
+    if (!on) {
+      setSettleOld(false);
+      setSettleAmount("");
+      setPaymentLines((prev) => prev.length === 1
+        ? [{ ...prev[0], amount: (creditSale ? 0 : grandTotal).toFixed(2) }]
+        : prev);
+      return;
+    }
+    if (isWalkInCustomer) {
       notify.error("Select a registered customer to pay old bills");
       return;
     }
-    if (on && outstanding <= 0.01) {
+    if (outstanding <= 0.01) {
       notify.error("This customer has no old credit bills to pay");
       return;
     }
-    setSettleOld(on);
-    const old = on ? outstanding : 0;
-    setSettleAmount(on ? outstanding.toFixed(2) : "");
-    setPaymentLines((prev) => prev.length === 1
-      ? [{ ...prev[0], amount: ((creditSale ? 0 : grandTotal) + old).toFixed(2) }]
-      : prev);
+    // Ask first: is he only paying old bills, or buying today as well?
+    setOldBillModeOpen(true);
   };
   const toggleCreditSale = (on: boolean) => {
     if (on && isWalkInCustomer) {
@@ -1686,6 +1709,115 @@ export default function PosCheckoutPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  /**
+   * "Only old bills": the customer bought nothing today and is just paying
+   * off what he owes. No invoice, no stock movement, no revenue — the only
+   * thing posted is a customer payment, exactly as the Credit Payments page
+   * does it (Dr cash/bank, Cr debtors, allocated oldest bill first).
+   */
+  const completeOldBillsOnly = async () => {
+    if (!customer?.debtor_no || !branchCode) {
+      notify.error("Select a registered customer first");
+      return;
+    }
+    const amount = Math.min(Number(oldOnlyAmount) || 0, outstanding);
+    if (amount <= 0.01) {
+      notify.error("Enter how much the customer is paying");
+      return;
+    }
+    const accountId = Number(paymentLines[0]?.bank_account_id || cashAccount?.id || 0);
+    if (!accountId) {
+      notify.error("No cash account configured for this till");
+      return;
+    }
+
+    setOldOnlyPosting(true);
+    const tranDate = new Date().toISOString().slice(0, 10);
+    const receipt = {
+      trans_no: "",
+      lines: [],
+      subtotal: 0,
+      customer,
+      payments: [{
+        method: (bankAccounts ?? []).find((a: any) => a.id === accountId)?.bank_account_name ?? "Cash",
+        amount,
+      }],
+      cashReceived: amount,
+      creditPaymentOnly: true,
+      oldBillsPaid: Number(amount.toFixed(2)),
+      balanceAfter: Number(Math.max(0, outstanding - amount).toFixed(2)),
+      shift_id: currentShiftId,
+    };
+
+    try {
+      if (isOffline) {
+        // Only the amount is queued. Which bills it settles is decided at
+        // sync against the server's real bills, and capped at what he still
+        // owes, so a stale offline balance can never overpay.
+        const tillCode = String(posSettings?.terminal_id || getOrCreateTerminalId().slice(-4)).trim();
+        const uuid = crypto.randomUUID();
+        await queuePendingCreditPayment({
+          uuid,
+          terminal_id: getOrCreateTerminalId(),
+          cashier_id: String(user?.id ?? user?.email ?? "unknown"),
+          debtor_no: String(customer.debtor_no),
+          branch_code: String(branchCode),
+          bank_account_id: String(accountId),
+          amount: Number(amount.toFixed(2)),
+          tran_date: tranDate,
+          comments: `POS credit payment (offline) - ${customer.name}`,
+          created_at: new Date().toISOString(),
+        });
+        receipt.trans_no = `${tillCode}-${uuid.slice(0, 8).toUpperCase()}`;
+        notify.success("Payment saved offline — it will post automatically once the connection is back");
+      } else {
+        const bills: any[] = openBills?.bills ?? [];
+        if (bills.length === 0) {
+          notify.error("Loading his bills — try again in a second");
+          setOldOnlyPosting(false);
+          return;
+        }
+        let left = amount;
+        const allocations: { trans_no_to: number; trans_type_to: number; amt: number }[] = [];
+        for (const b of bills) {
+          if (left <= 0.005) break;
+          const owing = Number(b.owing);
+          if (owing <= 0.005) continue;
+          const amt = Math.min(left, owing);
+          allocations.push({ trans_no_to: Number(b.trans_no), trans_type_to: 10, amt: Number(amt.toFixed(2)) });
+          left = Number((left - amt).toFixed(2));
+        }
+        const result: any = await createCustomerPayment({
+          debtor_no: Number(customer.debtor_no),
+          branch_code: Number(branchCode),
+          tran_date: tranDate,
+          bank_account_id: accountId,
+          amount: Number(amount.toFixed(2)),
+          comments: `POS credit payment - ${customer.name}`,
+          allocations,
+        } as any);
+        receipt.trans_no = String(result?.trans_no ?? "");
+        notify.success(`Payment received: ${formatCurrency(amount, 2)}`);
+        queryClient.invalidateQueries({ queryKey: ["credit-open-bills"] });
+        queryClient.invalidateQueries({ queryKey: ["credit-customers"] });
+        queryClient.invalidateQueries({ queryKey: ["customer-credit"] });
+      }
+    } catch (err: any) {
+      notify.error(err?.response?.data?.message ?? "Could not record the payment — please retry");
+      setOldOnlyPosting(false);
+      return;
+    }
+
+    setOldOnlyPosting(false);
+    setOldOnlyOpen(false);
+    setOldOnlyAmount("");
+    setSettleOld(false);
+    setSettleAmount("");
+    setIsQuoteReceipt(false);
+    setLastReceipt(receipt);
+    setTimeout(() => setReceiptOpen(true), 150);
+  };
 
   const handleCheckout = () => {
     if (!customer || !branchCode || cart.length === 0) {
@@ -3871,7 +4003,111 @@ export default function PosCheckoutPage() {
         previousBalance={lastReceipt?.previousBalance}
         oldBillsPaid={lastReceipt?.oldBillsPaid}
         balanceAfter={lastReceipt?.balanceAfter}
+        creditPaymentOnly={lastReceipt?.creditPaymentOnly}
       />
+
+      {/* Ticking "Pay old credit bills" asks which kind of payment this is. */}
+      <Dialog open={oldBillModeOpen} onClose={() => setOldBillModeOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>What is the customer paying?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {customer?.name} owes <b>{formatCurrency(outstanding, 2)}</b>
+          </Typography>
+          <Stack spacing={1.5}>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => {
+                setOldBillModeOpen(false);
+                setOldOnlyAmount(outstanding.toFixed(2));
+                setOldOnlyOpen(true);
+              }}
+              sx={{ py: 1.5, textAlign: "left", justifyContent: "flex-start" }}
+            >
+              <Box>
+                <Typography fontWeight={700}>Only old bills</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Nothing bought today — just paying off his account
+                </Typography>
+              </Box>
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              disabled={cart.length === 0}
+              onClick={() => { setOldBillModeOpen(false); startSettleWithToday(); }}
+              sx={{ py: 1.5, textAlign: "left", justifyContent: "flex-start" }}
+            >
+              <Box>
+                <Typography fontWeight={700}>Old bills + today's bill</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {cart.length === 0
+                    ? "Add items to the cart to use this"
+                    : "Pays today's cart first, the rest goes to old bills"}
+                </Typography>
+              </Box>
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOldBillModeOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* "Only old bills": how much of the outstanding is he handing over. */}
+      <Dialog open={oldOnlyOpen} onClose={() => !oldOnlyPosting && setOldOnlyOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Pay old credit bills</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Box sx={{ p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
+              <Typography variant="caption" color="text.secondary">Customer</Typography>
+              <Typography fontWeight={700}>{customer?.name}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                Outstanding balance
+              </Typography>
+              <Typography fontWeight={800} fontSize={22} color="error.main">
+                {formatCurrency(outstanding, 2)}
+              </Typography>
+            </Box>
+            <TextField
+              autoFocus
+              label="Paying now"
+              type="number"
+              fullWidth
+              value={oldOnlyAmount}
+              onChange={(e) => setOldOnlyAmount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !oldOnlyPosting) { e.preventDefault(); completeOldBillsOnly(); }
+              }}
+              helperText={
+                (Number(oldOnlyAmount) || 0) > outstanding + 0.01
+                  ? `More than he owes — only ${formatCurrency(outstanding, 2)} will be taken`
+                  : (Number(oldOnlyAmount) || 0) > 0.01 && (Number(oldOnlyAmount) || 0) < outstanding - 0.01
+                    ? `Part payment — ${formatCurrency(outstanding - (Number(oldOnlyAmount) || 0), 2)} will still be owing`
+                    : "Full payment — his account will be cleared"
+              }
+            />
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant="text" onClick={() => setOldOnlyAmount(outstanding.toFixed(2))}>
+                Full
+              </Button>
+              <Button size="small" variant="text" onClick={() => setOldOnlyAmount((outstanding / 2).toFixed(2))}>
+                Half
+              </Button>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOldOnlyOpen(false)} disabled={oldOnlyPosting}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={completeOldBillsOnly}
+            disabled={oldOnlyPosting || (Number(oldOnlyAmount) || 0) <= 0.01}
+          >
+            {oldOnlyPosting ? "Posting..." : "Take payment & print"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <PosReprintDialog
         open={reprintOpen}

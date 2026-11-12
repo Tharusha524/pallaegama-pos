@@ -88,6 +88,12 @@ interface PosReceiptDialogProps {
   offlineNo?: string;
   // Credit bill: what the customer owed before this bill (old credit bills + opening balance).
   previousBalance?: number;
+  /**
+   * The customer bought nothing — he only paid off old credit bills. The
+   * receipt is a payment slip: no items table, no sale totals, just what he
+   * handed over and what is still owing.
+   */
+  creditPaymentOnly?: boolean;
 }
 
 /**
@@ -138,7 +144,7 @@ export default function PosReceiptDialog({
   open, onClose, transNo, customerName, lines, total, payments, cashReceived,
   paperSize = "80mm Thermal", isQuote = false, receiptSettings, shiftId, couponCode, voucherCode,
   reprint = false, printedAt, cashierName, offlineNo, previousBalance,
-  oldBillsPaid, balanceAfter,
+  oldBillsPaid, balanceAfter, creditPaymentOnly = false,
 }: PosReceiptDialogProps) {
   const { formatCurrency } = useHomeCurrency();
   const { user } = useCurrentUser();
@@ -391,7 +397,7 @@ export default function PosReceiptDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle className="pos-receipt-no-print">{isQuote ? `Quotation #${transNo}` : `${reprint ? "Reprint" : "Receipt"} — Invoice #${transNo}`}</DialogTitle>
+      <DialogTitle className="pos-receipt-no-print">{isQuote ? `Quotation #${transNo}` : creditPaymentOnly ? `Credit Payment #${transNo}` : `${reprint ? "Reprint" : "Receipt"} — Invoice #${transNo}`}</DialogTitle>
       <DialogContent ref={scrollRef}>
         <style>{`
           @media print {
@@ -497,6 +503,12 @@ export default function PosReceiptDialog({
           {isQuote && (
             <Typography align="center" fontWeight={800} fontSize={14} sx={{ mb: 0.5 }}>PRICE QUOTATION</Typography>
           )}
+          {reprint && !isQuote && (
+            <Typography align="center" fontWeight={800} fontSize={14} sx={{ mb: 0.5 }}>REPRINT</Typography>
+          )}
+          {creditPaymentOnly && (
+            <Typography align="center" fontWeight={800} fontSize={14} sx={{ mb: 0.5 }}>CREDIT PAYMENT</Typography>
+          )}
           <Stack spacing={0.25} sx={{ my: secPx() }}>
             {rs.show_invoice_id && (
               <Typography fontSize={fontPx(rs.font_invoice_info)}>{isQuote ? "Quotation ID" : rs.label_invoice_id}: {transNo}</Typography>
@@ -524,8 +536,8 @@ export default function PosReceiptDialog({
 
           <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary" }} />
 
-          {/* ---- Line items ---- */}
-          <Box sx={{ my: secPx() }}>
+          {/* ---- Line items (nothing was sold on a credit-payment slip) ---- */}
+          <Box sx={{ my: secPx(), display: creditPaymentOnly ? "none" : undefined }}>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: fontPx(rs.font_items) - 1 }}>
               <colgroup>
                 <col style={{ width: "25%" }} />
@@ -575,22 +587,36 @@ export default function PosReceiptDialog({
           <Stack spacing={0.25} sx={{ my: secPx() }}>
           </Stack>
 
-          <Box sx={{ display: "flex", justifyContent: "space-between", mt: secPx() }}>
-            <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_total}</Typography>
-            <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>
-              {rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Typography>
-          </Box>
+          {/* A credit-payment slip has no sale total — the amount paid is the
+              PAID row below, so a "TOTAL 0.00" here would only confuse. */}
+          {!creditPaymentOnly && (
+            <Box sx={{ display: "flex", justifyContent: "space-between", mt: secPx() }}>
+              <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>{rs.label_total}</Typography>
+              <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>
+                {rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+            </Box>
+          )}
+          {creditPaymentOnly && (
+            <Box sx={{ display: "flex", justifyContent: "space-between", mt: secPx() }}>
+              <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>PAID</Typography>
+              <Typography fontWeight={rs.weight_total} fontSize={fontPx(rs.font_totals) + 7}>
+                {rs.label_currency_prefix ? `${rs.label_currency_prefix} ` : ""}{oldPaid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+            </Box>
+          )}
 
           {!isQuote && rs.show_payment_info && (
             <>
               <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", mt: secPx(1.5) }} />
               <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)} sx={{ mt: secPx(1.5), display: "block" }}>{rs.label_payment_info}</Typography>
               <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
-                  <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
-                  <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(total)}</Typography>
-                </Box>
+                {!creditPaymentOnly && (
+                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
+                    <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_total_due ?? "TOTAL"}</span>
+                    <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(total)}</Typography>
+                  </Box>
+                )}
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_totals) }}>
                   <span style={{ fontWeight: rs.weight_payment_lines }}>{rs.label_cash_received}</span>
                   <Typography fontWeight={rs.weight_payment_lines} fontSize={fontPx(rs.font_totals)}>{fmt(received)}</Typography>
@@ -625,10 +651,13 @@ export default function PosReceiptDialog({
                 {oldPaid > 0.001 && rs.show_old_bills_paid !== false && (
                   <>
                     <Divider sx={{ borderStyle: "dashed", borderBottomWidth: 1, borderColor: "text.primary", my: 0.5 }} />
-                    <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_old_bills_paid ?? rs.font_totals) }}>
-                      <span style={{ fontWeight: rs.weight_old_bills_paid ?? 700 }}>{rs.label_old_bills_paid ?? "OLD BILLS PAID"}</span>
-                      <Typography fontWeight={rs.weight_old_bills_paid ?? 700} fontSize={fontPx(rs.font_old_bills_paid ?? rs.font_totals)}>{fmt(oldPaid)}</Typography>
-                    </Box>
+                    {/* On a payment slip the PAID row above already says this. */}
+                    {!creditPaymentOnly && (
+                      <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_old_bills_paid ?? rs.font_totals) }}>
+                        <span style={{ fontWeight: rs.weight_old_bills_paid ?? 700 }}>{rs.label_old_bills_paid ?? "OLD BILLS PAID"}</span>
+                        <Typography fontWeight={rs.weight_old_bills_paid ?? 700} fontSize={fontPx(rs.font_old_bills_paid ?? rs.font_totals)}>{fmt(oldPaid)}</Typography>
+                      </Box>
+                    )}
                     {balanceAfter != null && rs.show_balance_after !== false && (
                       <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: fontPx(rs.font_balance_after ?? rs.font_totals) }}>
                         <span style={{ fontWeight: rs.weight_balance_after ?? 700 }}>{rs.label_balance_after ?? "BALANCE NOW"}</span>

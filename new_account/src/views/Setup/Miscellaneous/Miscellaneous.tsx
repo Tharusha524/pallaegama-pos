@@ -8,9 +8,9 @@ import ModuleHubLayout, { type ModuleHubItem } from "../../../components/ModuleH
 
 const ITEMS: ModuleHubItem[] = [
   { text: "PAYMENT TERMS", icon: <PaymentIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/payment-terms" },
-  { text: "SHIPPING COMPANY", icon: <LocalShippingIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/shipping-company" },
-  { text: "POINT OF SALE", icon: <PointOfSaleIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/point-of-sale" },
-  { text: "CONTACT CATEGORIES", icon: <ContactsIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/contact-categories" },
+  // { text: "SHIPPING COMPANY", icon: <LocalShippingIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/shipping-company" }, // hidden
+  // { text: "POINT OF SALE", icon: <PointOfSaleIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/point-of-sale" }, // hidden
+  // { text: "CONTACT CATEGORIES", icon: <ContactsIcon sx={{ fontSize: 40, color: "#1976d2" }} />, path: "/setup/miscellaneous/contact-categories" }, // hidden
 ];
 
 export default function Miscellaneous() {
